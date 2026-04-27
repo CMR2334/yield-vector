@@ -1,0 +1,4509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#5b5cf6">
+<title>Yield Vector</title>
+<!-- iOS PWA: lets the page launch full-screen when added to Home Screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Yield Vector">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<!-- Icon + manifest hrefs are set at runtime via canvas-generated PNG -->
+<link rel="apple-touch-icon" id="apple-icon" href="">
+<link rel="icon" id="favicon" href="">
+<link rel="manifest" id="manifest" href="">
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root {
+  --bg: #f5f5f7;
+  --bg-elevated: #ffffff;
+  --card: #ffffff;
+  --card-soft: #fafafc;
+
+  --text: #0d1421;
+  --text-secondary: #5b6374;
+  --text-tertiary: #9099a8;
+  --text-inverse: #ffffff;
+
+  --accent: #5b5cf6;
+  --accent-hover: #4f50e0;
+  --accent-soft: #eef0fe;
+  --accent-mid: #c8c9fa;
+  --accent-strong: #3f40c4;
+
+  --warning: #f59e0b;
+  --warning-soft: #fff5e0;
+  --danger: #ef4444;
+  --danger-soft: #fee5e5;
+  --success: #10b981;
+  --success-soft: #d6f5e7;
+
+  --border: #e5e7eb;
+  --border-soft: #eef0f2;
+  --border-strong: #d1d5db;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.05);
+  --shadow-card-hover: 0 1px 3px rgba(15, 23, 42, 0.06), 0 12px 28px rgba(15, 23, 42, 0.08);
+  --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.18);
+  --shadow-fab: 0 8px 24px rgba(91, 92, 246, 0.35);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+
+  --header-height: 64px;
+  --bottom-nav-height: 70px;
+  --content-max-width: 1280px;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+ul, ol { list-style: none; }
+a { color: inherit; text-decoration: none; }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--header-height);
+  padding: 0 var(--space-6);
+  background: rgba(245, 245, 247, 0.85);
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #a78bfa 0%, #6366f1 55%, #312e81 100%);
+  display: grid;
+  place-items: center;
+  color: white;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.45);
+}
+
+.primary-nav {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: var(--space-6);
+}
+
+.nav-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-btn:hover { color: var(--text); background: var(--accent-soft); }
+.nav-btn.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+.header-trailing {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.header-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* Overview "side panel" layout: actions wide on left, snapshot narrow on
+   right. Items align to top so they don't stretch awkwardly. */
+.overview-side {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .overview-side { grid-template-columns: 1fr; }
+}
+
+.snapshot-card {
+  padding: var(--space-5);
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
+  box-shadow: none;
+}
+.snapshot-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-3);
+}
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.snap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: var(--card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+}
+.snap-l { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
+.snap-v { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); font-feature-settings: 'tnum' 1; }
+
+/* Sync indicator pill in the header — visible on every screen size */
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--card-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-soft);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.sync-indicator:hover { background: var(--accent-soft); border-color: var(--accent-mid); color: var(--accent); }
+.sync-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.sync-indicator[data-status="synced"] .sync-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+.sync-indicator[data-status="syncing"] .sync-dot { background: var(--warning); animation: sync-pulse 1.1s ease-in-out infinite; }
+.sync-indicator[data-status="pending"] .sync-dot { background: var(--warning); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
+.sync-indicator[data-status="error"] .sync-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+.sync-indicator[data-status="unconfigured"] .sync-dot { background: var(--text-tertiary); }
+.sync-indicator[data-status="error"] { color: var(--danger); border-color: rgba(239, 68, 68, 0.25); background: var(--danger-soft); }
+
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+@media (max-width: 480px) {
+  .sync-indicator .sync-text { display: none; }
+  .sync-indicator { padding: 8px; }
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--space-8) var(--space-6) var(--space-12);
+  max-width: var(--content-max-width);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Mobile bottom nav */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--bottom-nav-height);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(1.6) blur(14px);
+  border-top: 1px solid var(--border-soft);
+  padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+  z-index: 30;
+  justify-content: space-around;
+}
+
+.mobile-nav .nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  font-size: 11px;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.mobile-nav .nav-btn.active {
+  color: var(--accent);
+  background: transparent;
+}
+
+.mobile-nav .nav-btn svg { width: 22px; height: 22px; stroke-width: 1.7; }
+
+.fab {
+  position: fixed;
+  display: none;
+  bottom: calc(var(--bottom-nav-height) + 12px);
+  right: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 26px;
+  font-weight: 300;
+  box-shadow: var(--shadow-fab);
+  z-index: 25;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+.fab:active { transform: scale(0.95); }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s, transform 0.05s, box-shadow 0.12s;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.btn:active { transform: translateY(0.5px); }
+
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-secondary { background: var(--bg-elevated); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { background: var(--card-soft); border-color: var(--border-strong); }
+
+.btn-ghost { color: var(--text-secondary); padding: 8px 12px; }
+.btn-ghost:hover { background: var(--accent-soft); color: var(--accent); }
+
+.btn-danger { color: var(--danger); }
+.btn-danger:hover { background: var(--danger-soft); }
+
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.btn-lg { padding: 12px 22px; font-size: 15px; }
+
+.btn-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-md);
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+}
+.btn-icon:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.card-soft { background: var(--card-soft); border: 1px solid var(--border-soft); box-shadow: none; }
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.card-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+   OVERVIEW: HERO
+   ============================================================ */
+.hero {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-card);
+  margin-bottom: var(--space-6);
+}
+
+.hero-numbers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-6);
+}
+
+.hero-amount {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+}
+
+.hero-amount .currency-symbol { font-weight: 500; opacity: 0.55; margin-right: 2px; font-size: 0.75em; vertical-align: 0.18em; }
+
+.hero-meta {
+  font-size: 15px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.hero-meta .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+.hero-meta .pill.warn { background: var(--warning-soft); color: #b45309; }
+.hero-meta .pill.danger { background: var(--danger-soft); color: var(--danger); }
+
+/* ============================================================
+   CHART
+   ============================================================ */
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.chart-svg { width: 100%; display: block; overflow: visible; }
+.chart-svg text {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* On mobile the chart gets cramped — let it overflow horizontally with
+   a min-width so users can scroll across instead of squinting. */
+@media (max-width: 720px) {
+  .chart-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    margin-left: calc(-1 * var(--space-4));
+    margin-right: calc(-1 * var(--space-4));
+    padding: 0 var(--space-4);
+    scrollbar-width: thin;
+  }
+  .chart-svg { min-width: 720px; }
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(13, 20, 33, 0.94);
+  color: white;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  transform: translate(-50%, -110%);
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 5;
+}
+.chart-tooltip.visible { opacity: 1; }
+.chart-tooltip .tt-date { font-weight: 600; margin-bottom: 4px; opacity: 0.85; }
+.chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+.chart-tooltip .tt-row .label { opacity: 0.7; }
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend-line { width: 16px; height: 2px; display: inline-block; border-radius: 1px; }
+.legend-line.dashed { border-top: 2px dashed currentColor; height: 0; }
+
+/* ============================================================
+   GRID & STAT CARDS
+   ============================================================ */
+.grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.grid-cols-1 { grid-template-columns: 1fr; }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.stat-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: box-shadow 0.18s;
+}
+.stat-card:hover { box-shadow: var(--shadow-card-hover); }
+.stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.stat-value.warn { color: #b45309; }
+.stat-value.danger { color: var(--danger); }
+.stat-value.success { color: var(--success); }
+.stat-meta { font-size: 12px; color: var(--text-tertiary); margin-top: var(--space-1); }
+
+/* ============================================================
+   UPCOMING ACTIONS
+   ============================================================ */
+.action-list { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.action-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  transition: background 0.1s;
+}
+.action-row:hover { background: var(--bg); }
+
+/* Mobile: tighter columns, tag wraps under the title so nothing collides */
+@media (max-width: 480px) {
+  .action-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .action-row .action-tag {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    margin-top: 2px;
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+}
+
+/* iOS calendar-icon-style date block: bright red month, large dark day */
+.action-day {
+  text-align: center;
+  line-height: 1;
+  padding: 2px 0;
+}
+.action-day .month {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff3b30;  /* iOS systemRed */
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  margin-bottom: 1px;
+}
+.action-day .day {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1c1c1e;  /* iOS systemLabel */
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-feature-settings: 'tnum' 1;
+}
+
+.action-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.action-title { font-weight: 500; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.action-sub { font-size: 12px; color: var(--text-tertiary); }
+
+.action-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.action-tag.warn { background: var(--warning-soft); color: #b45309; }
+.action-tag.success { background: var(--success-soft); color: #047857; }
+.action-tag.danger { background: var(--danger-soft); color: var(--danger); }
+
+/* ============================================================
+   OFFER CARDS
+   ============================================================ */
+.offer-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  border: 1.5px solid transparent;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+  position: relative;
+}
+.offer-card.included { border-color: var(--accent); }
+.offer-card.draft { opacity: 0.85; border-style: dashed; border-color: var(--warning); }
+
+.offer-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.offer-include {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  border: 2px solid var(--border-strong);
+  border-radius: 7px;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.offer-include:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.offer-include:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px; top: 1px;
+  width: 6px; height: 11px;
+  border: solid white;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+.offer-include:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.offer-name { font-size: 16px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+.offer-bank { font-size: 13px; color: var(--text-tertiary); margin-top: 2px; }
+
+.offer-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: var(--space-4);
+}
+.offer-stat { display: flex; flex-direction: column; }
+.offer-stat-label { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.offer-stat-value { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.offer-stat-value.success { color: var(--success); }
+.offer-stat-value.muted { color: var(--text-tertiary); font-weight: 500; }
+
+.offer-dates { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-3); display: flex; flex-direction: column; gap: 2px; }
+
+.offer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chip-accent { background: var(--accent-soft); color: var(--accent); }
+.chip-warn { background: var(--warning-soft); color: #b45309; }
+.chip-success { background: var(--success-soft); color: #047857; }
+.chip-danger { background: var(--danger-soft); color: var(--danger); }
+.chip-muted { background: var(--bg); color: var(--text-tertiary); }
+
+.offer-actions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+/* ============================================================
+   TIMELINE
+   ============================================================ */
+.timeline-wrap {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+  overflow-x: auto;
+}
+
+.timeline-svg-wrap { position: relative; }
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-soft);
+  min-height: 44px;
+}
+.timeline-row:last-child { border-bottom: none; }
+
+.timeline-row-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  border-right: 1px solid var(--border-soft);
+}
+.timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+.timeline-row-track {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 44px;
+}
+
+.tl-bar {
+  position: absolute;
+  top: 50%;
+  height: 22px;
+  transform: translateY(-50%);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent-mid);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tl-bar.confirmed { background: rgba(91, 92, 246, 0.16); border-color: var(--accent); color: var(--accent-strong); }
+.tl-bar.hypothetical { background: repeating-linear-gradient(45deg, rgba(91,92,246,0.10), rgba(91,92,246,0.10) 6px, rgba(91,92,246,0.18) 6px, rgba(91,92,246,0.18) 12px); border: 1.5px dashed var(--accent); color: var(--accent-strong); }
+.tl-bar.completed { background: var(--bg); border-color: var(--border-strong); color: var(--text-tertiary); }
+.tl-bar.cancelled { opacity: 0.4; }
+
+.tl-axis {
+  position: relative;
+  height: 32px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.tl-axis-tick { position: absolute; transform: translateX(-50%); padding-top: 4px; font-weight: 500; }
+.tl-axis-tick::before {
+  content: '';
+  position: absolute;
+  top: -4px; left: 50%;
+  width: 1px; height: 6px;
+  background: var(--border-strong);
+}
+
+.tl-grid-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--border-soft);
+}
+
+.tl-today {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.tl-today::before {
+  content: 'Today';
+  position: absolute;
+  top: -16px;
+  left: 0;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+/* Only the axis row gets the "Today" pill — suppress on data bars */
+.timeline-row-track .tl-today::before {
+  content: none;
+}
+
+.tl-shortfall-band {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 1px dashed rgba(239, 68, 68, 0.5);
+  border-right: 1px dashed rgba(239, 68, 68, 0.5);
+  pointer-events: none;
+}
+
+/* ============================================================
+   FORMS
+   ============================================================ */
+.form-section {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.form-section + .form-section { margin-top: var(--space-4); }
+
+.form-section h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-1);
+}
+.form-section .section-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-5); }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label, .field-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+.field-error { font-size: 12px; color: var(--danger); margin-top: 2px; }
+
+.input, .select, .textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--text);
+  transition: border-color 0.1s, box-shadow 0.1s;
+  font-family: inherit;
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 92, 246, 0.15);
+}
+.input[type="number"] { font-feature-settings: 'tnum' 1; }
+.textarea { resize: vertical; min-height: 72px; }
+
+.input-group { position: relative; }
+.input-group .input-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 14px; pointer-events: none; }
+.input-group .input-suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 13px; pointer-events: none; }
+.input-group .input { padding-left: 28px; }
+.input-group.with-suffix .input { padding-right: 60px; }
+
+.checkbox-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: 4px 0; }
+.checkbox-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border-strong);
+  border-radius: 5px;
+  cursor: pointer;
+  position: relative;
+}
+.checkbox-row input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.checkbox-row input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 0;
+  width: 5px; height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.radio-group {
+  display: flex;
+  gap: 0;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  width: 100%;
+}
+.radio-group label {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.radio-group input[type="radio"] { display: none; }
+.radio-group input[type="radio"]:checked + label { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
+
+/* ============================================================
+   MODAL / DRAWER
+   ============================================================ */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  background: rgba(13, 20, 33, 0.45);
+  backdrop-filter: blur(2px);
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
+}
+.modal.open { display: flex; }
+
+.modal-card {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 640px;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 64px);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border-soft);
+}
+.modal-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.modal-body { padding: var(--space-6); overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-3) 0;
+  margin: var(--space-4) 0;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  justify-content: space-between;
+}
+.advanced-toggle .chevron { transition: transform 0.15s; }
+.advanced-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+.advanced-fields { display: none; flex-direction: column; gap: var(--space-4); }
+.advanced-fields.open { display: flex; }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border-soft); }
+
+table.data-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+  background: var(--card);
+}
+.data-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: var(--space-3);
+  background: var(--card-soft);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.data-table tbody tr:hover { background: var(--bg); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.num { text-align: right; font-feature-settings: 'tnum' 1; }
+.row-warn { background: rgba(245, 158, 11, 0.06); }
+.row-danger { background: rgba(239, 68, 68, 0.07); }
+
+/* ============================================================
+   PLANNER OPTIMIZER
+   ============================================================ */
+.optimizer-bar {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) var(--space-6);
+  box-shadow: var(--shadow-card);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.optimizer-summary {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.optimizer-summary .metric { display: flex; flex-direction: column; gap: 2px; }
+.optimizer-summary .metric .label { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.optimizer-summary .metric .value { font-size: 18px; font-weight: 600; }
+
+.combo-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.12s, transform 0.05s, box-shadow 0.12s;
+}
+.combo-card:hover { border-color: var(--accent-mid); }
+.combo-card:active { transform: scale(0.997); }
+.combo-card.selected { border-color: var(--accent); box-shadow: var(--shadow-card-hover), 0 0 0 4px rgba(91, 92, 246, 0.12); }
+.recommended-tag { color: var(--accent); font-weight: 700; }
+
+.combo-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); }
+.combo-rank { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; }
+.combo-bonus { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--success); }
+.combo-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--space-3); display: flex; flex-wrap: wrap; gap: 12px; }
+.combo-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.combo-offers { display: flex; flex-direction: column; gap: 4px; }
+.combo-offer { font-size: 13px; padding: 6px 10px; background: var(--bg); border-radius: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.combo-offer .name { color: var(--text); font-weight: 500; }
+.combo-offer .amount { color: var(--text-tertiary); font-feature-settings: 'tnum' 1; }
+
+/* ============================================================
+   EMPTY STATES & MISC
+   ============================================================ */
+.empty-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+  color: var(--text-secondary);
+}
+.empty-state svg { width: 48px; height: 48px; opacity: 0.4; margin-bottom: var(--space-4); }
+.empty-state h3 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: var(--space-2); }
+.empty-state p { font-size: 14px; max-width: 360px; margin: 0 auto var(--space-4); }
+
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(13, 20, 33, 0.94);
+  color: white;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 200;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.danger { background: var(--danger); }
+
+.divider { height: 1px; background: var(--border-soft); margin: var(--space-5) 0; }
+
+.banner {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border: 1px solid rgba(91, 92, 246, 0.2);
+  margin-bottom: var(--space-4);
+}
+.banner.warn { background: var(--warning-soft); color: #92400e; border-color: rgba(245, 158, 11, 0.3); }
+.banner.danger { background: var(--danger-soft); color: #991b1b; border-color: rgba(239, 68, 68, 0.3); }
+.banner svg { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; }
+
+.toolbar {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: var(--space-5);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.section-header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.section-header p { font-size: 14px; color: var(--text-secondary); }
+
+.row-action-buttons { display: flex; gap: var(--space-1); justify-content: flex-end; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 880px) {
+  .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .primary-nav, .header-actions { display: none; }
+  .app-header { padding: 0 var(--space-4); }
+  .mobile-nav { display: flex; }
+  .fab { display: flex; }
+  .app-main {
+    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + var(--space-8));
+  }
+  .hero { padding: var(--space-6); border-radius: var(--radius-lg); }
+  .hero-amount { font-size: 44px; }
+  .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
+  .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
+  .stat-card { padding: var(--space-4); }
+  .stat-value { font-size: 22px; }
+  .timeline-row { grid-template-columns: 140px 1fr; }
+  .modal { padding: 0; align-items: flex-end; }
+  .modal-card { max-width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  .modal-header { padding: var(--space-4); }
+  .modal-body { padding: var(--space-4); }
+  .modal-footer { padding: var(--space-3) var(--space-4); }
+  .form-grid { grid-template-columns: 1fr; }
+  .section-header h2 { font-size: 20px; }
+  .timeline-row-label { font-size: 12px; padding: 6px 8px; }
+}
+
+@media (max-width: 480px) {
+  .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
+  .hero-amount { font-size: 40px; }
+}
+
+@media (min-width: 880px) {
+  .planner-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--space-4);
+  }
+  .combo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+@media (min-width: 481px) and (max-width: 879px) {
+  .planner-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+  .combo-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+}
+
+@media (max-width: 480px) {
+  .planner-grid, .combo-grid { display: flex; flex-direction: column; gap: var(--space-4); }
+}
+
+/* Visually hidden but accessible */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+</style>
+</head>
+<body>
+<div class="app-shell" id="app">
+  <!-- Populated by JS -->
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   CONSTANTS & STORAGE
+   ============================================================ */
+const STORAGE_KEY = 'capital-planner-v1';
+const TODAY = startOfDay(new Date());
+
+const STATUSES = ['prospect', 'selected', 'applied', 'funded', 'completed', 'skipped'];
+const STATUS_LABELS = {
+  prospect: 'Prospect',
+  selected: 'Selected',
+  applied: 'Applied',
+  funded: 'Funded',
+  completed: 'Completed',
+  skipped: 'Skipped'
+};
+const STATUS_CHIP_CLASS = {
+  prospect: 'chip-muted',
+  selected: 'chip-accent',
+  applied: 'chip-accent',
+  funded: 'chip-accent',
+  completed: 'chip-success',
+  skipped: 'chip-muted'
+};
+
+const CONFIDENCE_LABELS = { confirmed: 'Confirmed', likely: 'Likely', uncertain: 'Uncertain' };
+
+const CONFIRMED_OFFER_STATUSES = new Set(['applied', 'funded']);
+const HYPOTHETICAL_OFFER_STATUSES = new Set(['prospect', 'selected']);
+
+const COMMITMENT_TYPES = [
+  { value: 'minimum balance', label: 'Minimum Balance' },
+  { value: 'opening deposit', label: 'Opening Deposit' },
+  { value: 'direct deposit', label: 'Direct Deposit' },
+  { value: 'manual hold', label: 'Manual Hold' },
+  { value: 'other', label: 'Other' }
+];
+
+const EVENT_CATEGORIES = [
+  { value: 'inflow', label: 'Inflow' },
+  { value: 'outflow', label: 'Outflow' },
+  { value: 'bonus payout', label: 'Bonus Payout' },
+  { value: 'fee', label: 'Fee' },
+  { value: 'correction', label: 'Correction' },
+  { value: 'other', label: 'Other' }
+];
+
+const ENTITY_OPTIONS = [
+  'Collin Rekowski (Ind - SSN)',
+  'Collin Rekowski (SP - EIN)',
+  'Ethir Systems (LLC - EIN)'
+];
+
+const EMAIL_OPTIONS = [
+  'cmreko91@gmail.com',
+  'collinrekowski1@gmail.com',
+  'ethirsystems@gmail.com'
+];
+
+/* ============================================================
+   CLOUD SYNC (GitHub Gist)
+   ============================================================
+   Persists state to a private GitHub Gist so the app syncs across
+   devices. Each device stores a Personal Access Token (PAT, scope:
+   `gist`) and the Gist ID in localStorage. On startup we pull the
+   Gist; if its `_lastModified` timestamp is newer than local, the
+   remote replaces local. Otherwise we push local up.
+
+   Conflict resolution is last-writer-wins on the `_lastModified`
+   timestamp embedded in the state. For a single user across devices
+   this is sufficient — the loser's edits are overwritten only if
+   they were strictly older than the winner's.
+
+   Token security note: a PAT with only the `gist` scope can only
+   read/write your gists. It cannot touch your repos, your account
+   settings, or any GitHub-authenticated services. Loss = revoke
+   at github.com/settings/tokens.
+   ============================================================ */
+const SYNC_CONFIG_KEY = 'capital-planner-sync-config-v1';
+const SYNC_FILENAME = 'capital-planner.json';
+
+const Sync = {
+  status: 'unconfigured',  // 'unconfigured' | 'syncing' | 'synced' | 'pending' | 'error'
+  lastError: null,
+  lastSyncAt: 0,            // Date.now() of last successful round-trip
+  pushTimer: null,
+  startupDone: false,
+
+  getConfig() {
+    try { return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY)) || null; }
+    catch { return null; }
+  },
+  setConfig(cfg) {
+    if (cfg) localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg));
+    else localStorage.removeItem(SYNC_CONFIG_KEY);
+  },
+  isConfigured() {
+    const c = this.getConfig();
+    return Boolean(c && c.token && c.gistId);
+  },
+  setStatus(s, err = null) {
+    this.status = s;
+    this.lastError = err;
+    updateSyncIndicator();
+  },
+
+  // Schedule a debounced push after local edits.
+  schedulePush(delayMs = 1500) {
+    if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
+    if (this.pushTimer) clearTimeout(this.pushTimer);
+    this.setStatus('pending');
+    this.pushTimer = setTimeout(() => this.push({ silent: true }), delayMs);
+  },
+
+  // Pull from Gist; if remote newer than local, replace local.
+  // If local newer or remote empty, push local up.
+  async startupSync() {
+    if (this.startupDone) return;
+    this.startupDone = true;
+    if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
+    const cfg = this.getConfig();
+    this.setStatus('syncing');
+    try {
+      const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
+      const file = data.files[SYNC_FILENAME] || Object.values(data.files || {})[0];
+      let remote = null;
+      if (file) {
+        const content = file.truncated
+          ? await (await fetch(file.raw_url)).text()
+          : file.content;
+        if (content && content.trim()) {
+          try { remote = JSON.parse(content); } catch { remote = null; }
+        }
+      }
+      const remoteModified = (remote && remote._lastModified) || 0;
+      const localModified = (App.state && App.state._lastModified) || 0;
+
+      if (remote && remoteModified > localModified) {
+        // Remote wins — replace local
+        App.state = remote;
+        // Don't trigger push from save: persist to localStorage directly
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+        this.lastSyncAt = Date.now();
+        this.setStatus('synced');
+        render();
+        toast('Pulled latest from cloud');
+      } else if (!remote || localModified > remoteModified) {
+        // Local wins — push (or seed empty Gist)
+        await this.push({ silent: true });
+      } else {
+        this.lastSyncAt = Date.now();
+        this.setStatus('synced');
+      }
+    } catch (e) {
+      this.setStatus('error', e.message);
+      console.warn('Startup sync failed', e);
+    }
+  },
+
+  async pull({ silent = false } = {}) {
+    if (!this.isConfigured()) { toast('Sync not configured', 'danger'); return; }
+    const cfg = this.getConfig();
+    this.setStatus('syncing');
+    try {
+      const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
+      const file = data.files[SYNC_FILENAME] || Object.values(data.files || {})[0];
+      if (!file) throw new Error('Gist has no file yet');
+      const content = file.truncated
+        ? await (await fetch(file.raw_url)).text()
+        : file.content;
+      if (!content || !content.trim()) throw new Error('Gist file is empty');
+      const remote = JSON.parse(content);
+      App.state = remote;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+      this.lastSyncAt = Date.now();
+      this.setStatus('synced');
+      render();
+      if (!silent) toast('Pulled from cloud');
+    } catch (e) {
+      this.setStatus('error', e.message);
+      if (!silent) toast('Pull failed: ' + e.message, 'danger');
+    }
+  },
+
+  async push({ silent = false } = {}) {
+    if (!this.isConfigured()) { if (!silent) toast('Sync not configured', 'danger'); return; }
+    const cfg = this.getConfig();
+    this.setStatus('syncing');
+    try {
+      // Stamp last-modified just before sending so remote reflects the upload
+      App.state._lastModified = Date.now();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+      const body = JSON.stringify({
+        files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
+      });
+      await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+      this.lastSyncAt = Date.now();
+      this.setStatus('synced');
+      if (!silent) toast('Pushed to cloud');
+    } catch (e) {
+      this.setStatus('error', e.message);
+      if (!silent) toast('Push failed: ' + e.message, 'danger');
+    }
+  },
+
+  async createGist(token) {
+    // Convenience: create a private Gist seeded with current state.
+    App.state._lastModified = Date.now();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+    const body = JSON.stringify({
+      description: 'Yield Vector sync',
+      public: false,
+      files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
+    });
+    const data = await ghFetch('https://api.github.com/gists', token, 'POST', body);
+    return data.id;
+  },
+
+  disconnect() {
+    if (this.pushTimer) clearTimeout(this.pushTimer);
+    this.setConfig(null);
+    this.lastSyncAt = 0;
+    this.setStatus('unconfigured');
+  }
+};
+
+async function ghGet(url, token) {
+  const r = await fetch(url, {
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github+json'
+    }
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+  }
+  return r.json();
+}
+
+async function ghFetch(url, token, method, body) {
+  const r = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+  }
+  return r.json();
+}
+
+function renderSyncIndicator() {
+  const labels = {
+    synced: 'Synced',
+    syncing: 'Syncing…',
+    pending: 'Pending',
+    error: 'Sync error',
+    unconfigured: 'Not synced'
+  };
+  const title = Sync.lastError
+    ? `Error: ${Sync.lastError}. Click to fix.`
+    : (Sync.status === 'synced' && Sync.lastSyncAt
+      ? `Last synced ${new Date(Sync.lastSyncAt).toLocaleTimeString()}. Click for sync settings.`
+      : `Click for sync settings.`);
+  return `
+    <button class="sync-indicator" data-status="${Sync.status}" data-action="open-sync" title="${escapeAttr(title)}">
+      <span class="sync-dot"></span>
+      <span class="sync-text">${labels[Sync.status] || 'Sync'}</span>
+    </button>
+  `;
+}
+
+function updateSyncIndicator() {
+  // Patch in place to avoid full re-render
+  const old = document.querySelector('.sync-indicator');
+  if (!old) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderSyncIndicator();
+  const next = wrap.firstElementChild;
+  old.replaceWith(next);
+}
+
+/* ============================================================
+   PWA: runtime-generated icon + manifest, no external assets
+   ============================================================ */
+function setupPwa() {
+  // Yield Vector home-screen icon: two-tier diagonal split (Wealthfront-
+  // inspired) with a subtle white upward-vector mark.
+  const c = document.createElement('canvas');
+  c.width = 180; c.height = 180;
+  const ctx = c.getContext('2d');
+  const W = 180, R = 38;
+
+  // Round corners via clip
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(R, 0);
+  ctx.lineTo(W - R, 0);
+  ctx.quadraticCurveTo(W, 0, W, R);
+  ctx.lineTo(W, W - R);
+  ctx.quadraticCurveTo(W, W, W - R, W);
+  ctx.lineTo(R, W);
+  ctx.quadraticCurveTo(0, W, 0, W - R);
+  ctx.lineTo(0, R);
+  ctx.quadraticCurveTo(0, 0, R, 0);
+  ctx.closePath();
+  ctx.clip();
+
+  // Smooth diagonal gradient — violet top-left fading to deep indigo bottom-right
+  const grad = ctx.createLinearGradient(0, 0, W, W);
+  grad.addColorStop(0, '#a78bfa');
+  grad.addColorStop(0.38, '#7c6ef5');
+  grad.addColorStop(0.65, '#6366f1');
+  grad.addColorStop(1, '#312e81');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, W);
+
+  // Subtle luminosity highlight to give depth without harshness
+  const shimmer = ctx.createLinearGradient(0, 0, W * 0.7, W * 0.7);
+  shimmer.addColorStop(0, 'rgba(255,255,255,0.14)');
+  shimmer.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shimmer;
+  ctx.fillRect(0, 0, W, W);
+
+  // White vector mark — clean upward arrow, slight diagonal
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Shaft
+  ctx.beginPath();
+  ctx.moveTo(48, 132);
+  ctx.lineTo(132, 48);
+  ctx.stroke();
+  // Arrowhead — two short strokes from the tip
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(132, 48);
+  ctx.lineTo(132, 84);
+  ctx.moveTo(132, 48);
+  ctx.lineTo(96, 48);
+  ctx.stroke();
+
+  ctx.restore();
+
+  const dataUrl = c.toDataURL('image/png');
+  const apple = document.getElementById('apple-icon');
+  const fav = document.getElementById('favicon');
+  if (apple) apple.href = dataUrl;
+  if (fav) fav.href = dataUrl;
+  // Web App Manifest (Android/Chrome)
+  const manifest = {
+    name: 'Yield Vector',
+    short_name: 'Yield Vector',
+    display: 'standalone',
+    start_url: location.pathname,
+    scope: location.pathname,
+    background_color: '#f5f5f7',
+    theme_color: '#5b5cf6',
+    icons: [
+      { src: dataUrl, sizes: '180x180', type: 'image/png', purpose: 'any maskable' }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+  const m = document.getElementById('manifest');
+  if (m) m.href = URL.createObjectURL(blob);
+}
+
+/* ============================================================
+   DATE UTILITIES
+   ============================================================ */
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  if (s instanceof Date) return startOfDay(s);
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return isNaN(d) ? null : d;
+}
+
+function isoDate(d) {
+  if (!d) return '';
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return '';
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function addDays(d, n) {
+  const dt = new Date(d);
+  dt.setDate(dt.getDate() + n);
+  return dt;
+}
+
+function daysBetween(a, b) {
+  const ms = startOfDay(b) - startOfDay(a);
+  return Math.round(ms / 86400000);
+}
+
+function formatDateShort(d) {
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return '—';
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatDateMedium(d) {
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return '—';
+  const sameYear = dt.getFullYear() === TODAY.getFullYear();
+  return dt.toLocaleDateString('en-US', sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateLong(d) {
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return '—';
+  return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function relativeDays(d) {
+  const dt = parseDate(d);
+  if (!dt) return '';
+  const n = daysBetween(TODAY, dt);
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n === -1) return 'yesterday';
+  if (n > 0) return `in ${n} days`;
+  return `${-n} days ago`;
+}
+
+/* ============================================================
+   CURRENCY FORMATTING
+   ============================================================ */
+function formatCurrency(n, opts = {}) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  return sign + '$' + Math.round(abs).toLocaleString('en-US');
+}
+
+function formatCurrencyDecimal(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatCompactCurrency(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1000)}K`;
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}K`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
+function formatPercent(n, digits = 1) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return (n * 100).toFixed(digits) + '%';
+}
+
+/* ============================================================
+   ID GENERATOR
+   ============================================================ */
+function uid(prefix = 'id') {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/* ============================================================
+   STATE MANAGEMENT
+   ============================================================ */
+const App = {
+  state: null,
+  view: 'overview',
+  filters: {
+    timelineShowCancelled: false,
+    timelineShowCompleted: true,
+    offersStatus: 'all',
+    offersSearch: '',
+    offersAdvanced: false
+  },
+  optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
+
+  init() {
+    const saved = this.load();
+    this.state = saved || this.defaultState();
+    if (!saved) {
+      this.state = seedSampleData(this.state);
+      this.save();
+    }
+    setupPwa();
+    if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
+    else Sync.setStatus('unconfigured');
+    render();
+    bindGlobalEvents();
+    // Async pull — runs after first paint, doesn't block UI
+    if (Sync.isConfigured()) {
+      setTimeout(() => Sync.startupSync(), 50);
+    }
+  },
+
+  defaultState() {
+    return {
+      version: 1,
+      settings: {
+        currentLiquidCapital: 200000,
+        minimumCashBuffer: 20000,
+        projectionStartDate: isoDate(TODAY),
+        projectionHorizonMode: 'auto',  // 'auto' | '3months' | '6months' | '1year' | '2years' | 'custom'
+        projectionHorizonDays: 365,     // used only when mode === 'custom'
+        maxOptimizerCandidates: 15,
+        defaultLockStartsFrom: 'funded date'
+      },
+      offers: [],
+      commitments: [],
+      events: []
+    };
+  },
+
+  load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (e) {
+      console.warn('Failed to load state', e);
+      return null;
+    }
+  },
+
+  save() {
+    try {
+      // Stamp last-modified so cloud sync can resolve "who's newer"
+      this.state._lastModified = Date.now();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      Sync.schedulePush();
+    } catch (e) {
+      toast('Could not save: storage unavailable', 'danger');
+    }
+  },
+
+  setView(view) {
+    if (this.view === view) return;
+    this.view = view;
+    render();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  },
+
+  update(updater) {
+    updater(this.state);
+    this.save();
+    render();
+  }
+};
+
+/* ============================================================
+   OFFER DERIVED FIELDS
+   ============================================================ */
+function effectiveFundingDate(offer) {
+  return offer.optionalPlannedFundingDate || offer.plannedSignupDate;
+}
+
+function depositDeadline(offer) {
+  if (!offer.plannedSignupDate || offer.daysAfterSignupAllowedBeforeDeposit == null) return null;
+  return isoDate(addDays(parseDate(offer.plannedSignupDate), Number(offer.daysAfterSignupAllowedBeforeDeposit)));
+}
+
+function withdrawalEligibleDate(offer) {
+  // The day-count anchor depends on lockStartsFrom:
+  //   'open date'   → days are measured from when the account is opened
+  //                   (e.g. US Bank: "60 days from account open"). Funding
+  //                   later means a shorter actual lock.
+  //   'funded date' → days are measured from the actual funding date
+  //                   (e.g. Citi: "keep $50k for 60 days from deposit").
+  const anchor = offer.lockStartsFrom === 'open date'
+    ? offer.plannedSignupDate
+    : effectiveFundingDate(offer);
+  if (!anchor || offer.daysFundsMustRemain == null) return null;
+  return isoDate(addDays(parseDate(anchor), Number(offer.daysFundsMustRemain)));
+}
+
+function lockStartDate(offer) {
+  // Money is only actually unavailable from when it's deposited, regardless
+  // of what the bank uses to anchor the day count. Always return the funding
+  // date here so the projection reflects real cash availability.
+  return effectiveFundingDate(offer);
+}
+
+function safeToCloseDate(offer) {
+  // Approximation: withdrawalEligible + a small grace period; or use explicit field if present
+  const we = withdrawalEligibleDate(offer);
+  if (!we) return null;
+  // Keep separate as concept; actual safe-to-close varies by bank policy
+  return null;
+}
+
+function simpleReturn(offer) {
+  if (!offer.requiredFundingAmount || !offer.signupBonusAmount) return null;
+  return offer.signupBonusAmount / offer.requiredFundingAmount;
+}
+
+function annualizedReturn(offer) {
+  const r = simpleReturn(offer);
+  if (r == null || !offer.daysFundsMustRemain || offer.daysFundsMustRemain <= 0) return null;
+  return r * 365 / offer.daysFundsMustRemain;
+}
+
+function isOfferComplete(offer) {
+  return Boolean(
+    offer.bankName &&
+    offer.requiredFundingAmount > 0 &&
+    offer.signupBonusAmount >= 0 &&
+    offer.plannedSignupDate &&
+    offer.daysFundsMustRemain != null &&
+    offer.daysFundsMustRemain >= 0 &&
+    parseDate(offer.plannedSignupDate)
+  );
+}
+
+function offerIssues(offer) {
+  const issues = [];
+  if (!offer.bankName) issues.push('Bank name is required');
+  if (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0) issues.push('Required funding amount must be > 0');
+  if (offer.signupBonusAmount == null || offer.signupBonusAmount < 0) issues.push('Bonus amount required');
+  if (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate)) issues.push('Planned signup date required');
+  if (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0) issues.push('Days funds must remain required');
+  return issues;
+}
+
+function offerIsActiveForProjection(offer, includedOverride = null) {
+  // Returns whether this offer should affect the projection.
+  if (!isOfferComplete(offer)) return false;
+  if (offer.status === 'completed' || offer.status === 'skipped') return false;
+  if (includedOverride !== null) return includedOverride.has(offer.id);
+  if (CONFIRMED_OFFER_STATUSES.has(offer.status)) return true;
+  return Boolean(offer.includeInScenario);
+}
+
+/* ============================================================
+   PROJECTION ENGINE
+   ============================================================
+   Generates a daily cash projection over the configured horizon.
+
+   For each day in [projectionStartDate, projectionStartDate + horizonDays):
+     availableCapital =
+         currentLiquidCapital
+       + cumulative net of all included Capital Events with date <= day
+       - sum of confirmed commitments active on this day
+       - sum of hypothetical commitments active on this day
+
+   Interval convention:
+     A commitment with startDate=A and endDate=B ties up funds on each day d
+     where A <= d < B. If a deposit lands March 1 and is withdrawal-eligible
+     May 1, the funds are tied up March 1 through April 30 (61 days).
+
+   Sources of commitments:
+     1. Manual/explicit Capital Commitments (with includeInProjection true).
+     2. Bonus Offers that are considered active:
+        - status in {applied, funded} → counted as confirmed
+        - status in {prospect, selected} with includeInScenario → counted
+          as hypothetical
+        Suppressed if a non-cancelled commitment with sourceBonusOfferId
+        already covers the offer.
+
+   The optimizer can pass an `includedOfferIds` set to override which
+   prospect/selected offers contribute (used to evaluate combinations).
+   ============================================================ */
+// Compute the effective projection horizon in days based on the user's
+// chosen mode. 'auto' = 30 days past the latest active date in the system
+// (commitment ends, withdrawal-eligible dates, included events), with a
+// 30-day floor. Modes other than 'custom' are fixed-day shorthands.
+function effectiveHorizonDays(state) {
+  const settings = state.settings || {};
+  const mode = settings.projectionHorizonMode || 'auto';
+  const start = parseDate(settings.projectionStartDate) || TODAY;
+  if (mode === '3months') return 90;
+  if (mode === '6months') return 180;
+  if (mode === '1year') return 365;
+  if (mode === '2years') return 730;
+  if (mode === 'custom') return Math.max(30, Math.min(1825, Number(settings.projectionHorizonDays) || 365));
+  // 'auto' — 30 days past the latest withdrawal-eligible date of active/planned offers.
+  // Intentionally ignores expiration dates, commitments, and events so distant
+  // entries don't blow the horizon out to 6+ months unnecessarily.
+  let last = addDays(start, 30);
+  for (const o of state.offers || []) {
+    if (o.status === 'completed' || o.status === 'skipped') continue;
+    const we = withdrawalEligibleDate(o);
+    const d = we ? parseDate(we) : null;
+    if (d && d > last) last = d;
+  }
+  return Math.max(30, Math.min(1825, daysBetween(start, addDays(last, 30))));
+}
+
+function generateProjection(state, options = {}) {
+  const settings = state.settings;
+  const horizon = effectiveHorizonDays(state);
+  const start = parseDate(settings.projectionStartDate) || TODAY;
+  const buffer = Number(settings.minimumCashBuffer) || 0;
+  const liquid = Number(settings.currentLiquidCapital) || 0;
+
+  const includedOverride = options.includedOfferIds
+    ? new Set(options.includedOfferIds)
+    : null;
+  const earlyExit = options.earlyExit || false;
+
+  // Pre-build day skeleton
+  const days = new Array(horizon);
+  const dayMs = 86400000;
+  const startMs = start.getTime();
+  for (let i = 0; i < horizon; i++) {
+    days[i] = {
+      date: new Date(startMs + i * dayMs),
+      dateISO: '',
+      dayIndex: i,
+      startingLiquidCapital: liquid,
+      confirmedTiedUp: 0,
+      hypotheticalTiedUp: 0,
+      totalTiedUp: 0,
+      netEventsToDate: 0,
+      availableCapital: liquid,
+      belowBuffer: false,
+      shortfall: false
+    };
+  }
+
+  // Helper: find day index for a Date (clamped)
+  function indexFor(date) {
+    if (!date) return -1;
+    const idx = Math.floor((startOfDay(date).getTime() - startMs) / dayMs);
+    return idx;
+  }
+
+  // Helper: apply a commitment over its active range
+  function applyCommitment(amount, startDate, endDate, kind) {
+    const sIdx = indexFor(startDate);
+    const eIdx = indexFor(endDate);
+    if (eIdx < 0) return; // ends before horizon starts
+    if (sIdx >= horizon) return; // starts after horizon ends
+    // Active days: [max(sIdx,0), min(eIdx, horizon)) — endDate exclusive
+    const from = Math.max(sIdx, 0);
+    const to = Math.min(eIdx, horizon);
+    for (let i = from; i < to; i++) {
+      if (kind === 'confirmed') days[i].confirmedTiedUp += amount;
+      else days[i].hypotheticalTiedUp += amount;
+    }
+  }
+
+  // 1. Manual capital commitments
+  const offerIdsWithCommitments = new Set();
+  for (const c of state.commitments) {
+    if (!c.includeInProjection) continue;
+    if (c.status === 'cancelled') continue;
+    const amount = Number(c.amount);
+    if (!amount || amount <= 0) continue;
+    const cs = parseDate(c.startDate);
+    const ce = parseDate(c.endDate);
+    if (!cs || !ce || cs >= ce) continue;
+    if (c.sourceBonusOfferId) offerIdsWithCommitments.add(c.sourceBonusOfferId);
+    const kind = (c.status === 'confirmed' || c.status === 'completed') ? 'confirmed' : 'hypothetical';
+    if (c.status === 'completed') continue; // completed commitments no longer tie up funds
+    applyCommitment(amount, cs, ce, kind);
+  }
+
+  // 2. Virtual commitments from bonus offers
+  for (const o of state.offers) {
+    if (!offerIsActiveForProjection(o, includedOverride)) continue;
+    if (offerIdsWithCommitments.has(o.id)) continue; // suppressed by explicit commitment
+    const start = parseDate(lockStartDate(o));
+    const end = parseDate(withdrawalEligibleDate(o));
+    if (!start || !end || start >= end) continue;
+    const kind = CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : 'hypothetical';
+    applyCommitment(Number(o.requiredFundingAmount), start, end, kind);
+  }
+
+  // 3. Capital events — accumulate net through each day
+  const validEvents = state.events
+    .filter(e => e.includeInProjection && e.date && parseDate(e.date) && typeof e.amount === 'number' && e.amount !== 0)
+    .map(e => ({ idx: indexFor(parseDate(e.date)), amount: Number(e.amount) }))
+    .filter(e => e.idx < horizon)
+    .sort((a, b) => a.idx - b.idx);
+
+  let cumul = 0;
+  let evIdx = 0;
+  for (let i = 0; i < horizon; i++) {
+    while (evIdx < validEvents.length && validEvents[evIdx].idx <= i) {
+      cumul += validEvents[evIdx].amount;
+      evIdx++;
+    }
+    const d = days[i];
+    d.netEventsToDate = cumul;
+    d.totalTiedUp = d.confirmedTiedUp + d.hypotheticalTiedUp;
+    d.availableCapital = d.startingLiquidCapital + cumul - d.totalTiedUp;
+    d.belowBuffer = d.availableCapital < buffer;
+    d.shortfall = d.availableCapital < 0;
+    d.dateISO = isoDate(d.date);
+    if (earlyExit && d.shortfall) {
+      // Optimizer hint: still finish for stats, but mark early-exit info
+    }
+  }
+
+  return days;
+}
+
+/* ============================================================
+   PROJECTION SUMMARY (for the Overview view)
+   ============================================================ */
+function summarizeProjection(projection, settings) {
+  if (!projection.length) return {};
+  let lowest = projection[0];
+  let lowestIdx = 0;
+  let shortfallDays = 0;
+  let belowBufferDays = 0;
+  for (let i = 0; i < projection.length; i++) {
+    const d = projection[i];
+    if (d.availableCapital < lowest.availableCapital) { lowest = d; lowestIdx = i; }
+    if (d.shortfall) shortfallDays++;
+    if (d.belowBuffer) belowBufferDays++;
+  }
+  return {
+    today: projection[0],
+    lowest,
+    lowestIdx,
+    shortfallDays,
+    belowBufferDays,
+    feasible: shortfallDays === 0,
+    horizonDays: projection.length
+  };
+}
+
+/* ============================================================
+   OFFER → COMMITMENT CONVERSION
+   ============================================================ */
+function convertOfferToCommitment(offer) {
+  const start = lockStartDate(offer);
+  const end = withdrawalEligibleDate(offer);
+  if (!start || !end) return null;
+  return {
+    id: uid('cmt'),
+    commitmentName: `${offer.bankName} — ${offer.offerName || 'Bonus'}`,
+    sourceBonusOfferId: offer.id,
+    amount: Number(offer.requiredFundingAmount),
+    startDate: start,
+    endDate: end,
+    type: 'minimum balance',
+    status: CONFIRMED_OFFER_STATUSES.has(offer.status) ? 'confirmed' : 'hypothetical',
+    includeInProjection: true,
+    expectedBonus: Number(offer.signupBonusAmount) || 0,
+    notes: ''
+  };
+}
+
+/* ============================================================
+   OPTIMIZER
+   ============================================================
+   Brute-force search over candidate offers (status in
+   {prospect, selected}, complete, dates within projection horizon).
+
+   For up to maxOptimizerCandidates offers, evaluate every 2^n subset.
+   For each subset:
+     - Generate the daily projection with that subset selected.
+     - A combination is feasible if availableCapital >= 0 every day.
+     - Track total bonus, lowest available capital, days below buffer,
+       and any breach dates.
+
+   Ranking (feasible only):
+     1. Highest total expected bonus.
+     2. Highest blended annualized return.
+     3. Highest lowest-available-capital (largest safety margin).
+
+   Note: For n=15 this is 32,768 evaluations × 365 days ≈ 12M ops,
+   which is fast in modern JS. We always run synchronously and then
+   render. If candidates exceed the configured limit, we ask the user
+   to deselect some via the planner cards.
+   ============================================================ */
+function runOptimizer(state) {
+  const horizonStart = parseDate(state.settings.projectionStartDate) || TODAY;
+  const horizonEnd = addDays(horizonStart, effectiveHorizonDays(state));
+
+  const candidates = state.offers.filter(o => {
+    if (!HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return false;
+    if (!isOfferComplete(o)) return false;
+    const start = parseDate(lockStartDate(o));
+    const end = parseDate(withdrawalEligibleDate(o));
+    if (!start || !end) return false;
+    if (end <= horizonStart || start >= horizonEnd) return false;
+    return true;
+  });
+
+  const max = state.settings.maxOptimizerCandidates || 15;
+
+  if (candidates.length > max) {
+    return {
+      tooMany: true,
+      candidateCount: candidates.length,
+      max,
+      candidates,
+      results: [],
+      evaluated: 0,
+      infeasibleCount: 0
+    };
+  }
+
+  const buffer = Number(state.settings.minimumCashBuffer) || 0;
+  const total = 1 << candidates.length;
+  const results = [];
+  let infeasibleCount = 0;
+
+  for (let mask = 0; mask < total; mask++) {
+    const includedIds = [];
+    let totalBonus = 0;
+    let totalRequired = 0;
+    let weightedAnnReturnNum = 0;
+    let weightedAnnReturnDen = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      if (mask & (1 << i)) {
+        const o = candidates[i];
+        includedIds.push(o.id);
+        totalBonus += Number(o.signupBonusAmount) || 0;
+        totalRequired += Number(o.requiredFundingAmount) || 0;
+        const ar = annualizedReturn(o);
+        if (ar != null) {
+          // Weight by required capital × duration to get a blended rate
+          const weight = Number(o.requiredFundingAmount) * Number(o.daysFundsMustRemain);
+          weightedAnnReturnNum += ar * weight;
+          weightedAnnReturnDen += weight;
+        }
+      }
+    }
+
+    const proj = generateProjection(state, { includedOfferIds: includedIds });
+    let lowest = Infinity;
+    let belowBufferDays = 0;
+    let shortfallDays = 0;
+    const breachDates = [];
+    for (const d of proj) {
+      if (d.availableCapital < lowest) lowest = d.availableCapital;
+      if (d.shortfall) { shortfallDays++; breachDates.push(d.dateISO); }
+      else if (d.belowBuffer) belowBufferDays++;
+    }
+    const feasible = shortfallDays === 0 && belowBufferDays === 0;
+    if (!feasible) infeasibleCount++;
+    results.push({
+      mask,
+      includedIds,
+      offerCount: includedIds.length,
+      totalBonus,
+      totalRequired,
+      lowestAvailable: lowest,
+      belowBufferDays,
+      shortfallDays,
+      feasible,
+      blendedAnnReturn: weightedAnnReturnDen > 0 ? weightedAnnReturnNum / weightedAnnReturnDen : null,
+      breachDates: breachDates.slice(0, 5)
+    });
+  }
+
+  // Rank feasible: bonus desc → annReturn desc → lowestAvailable desc
+  const feasibleResults = results
+    .filter(r => r.feasible && r.offerCount > 0)
+    .sort((a, b) => {
+      if (b.totalBonus !== a.totalBonus) return b.totalBonus - a.totalBonus;
+      const ar = (a.blendedAnnReturn ?? 0), br = (b.blendedAnnReturn ?? 0);
+      if (br !== ar) return br - ar;
+      return b.lowestAvailable - a.lowestAvailable;
+    });
+
+  return {
+    tooMany: false,
+    candidates,
+    results: feasibleResults.slice(0, 10),
+    allResults: results,
+    evaluated: total,
+    infeasibleCount,
+    candidateCount: candidates.length
+  };
+}
+
+/* ============================================================
+   RENDERING — top-level shell
+   ============================================================ */
+function render() {
+  const root = document.getElementById('app');
+  // Preserve focus + caret on inputs across full re-renders. Without this,
+  // typing/backspacing in the search box loses focus on every keystroke
+  // because innerHTML destroys the input element.
+  const focused = document.activeElement;
+  const focusedId = focused && focused.id ? focused.id : null;
+  const selStart = focused && focused.selectionStart != null ? focused.selectionStart : null;
+  const selEnd = focused && focused.selectionEnd != null ? focused.selectionEnd : null;
+
+  root.innerHTML = renderShell();
+
+  if (focusedId) {
+    const el = document.getElementById(focusedId);
+    if (el) {
+      el.focus({ preventScroll: true });
+      try { if (selStart != null && el.setSelectionRange) el.setSelectionRange(selStart, selEnd); } catch {}
+    }
+  }
+  bindViewEvents();
+  // Re-render charts that need actual DOM measurements
+  renderChartsAfterMount();
+}
+
+function renderShell() {
+  return `
+    ${renderHeader()}
+    <main class="app-main">${renderActiveView()}</main>
+    ${renderMobileNav()}
+    <button class="fab" id="fab-add" aria-label="Add offer">+</button>
+    <div class="modal" id="modal-root"></div>
+    <div class="toast" id="toast"></div>
+  `;
+}
+
+function renderHeader() {
+  const views = [
+    ['overview', 'Overview'],
+    ['planner', 'Planner'],
+    ['timeline', 'Timeline'],
+    ['offers', 'Offers'],
+    ['settings', 'Settings']
+  ];
+  return `
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+        </div>
+        <div class="brand-name">Yield Vector</div>
+      </div>
+      <nav class="primary-nav">
+        ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}">${l}</button>`).join('')}
+      </nav>
+      <div class="header-trailing">
+        ${renderSyncIndicator()}
+        <div class="header-actions">
+          <button class="btn btn-primary" data-action="add-offer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add offer
+          </button>
+        </div>
+      </div>
+    </header>
+  `;
+}
+
+function renderMobileNav() {
+  const items = [
+    ['overview', 'Home', 'M3 12L12 4l9 8M5 11v9h14v-9'],
+    ['planner', 'Plan', 'M3 6h18M6 6v14M14 6v14M18 10h3M18 14h3M18 18h3'],
+    ['timeline', 'Timeline', 'M4 6h16M4 12h10M4 18h13'],
+    ['offers', 'Offers', 'M4 5h16v4H4zM4 13h16v6H4z'],
+    ['settings', 'Settings', 'M12 8a4 4 0 100 8 4 4 0 000-8zM21 12c0-.6-.1-1.2-.2-1.7l2-1.5-2-3.4-2.3.9c-.8-.7-1.7-1.2-2.7-1.6L15 2H9l-.8 2.6c-1 .4-1.9.9-2.7 1.6l-2.3-.9-2 3.4 2 1.5C3.1 10.8 3 11.4 3 12s.1 1.2.2 1.7l-2 1.5 2 3.4 2.3-.9c.8.7 1.7 1.2 2.7 1.6L9 22h6l.8-2.6c1-.4 1.9-.9 2.7-1.6l2.3.9 2-3.4-2-1.5c.1-.5.2-1.1.2-1.7z']
+  ];
+  return `
+    <nav class="mobile-nav">
+      ${items.map(([k, l, p]) => `
+        <button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="${p}"/></svg>
+          <span>${l}</span>
+        </button>
+      `).join('')}
+    </nav>
+  `;
+}
+
+function renderActiveView() {
+  switch (App.view) {
+    case 'overview': return renderOverview();
+    case 'planner': return renderPlanner();
+    case 'timeline': return renderTimeline();
+    case 'offers': return renderOffers();
+    case 'settings': return renderSettings();
+    default: return renderOverview();
+  }
+}
+
+/* ============================================================
+   OVERVIEW VIEW
+   ============================================================ */
+function renderOverview() {
+  const proj = generateProjection(App.state);
+  const summary = summarizeProjection(proj, App.state.settings);
+
+  const today = summary.today;
+  const lowest = summary.lowest;
+
+  const includedOffers = App.state.offers.filter(o => offerIsActiveForProjection(o));
+  const expectedBonusTotal = includedOffers.reduce((s, o) => s + (Number(o.signupBonusAmount) || 0), 0);
+  const tiedUpToday = today ? today.totalTiedUp : 0;
+  const liquidCapital = App.state.settings.currentLiquidCapital;
+
+  const heroAvailable = today ? today.availableCapital : liquidCapital;
+  const heroLowest = lowest ? lowest.availableCapital : heroAvailable;
+
+  const lowestPill = summary.shortfallDays > 0
+    ? `<span class="pill danger">${summary.shortfallDays} shortfall day${summary.shortfallDays === 1 ? '' : 's'}</span>`
+    : summary.belowBufferDays > 0
+      ? `<span class="pill warn">${summary.belowBufferDays} day${summary.belowBufferDays === 1 ? '' : 's'} below buffer</span>`
+      : `<span class="pill">Healthy through horizon</span>`;
+
+  const upcomingActions = computeUpcomingActions(App.state, 12);
+
+  return `
+    <section class="hero">
+      <div class="hero-numbers">
+        <div class="hero-amount">
+          <span class="currency-symbol">$</span>${Math.max(0, Math.round(heroAvailable)).toLocaleString('en-US')}
+        </div>
+        <div class="hero-meta">
+          <span>Available capital today</span>
+          ${lowestPill}
+          ${lowest && summary.lowestIdx > 0 ? `<span style="color:var(--text-tertiary);">Lowest <strong style="color:${heroLowest < 0 ? 'var(--danger)' : 'var(--text)'};">${formatCompactCurrency(heroLowest)}</strong> on ${formatDateMedium(lowest.date)}</span>` : ''}
+        </div>
+      </div>
+      <div class="chart-wrap" id="hero-chart-wrap">
+        <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="chart-tooltip" id="chart-tooltip"></div>
+      </div>
+      <div class="chart-legend">
+        <span class="chart-legend-item"><span class="legend-line" style="background:var(--accent);"></span> Available capital</span>
+        <span class="chart-legend-item"><span class="legend-line dashed" style="color:var(--warning);"></span> Buffer (${formatCompactCurrency(App.state.settings.minimumCashBuffer)})</span>
+        <span class="chart-legend-item"><span class="legend-swatch" style="background:#5b5cf6;"></span> Funding date</span>
+        <span class="chart-legend-item"><span class="legend-swatch" style="background:#10b981;"></span> Withdrawal eligible</span>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-4" style="margin-bottom: var(--space-6);">
+      ${statCard('Liquid capital', formatCurrency(liquidCapital), '')}
+      ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`)}
+      ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success')}
+      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : ''))}
+    </div>
+
+    <div class="overview-side">
+      <section class="card">
+        <div class="card-header">
+          <h2>Upcoming actions</h2>
+          <span style="font-size:12px;color:var(--text-tertiary);">Next 12</span>
+        </div>
+        ${upcomingActions.length === 0
+          ? `<div style="padding:var(--space-6);text-align:center;color:var(--text-tertiary);font-size:14px;">No upcoming dates yet. Add an offer to get started.</div>`
+          : `<div class="action-list">${upcomingActions.map(renderActionRow).join('')}</div>`}
+      </section>
+
+      <aside class="card snapshot-card">
+        <div class="snapshot-title">At a glance</div>
+        <div class="snapshot-grid">
+          <div class="snap"><span class="snap-l">Active offers</span><span class="snap-v">${App.state.offers.filter(o => o.status !== 'completed' && o.status !== 'skipped').length}</span></div>
+          <div class="snap"><span class="snap-l">Confirmed</span><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span></div>
+          <div class="snap"><span class="snap-l">Events</span><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span></div>
+          <div class="snap"><span class="snap-l">Horizon</span><span class="snap-v">${effectiveHorizonDays(App.state)}d</span></div>
+          <div class="snap"><span class="snap-l">Buffer</span><span class="snap-v">${formatCompactCurrency(App.state.settings.minimumCashBuffer)}</span></div>
+          <div class="snap"><span class="snap-l">Bonus pool</span><span class="snap-v" style="color:var(--success);">${formatCompactCurrency(expectedBonusTotal)}</span></div>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
+function statCard(label, value, meta = '', variant = '') {
+  return `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${variant}">${value}</div>
+      ${meta ? `<div class="stat-meta">${meta}</div>` : ''}
+    </div>
+  `;
+}
+
+function computeUpcomingActions(state, limit = 12) {
+  const horizonEnd = addDays(TODAY, 90);
+  const items = [];
+  for (const o of state.offers) {
+    if (o.status === 'completed' || o.status === 'skipped') continue;
+    if (o.offerExpirationDate) {
+      const d = parseDate(o.offerExpirationDate);
+      if (d && d >= TODAY && d <= horizonEnd) {
+        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn' });
+      }
+    }
+    const dd = depositDeadline(o);
+    if (dd) {
+      const d = parseDate(dd);
+      if (d && d >= TODAY && d <= horizonEnd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
+        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'warn' });
+      }
+    }
+    const we = withdrawalEligibleDate(o);
+    if (we && (o.status === 'funded' || o.status === 'applied')) {
+      const d = parseDate(we);
+      if (d && d >= TODAY && d <= horizonEnd) {
+        items.push({ date: d, kind: 'Withdrawal date', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success' });
+      }
+    }
+  }
+  for (const c of state.commitments) {
+    if (c.status === 'cancelled' || c.status === 'completed') continue;
+    if (c.endDate) {
+      const d = parseDate(c.endDate);
+      if (d && d >= TODAY && d <= horizonEnd) {
+        items.push({ date: d, kind: 'Commitment release', name: c.commitmentName, sub: formatCompactCurrency(c.amount), tag: 'success' });
+      }
+    }
+  }
+  for (const e of state.events) {
+    if (!e.includeInProjection) continue;
+    const d = parseDate(e.date);
+    if (d && d >= TODAY && d <= horizonEnd) {
+      items.push({ date: d, kind: e.amount >= 0 ? 'Inflow' : 'Outflow', name: e.eventName, sub: formatCurrency(e.amount), tag: e.amount >= 0 ? 'success' : '' });
+    }
+  }
+  items.sort((a, b) => a.date - b.date);
+  return items.slice(0, limit);
+}
+
+function renderActionRow(item) {
+  const month = item.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+  const day = item.date.getDate();
+  return `
+    <div class="action-row">
+      <div class="action-day">
+        <span class="month">${month}</span>
+        <span class="day">${day}</span>
+      </div>
+      <div class="action-body">
+        <div class="action-title">${escapeHtml(item.name)}</div>
+        <div class="action-sub">${escapeHtml(item.sub)} · ${relativeDays(item.date)}</div>
+      </div>
+      <span class="action-tag ${item.tag || ''}">${escapeHtml(item.kind)}</span>
+    </div>
+  `;
+}
+
+/* ============================================================
+   PLANNER VIEW
+   ============================================================ */
+function renderPlanner() {
+  const offers = App.state.offers
+    .filter(o => o.status !== 'completed' && o.status !== 'skipped')
+    .slice()
+    .sort((a, b) => {
+      const ar = annualizedReturn(a) ?? 0;
+      const br = annualizedReturn(b) ?? 0;
+      return br - ar;
+    });
+
+  const proj = generateProjection(App.state);
+  const summary = summarizeProjection(proj, App.state.settings);
+  const includedCount = offers.filter(o => offerIsActiveForProjection(o)).length;
+  const includedBonus = offers.filter(o => offerIsActiveForProjection(o)).reduce((s, o) => s + (o.signupBonusAmount || 0), 0);
+
+  const candidates = offers.filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o));
+
+  const optResult = App.optimizer.results;
+
+  return `
+    <div class="section-header">
+      <div>
+        <h2>Planner</h2>
+        <p>Toggle offers in or out and see your cash projection update live.</p>
+      </div>
+      <div style="display:flex;gap:var(--space-2);">
+        <button class="btn btn-secondary" data-action="add-offer">+ Add offer</button>
+      </div>
+    </div>
+
+    <div class="optimizer-bar">
+      <div class="optimizer-summary">
+        <div class="metric">
+          <span class="label">Selected</span>
+          <span class="value">${includedCount} <span style="font-size:13px;color:var(--text-tertiary);font-weight:500;">of ${offers.length}</span></span>
+        </div>
+        <div class="metric">
+          <span class="label">Expected bonus</span>
+          <span class="value" style="color:var(--success);">${formatCurrency(includedBonus)}</span>
+        </div>
+        <div class="metric">
+          <span class="label">Lowest projected</span>
+          <span class="value ${summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : '')}" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#b45309;' : '')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
+        </div>
+        <div class="metric">
+          <span class="label">Candidates for optimizer</span>
+          <span class="value">${candidates.length}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-primary" data-action="run-optimizer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Find feasible combinations
+        </button>
+        ${optResult ? `<button class="btn btn-ghost btn-sm" data-action="clear-optimizer">Clear results</button>` : ''}
+      </div>
+    </div>
+
+    ${optResult ? renderOptimizerResults(optResult) : ''}
+
+    ${offers.length === 0
+      ? renderEmptyState('No offers yet', 'Add a bonus to start planning. We will compute the funding/withdrawal dates and tied-up cash for you.', 'add-offer', 'Add your first offer')
+      : `<div class="planner-grid">${offers.map(renderOfferCard).join('')}</div>`
+    }
+  `;
+}
+
+function renderOptimizerResults(result) {
+  if (result.tooMany) {
+    return `
+      <div class="banner warn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+        <div>
+          <strong>Too many candidates for brute force:</strong> ${result.candidateCount} offers (limit ${result.max}). Mark some offers as "skipped" or convert them to commitments first, or raise the limit in Settings.
+        </div>
+      </div>
+    `;
+  }
+  if (result.results.length === 0) {
+    return `
+      <div class="banner danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+        <div>
+          <strong>No feasible combinations.</strong> Of ${result.evaluated} subsets evaluated, all ${result.infeasibleCount} would breach your buffer or go negative. Try raising your liquid capital, lowering your buffer floor, or removing high-capital offers.
+        </div>
+      </div>
+    `;
+  }
+  // Compute which combo (if any) matches the user's current includeInScenario state.
+  const currentMask = currentlyAppliedComboMask(result.candidates);
+  return `
+    <section class="card" style="margin-bottom:var(--space-5);">
+      <div class="card-header">
+        <h2>Top feasible combinations</h2>
+        <span style="font-size:12px;color:var(--text-tertiary);">Evaluated ${result.evaluated.toLocaleString()} subsets · ${result.infeasibleCount} infeasible · click a combo to apply it</span>
+      </div>
+      <div class="combo-grid">
+        ${result.results.map((r, i) => renderComboCard(r, i, result.candidates, currentMask)).join('')}
+      </div>
+      <p style="margin-top:var(--space-3);font-size:12px;color:var(--text-tertiary);">Only combinations that never dip below your buffer are shown. Ranking: highest total bonus → highest blended APY → highest lowest-available cash. <strong>Low cash</strong> is how thin you'd run at the worst point.</p>
+    </section>
+  `;
+}
+
+function currentlyAppliedComboMask(candidates) {
+  let mask = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const o = App.state.offers.find(x => x.id === candidates[i].id);
+    if (o && o.includeInScenario) mask |= (1 << i);
+  }
+  return mask;
+}
+
+function renderComboCard(r, rank, candidates, currentMask) {
+  const offers = r.includedIds.map(id => candidates.find(o => o.id === id)).filter(Boolean);
+  const isSelected = r.mask === currentMask;
+  return `
+    <div class="combo-card ${isSelected ? 'selected' : ''}" data-action="apply-combo" data-mask="${r.mask}" role="button" tabindex="0">
+      <div class="combo-header">
+        <div>
+          <div class="combo-rank">#${rank + 1}${rank === 0 ? ' · <span class="recommended-tag">Recommended</span>' : ''}${isSelected ? ' · <span style="color:var(--accent);">Applied</span>' : ''}</div>
+          <div class="combo-bonus">${formatCurrency(r.totalBonus)}</div>
+        </div>
+      </div>
+      <div class="combo-meta">
+        <span><strong>${formatCompactCurrency(r.totalRequired)}</strong> capital</span>
+        <span><strong>${formatCompactCurrency(r.lowestAvailable)}</strong> low cash</span>
+        ${r.blendedAnnReturn != null ? `<span><strong>${formatPercent(r.blendedAnnReturn)}</strong> APY blended</span>` : ''}
+        ${r.belowBufferDays > 0 ? `<span style="color:#b45309;">${r.belowBufferDays}d below buffer</span>` : ''}
+      </div>
+      <div class="combo-offers">
+        ${offers.map(o => `
+          <div class="combo-offer">
+            <span class="name">${escapeHtml(o.bankName)}${o.offerName ? ' · ' + escapeHtml(o.offerName) : ''}</span>
+            <span class="amount">${formatCompactCurrency(o.signupBonusAmount)} / ${formatCompactCurrency(o.requiredFundingAmount)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderOfferCard(o) {
+  const complete = isOfferComplete(o);
+  const issues = offerIssues(o);
+  const start = lockStartDate(o);
+  const end = withdrawalEligibleDate(o);
+  const ar = annualizedReturn(o);
+  const sr = simpleReturn(o);
+  const isConfirmed = CONFIRMED_OFFER_STATUSES.has(o.status);
+  const checked = isConfirmed || o.includeInScenario;
+  const disabled = !complete || isConfirmed;
+
+  return `
+    <div class="offer-card ${checked && complete ? 'included' : ''} ${!complete ? 'draft' : ''}">
+      <div class="offer-card-header">
+        <input type="checkbox" class="offer-include"
+          ${checked ? 'checked' : ''}
+          ${disabled ? 'disabled' : ''}
+          data-action="toggle-include" data-id="${o.id}"
+          aria-label="Include in scenario" />
+        <div style="flex:1;min-width:0;">
+          <div class="offer-name">${escapeHtml(o.bankName || 'Untitled offer')}</div>
+          <div class="offer-bank">${escapeHtml(o.offerName || '')}</div>
+        </div>
+        <button class="btn-icon" data-action="edit-offer" data-id="${o.id}" aria-label="Edit">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+      </div>
+      ${!complete
+        ? `<div class="banner warn" style="font-size:12px;padding:8px 10px;margin-bottom:var(--space-3);">Draft — ${escapeHtml(issues[0])}</div>`
+        : ''}
+      <div class="offer-stats">
+        <div class="offer-stat">
+          <span class="offer-stat-label">Funding</span>
+          <span class="offer-stat-value">${formatCompactCurrency(o.requiredFundingAmount)}</span>
+        </div>
+        <div class="offer-stat">
+          <span class="offer-stat-label">Bonus</span>
+          <span class="offer-stat-value success">${formatCompactCurrency(o.signupBonusAmount)}</span>
+        </div>
+        <div class="offer-stat">
+          <span class="offer-stat-label">Days tied up</span>
+          <span class="offer-stat-value" title="Actual days your cash is unavailable: from funded date to withdrawal-eligible date.${o.lockStartsFrom === 'open date' ? ' Bank requires ' + o.daysFundsMustRemain + ' days from account open.' : ''}">${(start && end) ? daysBetween(parseDate(start), parseDate(end)) : (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && start && end ? ` <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">/ ${o.daysFundsMustRemain}</span>` : ''}</span>
+        </div>
+        <div class="offer-stat">
+          <span class="offer-stat-label">Annualized</span>
+          <span class="offer-stat-value ${ar != null ? 'success' : 'muted'}" title="Annualized return on tied-up capital. = (bonus / required funding) × 365 / lock days.">${ar != null ? formatPercent(ar) : '—'}</span>
+        </div>
+      </div>
+      <div class="offer-dates">
+        ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
+        ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
+        ${o.offerExpirationDate ? `<span style="color:var(--warning);"><strong>Offer expires:</strong> ${formatDateMedium(o.offerExpirationDate)}</span>` : ''}
+      </div>
+      <div class="offer-chips">
+        <span class="chip ${STATUS_CHIP_CLASS[o.status] || 'chip-muted'}">${STATUS_LABELS[o.status] || o.status}</span>
+        ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
+        ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   TIMELINE VIEW
+   ============================================================ */
+function renderTimeline() {
+  const settings = App.state.settings;
+  const start = parseDate(settings.projectionStartDate) || TODAY;
+  const horizon = effectiveHorizonDays(App.state);
+  const end = addDays(start, horizon);
+
+  // Collect "rows" — manual commitments + virtual offer commitments
+  const rows = [];
+  const offerWithCommitment = new Set();
+  for (const c of App.state.commitments) {
+    if (c.sourceBonusOfferId) offerWithCommitment.add(c.sourceBonusOfferId);
+    if (!App.filters.timelineShowCancelled && c.status === 'cancelled') continue;
+    if (!App.filters.timelineShowCompleted && c.status === 'completed') continue;
+    rows.push({
+      id: c.id,
+      label: c.commitmentName,
+      sub: `${formatCurrency(c.amount)} · ${c.type}`,
+      start: parseDate(c.startDate),
+      end: parseDate(c.endDate),
+      status: c.status,
+      isVirtual: false
+    });
+  }
+  for (const o of App.state.offers) {
+    if (offerWithCommitment.has(o.id)) continue;
+    if (!isOfferComplete(o)) continue;
+    if (!offerIsActiveForProjection(o) && o.status !== 'completed') continue;
+    if (o.status === 'completed' && !App.filters.timelineShowCompleted) continue;
+    if (o.status === 'skipped') continue;
+    const sStart = parseDate(lockStartDate(o));
+    const sEnd = parseDate(withdrawalEligibleDate(o));
+    if (!sStart || !sEnd) continue;
+    rows.push({
+      id: o.id,
+      label: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`,
+      sub: `${formatCurrency(o.requiredFundingAmount)} · ${STATUS_LABELS[o.status] || o.status}`,
+      start: sStart,
+      end: sEnd,
+      status: CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : (o.status === 'completed' ? 'completed' : 'hypothetical'),
+      isVirtual: true
+    });
+  }
+  rows.sort((a, b) => (a.start || 0) - (b.start || 0));
+
+  // Compute shortfall bands
+  const proj = generateProjection(App.state);
+  const shortfallBands = [];
+  let bandStart = null;
+  for (let i = 0; i < proj.length; i++) {
+    const d = proj[i];
+    if (d.shortfall && bandStart === null) bandStart = i;
+    if ((!d.shortfall || i === proj.length - 1) && bandStart !== null) {
+      shortfallBands.push({ from: bandStart, to: d.shortfall ? i + 1 : i });
+      bandStart = null;
+    }
+  }
+
+  // Generate axis ticks (one per month within horizon)
+  const ticks = [];
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  if (cursor < start) cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  while (cursor < end) {
+    ticks.push({
+      pct: ((cursor - start) / (end - start)) * 100,
+      label: cursor.toLocaleDateString('en-US', { month: 'short', year: cursor.getFullYear() !== TODAY.getFullYear() ? '2-digit' : undefined })
+    });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  const totalDays = horizon;
+  function pctFor(d) {
+    if (!d) return null;
+    const days = (d - start) / 86400000;
+    return Math.max(0, Math.min(100, (days / totalDays) * 100));
+  }
+
+  const todayPct = (TODAY >= start && TODAY < end) ? pctFor(TODAY) : null;
+
+  return `
+    <div class="section-header">
+      <div>
+        <h2>Timeline</h2>
+        <p>Capital commitments over the next ${horizon} days. Confirmed bars are solid, hypothetical bars are dashed.</p>
+      </div>
+      <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;">
+        <label class="checkbox-row">
+          <input type="checkbox" data-action="toggle-filter" data-filter="timelineShowCompleted" ${App.filters.timelineShowCompleted ? 'checked' : ''} />
+          <span style="font-size:13px;color:var(--text-secondary);">Show completed</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" data-action="toggle-filter" data-filter="timelineShowCancelled" ${App.filters.timelineShowCancelled ? 'checked' : ''} />
+          <span style="font-size:13px;color:var(--text-secondary);">Show cancelled</span>
+        </label>
+      </div>
+    </div>
+
+    ${rows.length === 0
+      ? renderEmptyState('No commitments to plot', 'When you add offers or capital commitments, they will appear here as horizontal bars across time.')
+      : `
+        <div class="timeline-wrap">
+          <div class="timeline-row">
+            <div class="timeline-row-label" style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;">${formatDateShort(start)} → ${formatDateShort(end)}</div>
+            <div class="timeline-row-track">
+              <div class="tl-axis">
+                ${ticks.map(t => `<span class="tl-axis-tick" style="left:${t.pct}%;">${t.label}</span>`).join('')}
+                ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
+              </div>
+            </div>
+          </div>
+          ${rows.map(r => {
+            const sPct = pctFor(r.start);
+            const ePct = pctFor(r.end);
+            if (sPct == null || ePct == null || ePct <= sPct) return '';
+            const w = ePct - sPct;
+            return `
+              <div class="timeline-row">
+                <div class="timeline-row-label">
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label)}</span>
+                  <span class="sub">${escapeHtml(r.sub)}</span>
+                </div>
+                <div class="timeline-row-track">
+                  ${ticks.map(t => `<div class="tl-grid-line" style="left:${t.pct}%;"></div>`).join('')}
+                  ${shortfallBands.map(b => {
+                    const left = (b.from / totalDays) * 100;
+                    const right = (b.to / totalDays) * 100;
+                    return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
+                  }).join('')}
+                  <div class="tl-bar ${r.status}" style="left:${sPct}%;width:${w}%;" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
+                    ${w > 8 ? formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })()) : ''}
+                  </div>
+                  ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="chart-legend" style="margin-top:var(--space-4);">
+          <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(91,92,246,0.2);border:1.5px solid var(--accent);"></span> Confirmed</span>
+          <span class="chart-legend-item"><span class="legend-swatch" style="background:repeating-linear-gradient(45deg,rgba(91,92,246,0.10),rgba(91,92,246,0.10) 4px,rgba(91,92,246,0.18) 4px,rgba(91,92,246,0.18) 8px);border:1.5px dashed var(--accent);"></span> Hypothetical</span>
+          <span class="chart-legend-item"><span class="legend-swatch" style="background:var(--bg);border:1.5px solid var(--border-strong);"></span> Completed</span>
+          <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(239,68,68,0.18);"></span> Shortfall day</span>
+        </div>
+      `}
+  `;
+}
+
+/* ============================================================
+   OFFERS VIEW
+   ============================================================ */
+function renderOffers() {
+  const all = App.state.offers.slice();
+  const filtered = all.filter(o => {
+    if (App.filters.offersStatus !== 'all' && o.status !== App.filters.offersStatus) return false;
+    if (App.filters.offersSearch) {
+      const q = App.filters.offersSearch.toLowerCase();
+      if (!(o.bankName + ' ' + (o.offerName || '') + ' ' + (o.notes || '')).toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const advanced = App.filters.offersAdvanced;
+
+  return `
+    <div class="section-header">
+      <div>
+        <h2>Offers</h2>
+        <p>${all.length} total · ${all.filter(o => isOfferComplete(o)).length} complete · ${all.filter(o => !isOfferComplete(o)).length} drafts</p>
+      </div>
+      <div style="display:flex;gap:var(--space-2);">
+        <button class="btn btn-secondary" data-action="toggle-advanced">${advanced ? 'Card view' : 'Table view'}</button>
+        <button class="btn btn-primary" data-action="add-offer">+ Add offer</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input id="offers-search-input" type="search" class="input" placeholder="Search offers..." style="max-width:280px;" data-action="offers-search" value="${escapeAttr(App.filters.offersSearch)}" autocomplete="off" />
+      <select class="select" style="max-width:200px;" data-action="offers-status">
+        <option value="all" ${App.filters.offersStatus === 'all' ? 'selected' : ''}>All statuses</option>
+        ${STATUSES.map(s => `<option value="${s}" ${App.filters.offersStatus === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+      </select>
+    </div>
+
+    ${filtered.length === 0
+      ? renderEmptyState(all.length === 0 ? 'No offers yet' : 'No offers match', all.length === 0 ? 'Add your first bank bonus to start planning.' : 'Try changing the filter or search query.', all.length === 0 ? 'add-offer' : null, all.length === 0 ? 'Add an offer' : null)
+      : (advanced ? renderOffersTable(filtered) : `<div class="planner-grid">${filtered.map(renderOfferCardWithActions).join('')}</div>`)
+    }
+  `;
+}
+
+function renderOfferCardWithActions(o) {
+  const card = renderOfferCard(o);
+  const actions = `
+    <div class="offer-actions" style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);">
+      <button class="btn btn-ghost btn-sm" data-action="edit-offer" data-id="${o.id}">Edit</button>
+      <button class="btn btn-ghost btn-sm" data-action="duplicate-offer" data-id="${o.id}">Duplicate</button>
+      <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}">Convert</button>
+      <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}">
+        ${STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+      </select>
+      <button class="btn btn-ghost btn-sm btn-danger" data-action="delete-offer" data-id="${o.id}" aria-label="Delete">×</button>
+    </div>
+  `;
+  // Insert actions inside the offer-card, just before its closing tag.
+  const lastIdx = card.lastIndexOf('</div>');
+  return card.slice(0, lastIdx) + actions + card.slice(lastIdx);
+}
+
+function renderOffersTable(offers) {
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Bank / Offer</th>
+            <th class="num">Funding</th>
+            <th class="num">Bonus</th>
+            <th class="num">Lock days</th>
+            <th>Fund date</th>
+            <th>Withdrawal date</th>
+            <th class="num">APY</th>
+            <th>Status</th>
+            <th>Entity</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${offers.map(o => {
+            const ar = annualizedReturn(o);
+            const ls = lockStartDate(o);
+            const we = withdrawalEligibleDate(o);
+            const actualDays = (ls && we) ? daysBetween(parseDate(ls), parseDate(we)) : null;
+            return `
+              <tr>
+                <td>
+                  <div style="font-weight:500;">${escapeHtml(o.bankName)}</div>
+                  <div style="font-size:11px;color:var(--text-tertiary);">${escapeHtml(o.offerName || '')}</div>
+                </td>
+                <td class="num">${formatCurrency(o.requiredFundingAmount)}</td>
+                <td class="num" style="color:var(--success);font-weight:600;">${formatCurrency(o.signupBonusAmount)}</td>
+                <td class="num" title="${o.lockStartsFrom === 'open date' ? 'Bank requires ' + (o.daysFundsMustRemain ?? '—') + ' days from open; actual lock = ' + (actualDays ?? '—') : 'Days funds must remain'}">${actualDays ?? (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && actualDays != null ? ` <span style="color:var(--text-tertiary);">/ ${o.daysFundsMustRemain}</span>` : ''}</td>
+                <td>${formatDateShort(ls) || '—'}</td>
+                <td>${formatDateShort(we) || '—'}</td>
+                <td class="num">${ar != null ? formatPercent(ar) : '—'}</td>
+                <td><span class="chip ${STATUS_CHIP_CLASS[o.status] || 'chip-muted'}">${STATUS_LABELS[o.status]}</span></td>
+                <td style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(o.entityUsed || '—')}</td>
+                <td>
+                  <div class="row-action-buttons">
+                    <button class="btn-icon" data-action="edit-offer" data-id="${o.id}" aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                    <button class="btn-icon" data-action="duplicate-offer" data-id="${o.id}" aria-label="Duplicate"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ============================================================
+   SETTINGS VIEW
+   ============================================================ */
+function renderSettings() {
+  const s = App.state.settings;
+  return `
+    <div class="section-header">
+      <div>
+        <h2>Settings</h2>
+        <p>Configure liquid capital, buffer, projection horizon, and manage data.</p>
+      </div>
+    </div>
+
+    <section class="form-section">
+      <h2>Capital & projection</h2>
+      <p class="section-desc">These values drive the daily cash projection on the Overview.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="s-liquid">Current liquid capital</label>
+          <div class="input-group">
+            <span class="input-prefix">$</span>
+            <input id="s-liquid" type="number" step="100" class="input" value="${s.currentLiquidCapital}" data-setting="currentLiquidCapital" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="s-buffer">Minimum cash buffer</label>
+          <div class="input-group">
+            <span class="input-prefix">$</span>
+            <input id="s-buffer" type="number" step="100" class="input" value="${s.minimumCashBuffer}" data-setting="minimumCashBuffer" />
+          </div>
+          <span class="field-hint">Days below this threshold are flagged but not breached.</span>
+        </div>
+        <div class="field">
+          <label for="s-start">Projection start date</label>
+          <input id="s-start" type="date" class="input" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
+        </div>
+        <div class="field">
+          <label for="s-horizon-mode">Projection horizon</label>
+          <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
+            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 month past last bonus)</option>
+            <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
+            <option value="6months" ${s.projectionHorizonMode === '6months' ? 'selected' : ''}>6 months</option>
+            <option value="1year" ${s.projectionHorizonMode === '1year' ? 'selected' : ''}>1 year</option>
+            <option value="2years" ${s.projectionHorizonMode === '2years' ? 'selected' : ''}>2 years</option>
+            <option value="custom" ${s.projectionHorizonMode === 'custom' ? 'selected' : ''}>Custom days…</option>
+          </select>
+          <span class="field-hint">Currently showing <strong>${effectiveHorizonDays(App.state)} days</strong>.</span>
+        </div>
+        ${(s.projectionHorizonMode === 'custom') ? `
+        <div class="field">
+          <label for="s-horizon">Custom horizon (days)</label>
+          <input id="s-horizon" type="number" min="30" max="1825" step="1" class="input" value="${s.projectionHorizonDays}" data-setting="projectionHorizonDays" />
+        </div>` : ''}
+        <div class="field">
+          <label for="s-max">Optimizer max candidates</label>
+          <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
+          <span class="field-hint">Brute force evaluates 2^n subsets. 15 ≈ 32k subsets.</span>
+        </div>
+        <div class="field">
+          <label>Default lock interval start</label>
+          <div class="radio-group">
+            <input type="radio" id="lock-fund" name="defaultLockStartsFrom" value="funded date" ${s.defaultLockStartsFrom === 'funded date' ? 'checked' : ''} data-setting="defaultLockStartsFrom" />
+            <label for="lock-fund">Funded date</label>
+            <input type="radio" id="lock-open" name="defaultLockStartsFrom" value="open date" ${s.defaultLockStartsFrom === 'open date' ? 'checked' : ''} data-setting="defaultLockStartsFrom" />
+            <label for="lock-open">Open date</label>
+          </div>
+        </div>
+      </div>
+      <div class="banner" style="margin-top:var(--space-5);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/></svg>
+        <div>
+          <strong>Interval convention:</strong> A commitment with start <em>A</em> and end <em>B</em> ties up funds on each day <em>d</em> where <em>A ≤ d &lt; B</em>. If money lands March 1 and is withdrawal-eligible May 1, it is tied up March 1 through April 30 (61 days).
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="card-header" style="margin-bottom:var(--space-4);">
+        <h2>Capital commitments</h2>
+        <button class="btn btn-secondary btn-sm" data-action="add-commitment">+ Add commitment</button>
+      </div>
+      <p class="section-desc">Manual holds (CDs, lockups, etc.). Bonus offers create their own virtual commitments automatically.</p>
+      ${App.state.commitments.length === 0
+        ? `<div class="empty-state" style="padding:var(--space-8);"><h3 style="font-size:15px;">No manual commitments</h3><p>Most offers do not need this — only add a commitment for non-bonus capital you want to hold out.</p></div>`
+        : renderCommitmentsTable()
+      }
+    </section>
+
+    <section class="form-section">
+      <div class="card-header" style="margin-bottom:var(--space-4);">
+        <h2>Capital events</h2>
+        <button class="btn btn-secondary btn-sm" data-action="add-event">+ Add event</button>
+      </div>
+      <p class="section-desc">One-time inflows (paychecks, sale proceeds) or outflows (taxes, big expenses) that change your liquid capital on a specific date.</p>
+      ${App.state.events.length === 0
+        ? `<div class="empty-state" style="padding:var(--space-8);"><h3 style="font-size:15px;">No capital events</h3><p>Add upcoming inflows/outflows to make the projection more accurate.</p></div>`
+        : renderEventsTable()
+      }
+    </section>
+
+    ${renderSyncSection()}
+
+    <section class="form-section">
+      <h2>Data</h2>
+      <p class="section-desc">Export your data to JSON to back up or transfer between devices. Import to restore.</p>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
+        <button class="btn btn-secondary" data-action="export-json">Export JSON</button>
+        <label class="btn btn-secondary" style="cursor:pointer;">
+          Import JSON
+          <input type="file" accept="application/json" style="display:none;" data-action="import-json" />
+        </label>
+        <button class="btn btn-secondary" data-action="reset-sample">Reset to sample data</button>
+        <button class="btn btn-secondary btn-danger" data-action="clear-all">Clear all data</button>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2>Daily projection (debug)</h2>
+      <p class="section-desc">Raw daily output of the cash projection over your horizon. Useful for verifying the math.</p>
+      <details>
+        <summary style="cursor:pointer;font-size:13px;color:var(--text-secondary);padding:8px 0;">Show full daily table (${effectiveHorizonDays(App.state)} rows)</summary>
+        ${renderProjectionDebugTable()}
+      </details>
+    </section>
+  `;
+}
+
+function renderCommitmentsTable() {
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="num">Amount</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>In projection</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${App.state.commitments.map(c => `
+            <tr>
+              <td>
+                <div style="font-weight:500;">${escapeHtml(c.commitmentName)}</div>
+                ${c.sourceBonusOfferId ? `<div style="font-size:11px;color:var(--text-tertiary);">Linked to offer</div>` : ''}
+              </td>
+              <td class="num">${formatCurrency(c.amount)}</td>
+              <td>${formatDateShort(c.startDate)}</td>
+              <td>${formatDateShort(c.endDate)}</td>
+              <td><span class="chip chip-muted">${escapeHtml(c.type)}</span></td>
+              <td><span class="chip ${c.status === 'confirmed' ? 'chip-accent' : c.status === 'completed' ? 'chip-success' : c.status === 'cancelled' ? 'chip-danger' : 'chip-muted'}">${escapeHtml(c.status)}</span></td>
+              <td>${c.includeInProjection ? '✓' : '—'}</td>
+              <td>
+                <div class="row-action-buttons">
+                  <button class="btn-icon" data-action="edit-commitment" data-id="${c.id}" aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button class="btn-icon btn-danger" data-action="delete-commitment" data-id="${c.id}" aria-label="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderEventsTable() {
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Date</th>
+            <th class="num">Amount</th>
+            <th>Category</th>
+            <th>In projection</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${App.state.events.map(e => `
+            <tr>
+              <td><div style="font-weight:500;">${escapeHtml(e.eventName)}</div>${e.notes ? `<div style="font-size:11px;color:var(--text-tertiary);">${escapeHtml(e.notes)}</div>` : ''}</td>
+              <td>${formatDateMedium(e.date)}</td>
+              <td class="num" style="color:${e.amount >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:600;">${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}</td>
+              <td><span class="chip chip-muted">${escapeHtml(e.category)}</span></td>
+              <td>${e.includeInProjection ? '✓' : '—'}</td>
+              <td>
+                <div class="row-action-buttons">
+                  <button class="btn-icon" data-action="edit-event" data-id="${e.id}" aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+                  <button class="btn-icon btn-danger" data-action="delete-event" data-id="${e.id}" aria-label="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSyncSection() {
+  const cfg = Sync.getConfig() || {};
+  const configured = Sync.isConfigured();
+  const lastSyncText = Sync.lastSyncAt
+    ? new Date(Sync.lastSyncAt).toLocaleString()
+    : '—';
+  const stateMod = App.state && App.state._lastModified
+    ? new Date(App.state._lastModified).toLocaleString()
+    : '—';
+  const statusColor = {
+    synced: 'var(--success)',
+    syncing: 'var(--warning)',
+    pending: 'var(--warning)',
+    error: 'var(--danger)',
+    unconfigured: 'var(--text-tertiary)'
+  }[Sync.status] || 'var(--text-tertiary)';
+
+  return `
+    <section class="form-section" id="sync-section">
+      <h2>Cloud sync</h2>
+      <p class="section-desc">Sync your planner across devices via a private GitHub Gist. Free, end-to-end controlled by you, requires only a "gist"-scoped Personal Access Token.</p>
+
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:var(--space-4);">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${statusColor};"></span>
+        <span style="color:var(--text-secondary);"><strong style="color:var(--text);">${({synced:'Synced',syncing:'Syncing…',pending:'Push pending',error:'Error',unconfigured:'Not configured'})[Sync.status] || Sync.status}</strong>${Sync.lastError ? ' — ' + escapeHtml(Sync.lastError) : ''}</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="sync-gist">Gist ID</label>
+          <input id="sync-gist" class="input" type="text" placeholder="e.g. a1b2c3d4e5..." value="${escapeAttr(cfg.gistId || '')}" autocomplete="off" spellcheck="false" />
+          <span class="field-hint">From the Gist URL: <code>gist.github.com/&lt;you&gt;/<strong>this-part</strong></code></span>
+        </div>
+        <div class="field">
+          <label for="sync-token">Personal Access Token</label>
+          <input id="sync-token" class="input" type="password" placeholder="ghp_... or github_pat_..." value="${escapeAttr(cfg.token || '')}" autocomplete="off" spellcheck="false" />
+          <span class="field-hint">Stored locally per device. Scope: only <strong>gist</strong>.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-4);">
+        <button class="btn btn-primary" data-action="sync-save">Save & test</button>
+        <button class="btn btn-secondary" data-action="sync-create-gist">Create new Gist</button>
+        <button class="btn btn-secondary" data-action="sync-pull" ${configured ? '' : 'disabled'}>Pull now</button>
+        <button class="btn btn-secondary" data-action="sync-push" ${configured ? '' : 'disabled'}>Push now</button>
+        <button class="btn btn-ghost btn-danger" data-action="sync-disconnect" ${configured ? '' : 'disabled'}>Disconnect</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-top:var(--space-4);font-size:12px;color:var(--text-tertiary);">
+        <div>Last cloud sync: <span style="color:var(--text-secondary);">${lastSyncText}</span></div>
+        <div>Local state modified: <span style="color:var(--text-secondary);">${stateMod}</span></div>
+      </div>
+
+      <div class="banner" style="margin-top:var(--space-5);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16.01"/></svg>
+        <div>
+          <strong>First-time setup (per account, not per device):</strong>
+          <ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.7;">
+            <li>Go to <a href="https://github.com/settings/tokens" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">github.com/settings/tokens</a> → <em>Generate new token</em> → <em>classic</em> → check <strong>only</strong> the <code>gist</code> scope → set "No expiration" or 1 year. Copy the token (starts with <code>ghp_</code>).</li>
+            <li>Paste the token above, leave Gist ID empty, then click <strong>Create new Gist</strong>. The app will create a private Gist and fill in the ID for you.</li>
+            <li>On every other device: open the same URL, paste the same token + Gist ID, click <strong>Save &amp; test</strong>. Your data appears.</li>
+          </ol>
+          <p style="margin-top:8px;font-size:12px;">Pushes are debounced (~1.5s after edits stop). Conflict rule: whichever device wrote last wins, based on the embedded <code>_lastModified</code> timestamp.</p>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderProjectionDebugTable() {
+  const proj = generateProjection(App.state);
+  // Sample to avoid massive DOM: every day for first 60, then weekly
+  const rows = [];
+  for (let i = 0; i < proj.length; i++) {
+    if (i < 60 || i % 7 === 0) rows.push(proj[i]);
+  }
+  return `
+    <div class="table-wrap" style="margin-top:var(--space-3);max-height:480px;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="num">Liquid</th>
+            <th class="num">Net Events</th>
+            <th class="num">Confirmed Tied</th>
+            <th class="num">Hypo Tied</th>
+            <th class="num">Available</th>
+            <th>Flag</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(d => `
+            <tr class="${d.shortfall ? 'row-danger' : (d.belowBuffer ? 'row-warn' : '')}">
+              <td>${formatDateShort(d.date)}</td>
+              <td class="num">${formatCurrency(d.startingLiquidCapital)}</td>
+              <td class="num">${formatCurrency(d.netEventsToDate)}</td>
+              <td class="num">${formatCurrency(d.confirmedTiedUp)}</td>
+              <td class="num">${formatCurrency(d.hypotheticalTiedUp)}</td>
+              <td class="num"><strong>${formatCurrency(d.availableCapital)}</strong></td>
+              <td>${d.shortfall ? '🚨 Shortfall' : (d.belowBuffer ? '⚠️ Buffer' : '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+function renderEmptyState(title, body, action = null, actionLabel = null) {
+  return `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(body)}</p>
+      ${action ? `<button class="btn btn-primary" data-action="${action}">${escapeHtml(actionLabel || '')}</button>` : ''}
+    </div>
+  `;
+}
+
+/* ============================================================
+   CHART RENDERING — Available Capital Over Time
+   ============================================================ */
+function renderChartsAfterMount() {
+  const heroChart = document.getElementById('hero-chart');
+  if (heroChart) renderHeroChart(heroChart);
+}
+
+function renderHeroChart(svg) {
+  const proj = generateProjection(App.state);
+  if (!proj.length) return;
+
+  const wrap = document.getElementById('hero-chart-wrap');
+  const tooltip = document.getElementById('chart-tooltip');
+  const W = 800, H = 280;
+  const padL = 56, padR = 28, padT = 16, padB = 36;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const buffer = App.state.settings.minimumCashBuffer;
+  const liquid = App.state.settings.currentLiquidCapital;
+
+  // Y range: padded
+  let minY = Math.min(0, buffer * 0.5);
+  let maxY = liquid;
+  for (const d of proj) {
+    if (d.availableCapital < minY) minY = d.availableCapital;
+    if (d.availableCapital > maxY) maxY = d.availableCapital;
+  }
+  if (buffer < minY) minY = buffer;
+  if (buffer > maxY) maxY = buffer;
+  const yPad = (maxY - minY) * 0.12 || 1000;
+  minY = minY - yPad * 0.4;
+  maxY = maxY + yPad * 0.6;
+  if (maxY === minY) { maxY += 1000; minY -= 1000; }
+
+  function xFor(i) { return padL + (i / (proj.length - 1)) * innerW; }
+  function yFor(v) { return padT + (1 - (v - minY) / (maxY - minY)) * innerH; }
+
+  // Y-axis ticks
+  const yTicks = niceTicks(minY, maxY, 4);
+
+  // X-axis: month labels. Skip the first month tick if it falls within
+  // ~12 days of "Today" — otherwise the labels collide.
+  const start = parseDate(App.state.settings.projectionStartDate) || TODAY;
+  const xTicks = [];
+  let cursor = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  let isFirstTick = true;
+  while (true) {
+    const dayOffset = Math.round((cursor - start) / 86400000);
+    if (dayOffset >= proj.length) break;
+    const tooCloseToToday = isFirstTick && dayOffset < 12;
+    if (dayOffset > 0 && !tooCloseToToday) {
+      // Show year too if it crosses into a new year
+      // Only show the year on January (when the year actually changes), and
+      // use the FULL year ("Jan 2027") to avoid confusion with day-of-month
+      // labels like "Jun 25" elsewhere on the chart.
+      const showYear = cursor.getMonth() === 0 && cursor.getFullYear() !== start.getFullYear();
+      xTicks.push({
+        i: dayOffset,
+        label: cursor.toLocaleDateString('en-US', showYear ? { month: 'short', year: 'numeric' } : { month: 'short' })
+      });
+    }
+    isFirstTick = false;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  // Build path
+  let linePath = '';
+  let areaPath = '';
+  for (let i = 0; i < proj.length; i++) {
+    const x = xFor(i);
+    const y = yFor(proj[i].availableCapital);
+    linePath += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    areaPath += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+  }
+  areaPath += `L${xFor(proj.length - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L${padL} ${(padT + innerH).toFixed(1)} Z`;
+
+  // Shortfall band rects
+  let shortfallBands = '';
+  let bandStart = null;
+  for (let i = 0; i < proj.length; i++) {
+    if (proj[i].shortfall && bandStart === null) bandStart = i;
+    if ((!proj[i].shortfall || i === proj.length - 1) && bandStart !== null) {
+      const endI = proj[i].shortfall ? i + 1 : i;
+      const x1 = xFor(bandStart);
+      const x2 = xFor(endI);
+      shortfallBands += `<rect x="${x1}" y="${padT}" width="${Math.max(2, x2 - x1)}" height="${innerH}" fill="rgba(239, 68, 68, 0.07)" />`;
+      bandStart = null;
+    }
+  }
+
+  // Markers: funding dates, withdrawal dates, bonus payouts
+  const markers = [];
+  for (const o of App.state.offers) {
+    if (!offerIsActiveForProjection(o)) continue;
+    const fund = parseDate(lockStartDate(o));
+    const withd = parseDate(withdrawalEligibleDate(o));
+    const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+    if (fund) {
+      const i = Math.round((fund - start) / 86400000);
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'fund', label: `Fund ${name}`, color: '#5b5cf6', amount: Number(o.requiredFundingAmount) || 0 });
+    }
+    if (withd) {
+      const i = Math.round((withd - start) / 86400000);
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'withdraw', label: `Withdraw ${name}`, color: '#10b981', amount: Number(o.requiredFundingAmount) || 0, bonus: Number(o.signupBonusAmount) || 0 });
+    }
+  }
+  for (const e of App.state.events) {
+    if (!e.includeInProjection) continue;
+    if (e.category !== 'bonus payout') continue;
+    const i = Math.round((parseDate(e.date) - start) / 86400000);
+    if (i >= 0 && i < proj.length) markers.push({ i, type: 'bonus', label: e.eventName, color: '#10b981', amount: Number(e.amount) || 0 });
+  }
+
+  const todayIdx = Math.round((TODAY - start) / 86400000);
+
+  const svgContent = `
+    <defs>
+      <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#5b5cf6" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="#5b5cf6" stop-opacity="0.0"/>
+      </linearGradient>
+    </defs>
+    <!-- Shortfall bands -->
+    ${shortfallBands}
+    <!-- Y grid + labels -->
+    ${yTicks.map(t => {
+      const y = yFor(t);
+      return `
+        <line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1"/>
+        <text x="${padL - 10}" y="${(y + 4).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatCompactCurrency(t)}</text>
+      `;
+    }).join('')}
+    <!-- Buffer line -->
+    <line x1="${padL}" y1="${yFor(buffer).toFixed(1)}" x2="${W - padR}" y2="${yFor(buffer).toFixed(1)}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.7"/>
+    <!-- Zero line if visible -->
+    ${minY < 0 ? `<line x1="${padL}" y1="${yFor(0).toFixed(1)}" x2="${W - padR}" y2="${yFor(0).toFixed(1)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 4"/>` : ''}
+    <!-- Area + line -->
+    <path d="${areaPath}" fill="url(#area-grad)" />
+    <path d="${linePath}" fill="none" stroke="#5b5cf6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- Today marker -->
+    ${todayIdx >= 0 && todayIdx < proj.length ? `
+      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#5b5cf6" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+      <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#5b5cf6" stroke="white" stroke-width="2.5"/>
+    ` : ''}
+    <!-- Markers -->
+    ${markers.map(m => {
+      const x = xFor(m.i);
+      const y = yFor(proj[m.i].availableCapital);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.9"><title>${escapeHtml(m.label)} — ${formatDateMedium(proj[m.i].date)}</title></circle>`;
+    }).join('')}
+    <!-- X axis labels (months) -->
+    ${xTicks.map(t => {
+      const x = xFor(t.i);
+      return `<text x="${x.toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">${t.label}</text>`;
+    }).join('')}
+    <!-- "Today" anchor: small accent above the chart, not on the axis line -->
+    ${todayIdx >= 0 && todayIdx < proj.length ? `
+      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT - 4).toFixed(1)}" fill="#5b5cf6" font-size="11" text-anchor="middle" font-weight="600">Today</text>
+    ` : ''}
+    <!-- Horizon end label, only if it doesn't collide with the rightmost month tick -->
+    ${(xTicks.length === 0 || xFor(proj.length - 1) - xFor(xTicks[xTicks.length - 1].i) > 32) ? `
+      <text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>
+    ` : ''}
+    <!-- Hover overlay -->
+    <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="chart-hover-area"/>
+    <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
+    <circle id="chart-hover-dot" cx="0" cy="0" r="5" fill="#5b5cf6" stroke="white" stroke-width="2" opacity="0"/>
+  `;
+
+  svg.innerHTML = svgContent;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  // No explicit height — let CSS width:100% + viewBox aspect ratio drive
+  // the rendered height. Setting a fixed height attribute conflicts with
+  // preserveAspectRatio="xMidYMid meet" and breaks cursor mapping.
+
+  // Hover interactions
+  const hoverArea = svg.querySelector('#chart-hover-area');
+  const hoverLine = svg.querySelector('#chart-hover-line');
+  const hoverDot = svg.querySelector('#chart-hover-dot');
+
+  function markerTypeLabel(type) {
+    if (type === 'fund') return 'Fund date';
+    if (type === 'withdraw') return 'Withdrawal eligible';
+    if (type === 'bonus') return 'Bonus payout';
+    return type;
+  }
+
+  function handleHover(evt) {
+    const rect = svg.getBoundingClientRect();
+    const rawX = (evt.clientX - rect.left) * (W / rect.width);
+    const i = Math.round(((rawX - padL) / innerW) * (proj.length - 1));
+    if (i < 0 || i >= proj.length) return;
+    const d = proj[i];
+    const cx = xFor(i);
+    const cy = yFor(d.availableCapital);
+    hoverLine.setAttribute('x1', cx);
+    hoverLine.setAttribute('x2', cx);
+    hoverLine.setAttribute('opacity', '0.5');
+    hoverDot.setAttribute('cx', cx);
+    hoverDot.setAttribute('cy', cy);
+    hoverDot.setAttribute('opacity', '1');
+
+    // Find any markers within ~12 SVG units of the cursor x
+    const nearMarkers = markers.filter(m => Math.abs(xFor(m.i) - rawX) < 12);
+
+    let html = `
+      <div class="tt-date">${formatDateLong(d.date)}</div>
+      <div class="tt-row"><span class="label">Available</span><span><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
+      <div class="tt-row"><span class="label">Tied up</span><span>${formatCurrency(d.totalTiedUp)}</span></div>
+      ${d.netEventsToDate !== 0 ? `<div class="tt-row"><span class="label">Net events</span><span>${(d.netEventsToDate >= 0 ? '+' : '') + formatCurrency(d.netEventsToDate)}</span></div>` : ''}
+    `;
+    if (nearMarkers.length > 0) {
+      html += `<div style="border-top:1px solid rgba(255,255,255,0.18);margin-top:6px;padding-top:6px;">`;
+      for (const m of nearMarkers) {
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${m.color};font-weight:600;">${escapeHtml(m.label)}</span></div>`;
+        if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span>${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'withdraw') {
+          if (m.amount) html += `<div class="tt-row"><span class="label">Released</span><span>${formatCurrency(m.amount)}</span></div>`;
+          if (m.bonus) html += `<div class="tt-row"><span class="label">Bonus</span><span style="color:#10b981;">+${formatCurrency(m.bonus)}</span></div>`;
+        }
+        if (m.type === 'bonus' && m.amount) html += `<div class="tt-row"><span class="label">Payout</span><span style="color:#10b981;">+${formatCurrency(m.amount)}</span></div>`;
+      }
+      html += `</div>`;
+    }
+    tooltip.innerHTML = html;
+    tooltip.classList.add('visible');
+
+    // On mobile use fixed positioning to escape the overflow-x:auto container
+    if (window.innerWidth <= 720) {
+      const svgX = (cx / W) * rect.width + rect.left;
+      const svgY = (cy / H) * rect.height + rect.top;
+      tooltip.style.position = 'fixed';
+      tooltip.style.left = svgX + 'px';
+      tooltip.style.top = svgY + 'px';
+    } else {
+      const wrapRect = wrap.getBoundingClientRect();
+      const tx = (cx / W) * wrapRect.width;
+      const ty = (cy / H) * wrapRect.height;
+      tooltip.style.position = 'absolute';
+      tooltip.style.left = tx + 'px';
+      tooltip.style.top = ty + 'px';
+    }
+  }
+
+  function clearHover() {
+    hoverLine.setAttribute('opacity', '0');
+    hoverDot.setAttribute('opacity', '0');
+    tooltip.classList.remove('visible');
+  }
+
+  hoverArea.addEventListener('mousemove', handleHover);
+  hoverArea.addEventListener('mouseleave', clearHover);
+  hoverArea.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
+  hoverArea.addEventListener('touchend', clearHover);
+}
+
+function niceTicks(min, max, count) {
+  const range = max - min;
+  const step = niceStep(range / count);
+  const ticks = [];
+  let v = Math.ceil(min / step) * step;
+  while (v <= max + step * 0.001) { ticks.push(v); v += step; }
+  return ticks;
+}
+function niceStep(raw) {
+  const exp = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / exp;
+  let nf;
+  if (f < 1.5) nf = 1;
+  else if (f < 3) nf = 2;
+  else if (f < 7) nf = 5;
+  else nf = 10;
+  return nf * exp;
+}
+
+/* ============================================================
+   MODAL: ADD/EDIT OFFER
+   ============================================================ */
+function showOfferModal(offerId = null) {
+  const isEdit = Boolean(offerId);
+  const o = isEdit ? App.state.offers.find(x => x.id === offerId) : {
+    id: uid('off'),
+    bankName: '',
+    offerName: '',
+    requiredFundingAmount: null,
+    signupBonusAmount: null,
+    offerExpirationDate: '',
+    plannedSignupDate: isoDate(addDays(TODAY, 7)),
+    daysAfterSignupAllowedBeforeDeposit: 30,
+    daysFundsMustRemain: 60,
+    optionalPlannedFundingDate: '',
+    lockStartsFrom: App.state.settings.defaultLockStartsFrom || 'funded date',
+    status: 'prospect',
+    includeInScenario: true,
+    confidence: 'likely',
+    notes: '',
+    docUrl: '',
+    entityUsed: '',
+    emailUsed: ''
+  };
+  const modal = document.getElementById('modal-root');
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">${isEdit ? 'Edit offer' : 'Add an offer'}</div>
+        <button class="btn-icon" data-action="close-modal" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <form class="modal-body" id="offer-form">
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2;">
+            <label for="f-bank">Bank name *</label>
+            <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" />
+          </div>
+          <div class="field" style="grid-column: span 2;">
+            <label for="f-offer">Offer name (optional)</label>
+            <input id="f-offer" class="input" type="text" placeholder="Sapphire Banking, Priority $1500…" value="${escapeAttr(o.offerName)}" name="offerName" />
+          </div>
+          <div class="field">
+            <label for="f-bonus">Bonus amount *</label>
+            <div class="input-group"><span class="input-prefix">$</span>
+              <input id="f-bonus" class="input" type="number" step="5" min="0" required value="${o.signupBonusAmount ?? ''}" name="signupBonusAmount" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-funding">Required funding *</label>
+            <div class="input-group"><span class="input-prefix">$</span>
+              <input id="f-funding" class="input" type="number" step="100" min="0" required value="${o.requiredFundingAmount ?? ''}" name="requiredFundingAmount" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-expires">Offer expires</label>
+            <input id="f-expires" class="input" type="date" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" />
+          </div>
+          <div class="field">
+            <label for="f-signup">Planned signup date *</label>
+            <input id="f-signup" class="input" type="date" required value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" />
+          </div>
+          <div class="field">
+            <label for="f-days-deposit">Days after signup to deposit</label>
+            <div class="input-group with-suffix">
+              <input id="f-days-deposit" class="input" type="number" min="0" step="1" value="${o.daysAfterSignupAllowedBeforeDeposit ?? ''}" name="daysAfterSignupAllowedBeforeDeposit" />
+              <span class="input-suffix">days</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-days-remain">Days funds must remain *</label>
+            <div class="input-group with-suffix">
+              <input id="f-days-remain" class="input" type="number" min="0" step="1" required value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
+              <span class="input-suffix">days</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-funded">Planned funding date (optional)</label>
+            <input id="f-funded" class="input" type="date" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" />
+            <span class="field-hint">If different from signup date.</span>
+          </div>
+          <div class="field">
+            <label>Days counted from</label>
+            <div class="radio-group">
+              <input type="radio" id="lsf-fund" name="lockStartsFrom" value="funded date" ${o.lockStartsFrom !== 'open date' ? 'checked' : ''} />
+              <label for="lsf-fund">Funded date</label>
+              <input type="radio" id="lsf-open" name="lockStartsFrom" value="open date" ${o.lockStartsFrom === 'open date' ? 'checked' : ''} />
+              <label for="lsf-open">Open date</label>
+            </div>
+            <span class="field-hint">Where the bank measures the hold from. <strong>Open date</strong> = e.g. US Bank "60 days from open" — funding later means a shorter actual lock. <strong>Funded date</strong> = e.g. Citi "keep $50k for 60 days from deposit". Money is always treated as tied up only from when you actually deposit.</span>
+          </div>
+          <div class="field">
+            <label for="f-status">Status</label>
+            <select id="f-status" class="select" name="status">
+              ${STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-confidence">Confidence</label>
+            <select id="f-confidence" class="select" name="confidence">
+              <option value="confirmed" ${o.confidence === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+              <option value="likely" ${o.confidence === 'likely' ? 'selected' : ''}>Likely</option>
+              <option value="uncertain" ${o.confidence === 'uncertain' ? 'selected' : ''}>Uncertain</option>
+            </select>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label class="checkbox-row">
+              <input type="checkbox" name="includeInScenario" ${o.includeInScenario ? 'checked' : ''} />
+              <span>Include in projection scenario</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="button" class="advanced-toggle" data-action="toggle-advanced-form" aria-expanded="false">
+          <span>Advanced fields (DD, fees, links, entity)</span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="advanced-fields" id="advanced-fields">
+          <div class="form-grid">
+            <div class="field"><label for="f-doc">DoC / source URL</label><input id="f-doc" class="input" type="url" placeholder="https://doctorofcredit.com/..." value="${escapeAttr(o.docUrl)}" name="docUrl" /></div>
+            <div class="field">
+              <label for="f-entity">Entity used</label>
+              <select id="f-entity" class="select" name="entityUsed">
+                <option value="" ${!o.entityUsed ? 'selected' : ''}>—</option>
+                ${ENTITY_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.entityUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                ${o.entityUsed && !ENTITY_OPTIONS.includes(o.entityUsed) ? `<option value="${escapeAttr(o.entityUsed)}" selected>${escapeHtml(o.entityUsed)} (legacy)</option>` : ''}
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-email">Email used</label>
+              <select id="f-email" class="select" name="emailUsed">
+                <option value="" ${!o.emailUsed ? 'selected' : ''}>—</option>
+                ${EMAIL_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.emailUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                ${o.emailUsed && !EMAIL_OPTIONS.includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
+              </select>
+            </div>
+          </div>
+          <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" class="textarea" name="notes">${escapeHtml(o.notes || '')}</textarea></div>
+        </div>
+      </form>
+      <div class="modal-footer">
+        ${isEdit ? `<button class="btn btn-ghost btn-danger" data-action="delete-offer-from-modal" data-id="${o.id}">Delete</button>` : '<span></span>'}
+        <div style="display:flex;gap:var(--space-2);">
+          <button class="btn btn-secondary" data-action="close-modal">Cancel</button>
+          <button class="btn btn-primary" data-action="save-offer" data-id="${o.id}" data-isedit="${isEdit ? '1' : '0'}">${isEdit ? 'Save changes' : 'Add offer'}</button>
+        </div>
+      </div>
+    </div>
+  `;
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('f-bank')?.focus(), 50);
+}
+
+function readOfferForm(idArg, isEdit) {
+  const form = document.getElementById('offer-form');
+  if (!form) return null;
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  const num = (v) => (v === '' || v == null) ? null : Number(v);
+
+  const offer = {
+    id: idArg,
+    bankName: (data.bankName || '').trim(),
+    offerName: (data.offerName || '').trim(),
+    requiredFundingAmount: num(data.requiredFundingAmount),
+    signupBonusAmount: num(data.signupBonusAmount),
+    offerExpirationDate: data.offerExpirationDate || '',
+    plannedSignupDate: data.plannedSignupDate || '',
+    daysAfterSignupAllowedBeforeDeposit: num(data.daysAfterSignupAllowedBeforeDeposit) ?? 30,
+    daysFundsMustRemain: num(data.daysFundsMustRemain),
+    optionalPlannedFundingDate: data.optionalPlannedFundingDate || '',
+    lockStartsFrom: data.lockStartsFrom || 'funded date',
+    status: data.status || 'prospect',
+    includeInScenario: form.querySelector('[name="includeInScenario"]').checked,
+    confidence: data.confidence || 'likely',
+    notes: data.notes || '',
+    docUrl: data.docUrl || '',
+    entityUsed: data.entityUsed || '',
+    emailUsed: data.emailUsed || ''
+  };
+  return offer;
+}
+
+/* ============================================================
+   MODAL: COMMITMENT
+   ============================================================ */
+function showCommitmentModal(commitmentId = null) {
+  const isEdit = Boolean(commitmentId);
+  const c = isEdit ? App.state.commitments.find(x => x.id === commitmentId) : {
+    id: uid('cmt'),
+    commitmentName: '',
+    sourceBonusOfferId: null,
+    amount: null,
+    startDate: isoDate(TODAY),
+    endDate: isoDate(addDays(TODAY, 90)),
+    type: 'manual hold',
+    status: 'confirmed',
+    includeInProjection: true,
+    expectedBonus: 0,
+    notes: ''
+  };
+  const modal = document.getElementById('modal-root');
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">${isEdit ? 'Edit commitment' : 'Add capital commitment'}</div>
+        <button class="btn-icon" data-action="close-modal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <form class="modal-body" id="commitment-form">
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2;">
+            <label for="c-name">Name *</label>
+            <input id="c-name" class="input" type="text" required value="${escapeAttr(c.commitmentName)}" name="commitmentName" />
+          </div>
+          <div class="field">
+            <label for="c-amount">Amount *</label>
+            <div class="input-group"><span class="input-prefix">$</span>
+              <input id="c-amount" class="input" type="number" step="100" min="0" required value="${c.amount ?? ''}" name="amount" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="c-type">Type</label>
+            <select id="c-type" class="select" name="type">
+              ${COMMITMENT_TYPES.map(t => `<option value="${t.value}" ${c.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label for="c-start">Start date *</label><input id="c-start" class="input" type="date" required value="${c.startDate}" name="startDate" /></div>
+          <div class="field"><label for="c-end">End date *</label><input id="c-end" class="input" type="date" required value="${c.endDate}" name="endDate" /></div>
+          <div class="field"><label for="c-status">Status</label><select id="c-status" class="select" name="status">
+            <option value="confirmed" ${c.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+            <option value="hypothetical" ${c.status === 'hypothetical' ? 'selected' : ''}>Hypothetical</option>
+            <option value="completed" ${c.status === 'completed' ? 'selected' : ''}>Completed</option>
+            <option value="cancelled" ${c.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+          </select></div>
+          <div class="field"><label for="c-bonus">Expected bonus</label>
+            <div class="input-group"><span class="input-prefix">$</span>
+              <input id="c-bonus" class="input" type="number" step="1" min="0" value="${c.expectedBonus ?? 0}" name="expectedBonus" />
+            </div>
+          </div>
+          <div class="field" style="grid-column:1/-1;"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${c.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
+          <div class="field" style="grid-column:1/-1;"><label for="c-notes">Notes</label><textarea id="c-notes" class="textarea" name="notes">${escapeHtml(c.notes || '')}</textarea></div>
+        </div>
+      </form>
+      <div class="modal-footer">
+        ${isEdit ? `<button class="btn btn-ghost btn-danger" data-action="delete-commitment-from-modal" data-id="${c.id}">Delete</button>` : '<span></span>'}
+        <div style="display:flex;gap:var(--space-2);"><button class="btn btn-secondary" data-action="close-modal">Cancel</button><button class="btn btn-primary" data-action="save-commitment" data-id="${c.id}" data-isedit="${isEdit ? '1' : '0'}">${isEdit ? 'Save changes' : 'Add commitment'}</button></div>
+      </div>
+    </div>
+  `;
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('c-name')?.focus(), 50);
+}
+
+function readCommitmentForm(idArg) {
+  const form = document.getElementById('commitment-form');
+  if (!form) return null;
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  const orig = App.state.commitments.find(c => c.id === idArg);
+  return {
+    id: idArg,
+    commitmentName: (data.commitmentName || '').trim(),
+    sourceBonusOfferId: orig ? orig.sourceBonusOfferId : null,
+    amount: Number(data.amount),
+    startDate: data.startDate,
+    endDate: data.endDate,
+    type: data.type,
+    status: data.status,
+    includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
+    expectedBonus: Number(data.expectedBonus) || 0,
+    notes: data.notes || ''
+  };
+}
+
+/* ============================================================
+   MODAL: EVENT
+   ============================================================ */
+function showEventModal(eventId = null) {
+  const isEdit = Boolean(eventId);
+  const e = isEdit ? App.state.events.find(x => x.id === eventId) : {
+    id: uid('evt'),
+    eventName: '',
+    date: isoDate(addDays(TODAY, 14)),
+    amount: 0,
+    category: 'inflow',
+    sourceBonusOfferId: null,
+    includeInProjection: true,
+    notes: ''
+  };
+  const modal = document.getElementById('modal-root');
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">${isEdit ? 'Edit event' : 'Add capital event'}</div>
+        <button class="btn-icon" data-action="close-modal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <form class="modal-body" id="event-form">
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
+          <div class="field"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div>
+          <div class="field"><label for="e-amount">Amount * (negative for outflows)</label>
+            <div class="input-group"><span class="input-prefix">$</span>
+              <input id="e-amount" class="input" type="number" step="0.01" required value="${e.amount}" name="amount" />
+            </div>
+          </div>
+          <div class="field"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
+          <div class="field"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
+          <div class="field" style="grid-column:1/-1;"><label for="e-notes">Notes</label><textarea id="e-notes" class="textarea" name="notes">${escapeHtml(e.notes || '')}</textarea></div>
+        </div>
+      </form>
+      <div class="modal-footer">
+        ${isEdit ? `<button class="btn btn-ghost btn-danger" data-action="delete-event-from-modal" data-id="${e.id}">Delete</button>` : '<span></span>'}
+        <div style="display:flex;gap:var(--space-2);"><button class="btn btn-secondary" data-action="close-modal">Cancel</button><button class="btn btn-primary" data-action="save-event" data-id="${e.id}" data-isedit="${isEdit ? '1' : '0'}">${isEdit ? 'Save changes' : 'Add event'}</button></div>
+      </div>
+    </div>
+  `;
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('e-name')?.focus(), 50);
+}
+
+function readEventForm(idArg) {
+  const form = document.getElementById('event-form');
+  if (!form) return null;
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  return {
+    id: idArg,
+    eventName: (data.eventName || '').trim(),
+    date: data.date,
+    amount: Number(data.amount),
+    category: data.category,
+    sourceBonusOfferId: null,
+    includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
+    notes: data.notes || ''
+  };
+}
+
+function closeModal() {
+  const modal = document.getElementById('modal-root');
+  modal.classList.remove('open');
+  modal.innerHTML = '';
+}
+
+/* ============================================================
+   ESCAPING
+   ============================================================ */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+let toastTimer = null;
+function toast(msg, kind = '') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'toast visible' + (kind ? ' ' + kind : '');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2500);
+}
+
+/* ============================================================
+   EVENT BINDINGS
+   ============================================================ */
+function bindGlobalEvents() {
+  document.addEventListener('click', onClick);
+  document.addEventListener('change', onChange);
+  document.addEventListener('input', onInput);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+  // Close modal on backdrop click
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-root') closeModal();
+  });
+}
+
+function bindViewEvents() { /* re-binding handled by event delegation */ }
+
+function onClick(e) {
+  const target = e.target.closest('[data-action], [data-view]');
+  if (!target) return;
+  const view = target.dataset.view;
+  if (view) {
+    e.preventDefault();
+    App.setView(view);
+    return;
+  }
+  const action = target.dataset.action;
+  if (!action) return;
+  const id = target.dataset.id;
+
+  switch (action) {
+    case 'add-offer': showOfferModal(); break;
+    case 'edit-offer': showOfferModal(id); break;
+    case 'duplicate-offer': duplicateOffer(id); break;
+    case 'convert-offer': convertOffer(id); break;
+    case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
+    case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { deleteOffer(id); closeModal(); } break;
+    case 'save-offer': saveOfferFromForm(id, target.dataset.isedit === '1'); break;
+    case 'toggle-advanced-form': toggleAdvancedForm(target); break;
+    case 'close-modal': closeModal(); break;
+
+    case 'add-commitment': showCommitmentModal(); break;
+    case 'edit-commitment': showCommitmentModal(id); break;
+    case 'delete-commitment': if (confirm('Delete this commitment?')) deleteCommitment(id); break;
+    case 'delete-commitment-from-modal': if (confirm('Delete this commitment?')) { deleteCommitment(id); closeModal(); } break;
+    case 'save-commitment': saveCommitmentFromForm(id, target.dataset.isedit === '1'); break;
+
+    case 'add-event': showEventModal(); break;
+    case 'edit-event': showEventModal(id); break;
+    case 'delete-event': if (confirm('Delete this event?')) deleteEvent(id); break;
+    case 'delete-event-from-modal': if (confirm('Delete this event?')) { deleteEvent(id); closeModal(); } break;
+    case 'save-event': saveEventFromForm(id, target.dataset.isedit === '1'); break;
+
+    case 'export-json': exportJson(); break;
+    case 'reset-sample': if (confirm('Replace your data with sample data?')) { App.state = seedSampleData(App.defaultState()); App.save(); render(); toast('Sample data loaded'); } break;
+    case 'clear-all': if (confirm('Erase ALL data? This cannot be undone.')) { App.state = App.defaultState(); App.save(); render(); toast('All data cleared'); } break;
+
+    case 'run-optimizer': runOptimizerNow(); break;
+    case 'clear-optimizer': App.optimizer.results = null; render(); break;
+    case 'apply-combo': applyOptimizerCombo(target.dataset.mask); break;
+
+    case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
+
+    // Sync actions
+    case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
+    case 'sync-save': saveSyncConfigFromForm(); break;
+    case 'sync-pull': Sync.pull(); break;
+    case 'sync-push': Sync.push(); break;
+    case 'sync-create-gist': createGistFromForm(); break;
+    case 'sync-disconnect': if (confirm('Disconnect cloud sync? Your local data is kept; nothing is deleted from the Gist.')) { Sync.disconnect(); render(); toast('Disconnected'); } break;
+  }
+
+  // FAB
+  if (target.id === 'fab-add') { showOfferModal(); return; }
+}
+
+function onChange(e) {
+  const el = e.target;
+  if (el.id === 'fab-add') return;
+
+  // Setting fields
+  if (el.dataset.setting) {
+    const key = el.dataset.setting;
+    let value = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
+    if (key === 'currentLiquidCapital' || key === 'minimumCashBuffer') value = Math.max(0, value);
+    if (key === 'projectionHorizonDays') value = Math.max(30, Math.min(1825, value));
+    if (key === 'maxOptimizerCandidates') value = Math.max(1, Math.min(20, value));
+    App.update(s => { s.settings[key] = value; });
+    return;
+  }
+
+  // Offer include checkbox
+  if (el.dataset.action === 'toggle-include') {
+    const id = el.dataset.id;
+    App.update(s => {
+      const o = s.offers.find(x => x.id === id);
+      if (o) o.includeInScenario = el.checked;
+    });
+    return;
+  }
+
+  // Filter toggles
+  if (el.dataset.action === 'toggle-filter') {
+    App.filters[el.dataset.filter] = el.checked;
+    render();
+    return;
+  }
+
+  // Status change inline
+  if (el.dataset.action === 'change-status') {
+    const id = el.dataset.id;
+    const newStatus = el.value;
+    App.update(s => {
+      const o = s.offers.find(x => x.id === id);
+      if (o) o.status = newStatus;
+    });
+    return;
+  }
+
+  // Offers status filter
+  if (el.dataset.action === 'offers-status') { App.filters.offersStatus = el.value; render(); return; }
+
+  // Import JSON
+  if (el.dataset.action === 'import-json') {
+    const file = el.files[0];
+    if (file) importJsonFile(file);
+    return;
+  }
+}
+
+function onInput(e) {
+  const el = e.target;
+  if (el.dataset.action === 'offers-search') {
+    App.filters.offersSearch = el.value;
+    clearTimeout(window._searchTimer);
+    window._searchTimer = setTimeout(() => render(), 120);
+  }
+}
+
+function toggleAdvancedForm(btn) {
+  const expanded = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!expanded));
+  const panel = document.getElementById('advanced-fields');
+  if (panel) panel.classList.toggle('open', !expanded);
+}
+
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+function saveOfferFromForm(id, isEdit) {
+  const offer = readOfferForm(id, isEdit);
+  if (!offer) return;
+  if (!offer.bankName) { toast('Bank name is required', 'danger'); return; }
+  App.update(s => {
+    const idx = s.offers.findIndex(o => o.id === id);
+    if (idx >= 0) s.offers[idx] = offer;
+    else s.offers.push(offer);
+  });
+  closeModal();
+  toast(isEdit ? 'Offer updated' : 'Offer added');
+}
+
+function deleteOffer(id) {
+  App.update(s => {
+    s.offers = s.offers.filter(o => o.id !== id);
+    s.commitments = s.commitments.filter(c => c.sourceBonusOfferId !== id);
+  });
+  toast('Offer deleted');
+}
+
+function duplicateOffer(id) {
+  const o = App.state.offers.find(x => x.id === id);
+  if (!o) return;
+  const dup = JSON.parse(JSON.stringify(o));
+  dup.id = uid('off');
+  dup.bankName = o.bankName + ' (copy)';
+  dup.status = 'prospect';
+  App.update(s => { s.offers.push(dup); });
+  toast('Offer duplicated');
+}
+
+function convertOffer(id) {
+  const o = App.state.offers.find(x => x.id === id);
+  if (!o) return;
+  if (!isOfferComplete(o)) { toast('Offer is incomplete', 'danger'); return; }
+  if (App.state.commitments.some(c => c.sourceBonusOfferId === id && c.status !== 'cancelled')) {
+    toast('Already converted'); return;
+  }
+  const cmt = convertOfferToCommitment(o);
+  if (!cmt) { toast('Could not derive dates', 'danger'); return; }
+  App.update(s => { s.commitments.push(cmt); });
+  toast('Offer converted to commitment');
+}
+
+function saveCommitmentFromForm(id, isEdit) {
+  const c = readCommitmentForm(id);
+  if (!c) return;
+  if (!c.commitmentName) { toast('Name required', 'danger'); return; }
+  if (!c.startDate || !c.endDate || parseDate(c.startDate) >= parseDate(c.endDate)) { toast('End date must be after start date', 'danger'); return; }
+  App.update(s => {
+    const idx = s.commitments.findIndex(x => x.id === id);
+    if (idx >= 0) s.commitments[idx] = c;
+    else s.commitments.push(c);
+  });
+  closeModal();
+  toast(isEdit ? 'Commitment saved' : 'Commitment added');
+}
+
+function deleteCommitment(id) {
+  App.update(s => { s.commitments = s.commitments.filter(c => c.id !== id); });
+  toast('Commitment deleted');
+}
+
+function saveEventFromForm(id, isEdit) {
+  const ev = readEventForm(id);
+  if (!ev) return;
+  if (!ev.eventName) { toast('Name required', 'danger'); return; }
+  if (!ev.date || !parseDate(ev.date)) { toast('Date required', 'danger'); return; }
+  App.update(s => {
+    const idx = s.events.findIndex(x => x.id === id);
+    if (idx >= 0) s.events[idx] = ev;
+    else s.events.push(ev);
+  });
+  closeModal();
+  toast(isEdit ? 'Event saved' : 'Event added');
+}
+
+function deleteEvent(id) {
+  App.update(s => { s.events = s.events.filter(e => e.id !== id); });
+  toast('Event deleted');
+}
+
+function runOptimizerNow() {
+  const result = runOptimizer(App.state);
+  App.optimizer.results = result;
+  render();
+  if (result.tooMany) toast(`Too many candidates (${result.candidateCount}). Mark some as skipped.`, 'danger');
+  else if (result.results.length === 0) toast('No feasible combinations found', 'danger');
+  else toast(`Found ${result.results.length} feasible combination${result.results.length === 1 ? '' : 's'}`);
+}
+
+function applyOptimizerCombo(maskStr) {
+  const result = App.optimizer.results;
+  if (!result) return;
+  const mask = Number(maskStr);
+  const candidates = result.candidates;
+  App.update(s => {
+    for (let i = 0; i < candidates.length; i++) {
+      const o = s.offers.find(x => x.id === candidates[i].id);
+      if (!o) continue;
+      o.includeInScenario = Boolean(mask & (1 << i));
+    }
+  });
+  toast('Combination applied');
+}
+
+/* ============================================================
+   SYNC FORM HANDLERS
+   ============================================================ */
+async function saveSyncConfigFromForm() {
+  const gistInput = document.getElementById('sync-gist');
+  const tokenInput = document.getElementById('sync-token');
+  if (!gistInput || !tokenInput) return;
+  const gistId = gistInput.value.trim();
+  const token = tokenInput.value.trim();
+  if (!token) { toast('Token is required', 'danger'); return; }
+  if (!gistId) { toast('Gist ID is required (or use "Create new Gist")', 'danger'); return; }
+  Sync.setConfig({ gistId, token });
+  Sync.setStatus('syncing');
+  // "Save & test" semantic: this device is joining sync. If the Gist has
+  // valid existing state, adopt it (pull). If empty or fresh, push local up.
+  try {
+    const data = await ghGet(`https://api.github.com/gists/${gistId}`, token);
+    const file = data.files[SYNC_FILENAME] || Object.values(data.files || {})[0];
+    let remote = null;
+    if (file) {
+      const content = file.truncated
+        ? await (await fetch(file.raw_url)).text()
+        : file.content;
+      if (content && content.trim()) {
+        try { remote = JSON.parse(content); } catch {}
+      }
+    }
+    if (remote && remote.settings && typeof remote.settings === 'object') {
+      // Adopt the cloud state — this device joins the existing sync
+      App.state = remote;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+      Sync.lastSyncAt = Date.now();
+      Sync.setStatus('synced');
+      Sync.startupDone = true;
+      toast('Synced — pulled cloud data');
+    } else {
+      // Empty/new Gist: seed it with our local state
+      await Sync.push({ silent: true });
+      Sync.startupDone = true;
+      toast('Synced — pushed local data to cloud');
+    }
+  } catch (e) {
+    Sync.setStatus('error', e.message);
+    toast('Sync test failed: ' + e.message, 'danger');
+  }
+  render();
+}
+
+async function createGistFromForm() {
+  const tokenInput = document.getElementById('sync-token');
+  if (!tokenInput) return;
+  const token = tokenInput.value.trim();
+  if (!token) { toast('Token is required first', 'danger'); return; }
+  Sync.setStatus('syncing');
+  try {
+    const gistId = await Sync.createGist(token);
+    Sync.setConfig({ gistId, token });
+    Sync.lastSyncAt = Date.now();
+    Sync.setStatus('synced');
+    toast('Created and linked Gist');
+    render();
+  } catch (e) {
+    Sync.setStatus('error', e.message);
+    toast('Could not create Gist: ' + e.message, 'danger');
+  }
+}
+
+/* ============================================================
+   IMPORT / EXPORT
+   ============================================================ */
+function exportJson() {
+  const blob = new Blob([JSON.stringify(App.state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `capital-planner-${isoDate(TODAY)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  toast('Exported');
+}
+
+function importJsonFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (!parsed.settings || !Array.isArray(parsed.offers)) throw new Error('Invalid shape');
+      App.state = parsed;
+      App.save();
+      render();
+      toast('Imported');
+    } catch (err) {
+      toast('Invalid JSON: ' + err.message, 'danger');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ============================================================
+   SEED DATA — realistic bank churning scenario
+   ============================================================ */
+function seedSampleData(state) {
+  const today = TODAY;
+  const settings = state.settings;
+  settings.currentLiquidCapital = 200000;
+  settings.minimumCashBuffer = 20000;
+  settings.projectionStartDate = isoDate(today);
+  settings.projectionHorizonMode = 'auto';
+  settings.projectionHorizonDays = 365;
+  settings.maxOptimizerCandidates = 15;
+
+  const inDays = (n) => isoDate(addDays(today, n));
+
+  state.offers = [
+    {
+      id: uid('off'),
+      bankName: 'US Bank',
+      offerName: 'Smartly Checking $450',
+      requiredFundingAmount: 25000,
+      signupBonusAmount: 450,
+      offerExpirationDate: inDays(45),
+      plannedSignupDate: inDays(-25),  // opened 25 days ago
+      daysAfterSignupAllowedBeforeDeposit: 30,
+      daysFundsMustRemain: 60,         // 60 days FROM OPEN DATE
+      optionalPlannedFundingDate: inDays(0),  // funded today
+      lockStartsFrom: 'open date',     // anchor on open, not funded → lock is ~35d, not 60
+      status: 'funded',
+      includeInScenario: true,
+      confidence: 'confirmed',
+      notes: 'Hold period is 60 days from account open. Funding later shortens the actual lock.',
+      docUrl: '',
+      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      emailUsed: 'collinrekowski1@gmail.com'
+    },
+    {
+      id: uid('off'),
+      bankName: 'Citi',
+      offerName: 'Priority Checking $1500',
+      requiredFundingAmount: 50000,
+      signupBonusAmount: 1500,
+      offerExpirationDate: inDays(60),
+      plannedSignupDate: inDays(7),
+      daysAfterSignupAllowedBeforeDeposit: 21,
+      daysFundsMustRemain: 60,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'selected',
+      includeInScenario: true,
+      confidence: 'likely',
+      notes: '$50k tier',
+      docUrl: 'https://www.doctorofcredit.com/',
+      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      emailUsed: ''
+    },
+    {
+      id: uid('off'),
+      bankName: 'BMO',
+      offerName: 'Premier Checking $600',
+      requiredFundingAmount: 25000,
+      signupBonusAmount: 600,
+      offerExpirationDate: inDays(75),
+      plannedSignupDate: inDays(20),
+      daysAfterSignupAllowedBeforeDeposit: 30,
+      daysFundsMustRemain: 90,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'prospect',
+      includeInScenario: false,
+      confidence: 'likely',
+      notes: '',
+      docUrl: '',
+      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      emailUsed: ''
+    },
+    {
+      id: uid('off'),
+      bankName: 'HSBC',
+      offerName: 'Premier $2500',
+      requiredFundingAmount: 100000,
+      signupBonusAmount: 2500,
+      offerExpirationDate: inDays(90),
+      plannedSignupDate: inDays(45),
+      daysAfterSignupAllowedBeforeDeposit: 30,
+      daysFundsMustRemain: 90,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'prospect',
+      includeInScenario: false,
+      confidence: 'likely',
+      notes: '',
+      docUrl: '',
+      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      emailUsed: ''
+    },
+    {
+      id: uid('off'),
+      bankName: 'Charles Schwab',
+      offerName: 'Brokerage $1000',
+      requiredFundingAmount: 100000,
+      signupBonusAmount: 1000,
+      offerExpirationDate: inDays(120),
+      plannedSignupDate: inDays(30),
+      daysAfterSignupAllowedBeforeDeposit: 45,
+      daysFundsMustRemain: 365,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'prospect',
+      includeInScenario: false,
+      confidence: 'uncertain',
+      notes: 'Requires holding for 1 year',
+      docUrl: '',
+      entityUsed: '',
+      emailUsed: ''
+    },
+    {
+      id: uid('off'),
+      bankName: 'Chase',
+      offerName: 'Private Client $3000',
+      requiredFundingAmount: 250000,
+      signupBonusAmount: 3000,
+      offerExpirationDate: inDays(60),
+      plannedSignupDate: inDays(14),
+      daysAfterSignupAllowedBeforeDeposit: 45,
+      daysFundsMustRemain: 90,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'prospect',
+      includeInScenario: false,
+      confidence: 'uncertain',
+      notes: 'Insufficient capital alone',
+      docUrl: '',
+      entityUsed: '',
+      emailUsed: ''
+    },
+    {
+      id: uid('off'),
+      bankName: 'PNC',
+      offerName: 'Virtual Wallet Plus $400',
+      requiredFundingAmount: 5000,
+      signupBonusAmount: 400,
+      offerExpirationDate: inDays(50),
+      plannedSignupDate: inDays(10),
+      daysAfterSignupAllowedBeforeDeposit: 60,
+      daysFundsMustRemain: 60,
+      optionalPlannedFundingDate: '',
+      lockStartsFrom: 'funded date',
+      status: 'prospect',
+      includeInScenario: false,
+      confidence: 'likely',
+      notes: 'Mostly DD requirement',
+      docUrl: '',
+      entityUsed: '',
+      emailUsed: ''
+    }
+  ];
+
+  state.commitments = [];
+
+  state.events = [
+    {
+      id: uid('evt'),
+      eventName: 'US Bank bonus payout',
+      date: inDays(75),
+      amount: 450,
+      category: 'bonus payout',
+      sourceBonusOfferId: state.offers[0].id,
+      includeInProjection: true,
+      notes: 'Estimated payout from US Bank Smartly bonus'
+    },
+    {
+      id: uid('evt'),
+      eventName: 'Quarterly tax payment',
+      date: inDays(35),
+      amount: -15000,
+      category: 'outflow',
+      sourceBonusOfferId: null,
+      includeInProjection: true,
+      notes: 'Q2 estimated tax'
+    },
+    {
+      id: uid('evt'),
+      eventName: 'Consulting payment',
+      date: inDays(50),
+      amount: 12000,
+      category: 'inflow',
+      sourceBonusOfferId: null,
+      includeInProjection: true,
+      notes: ''
+    }
+  ];
+
+  return state;
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', () => App.init());
+
+// Wire up FAB explicitly since it lives outside of view re-renders
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'fab-add') showOfferModal();
+});
+
+</script>
+</body>
+</html>

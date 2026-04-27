@@ -1,0 +1,11 @@
+{
+  "name": "yield-vector",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "watch": "node auto-push.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  }
+}
