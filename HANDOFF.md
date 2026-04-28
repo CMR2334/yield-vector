@@ -39,6 +39,45 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 22 — chart pan/long-press, fixed tooltip, hero, landscape modal, At a glance**
+- **Chart touch model — coexisting swipe-pan + long-press-inspect.** The
+  old `touchmove` handler called `e.preventDefault()` which blocked the
+  parent `.chart-wrap`'s `overflow-x: auto` native scroll, so users
+  couldn't pan the (wider-than-viewport) chart on phones. Replaced with
+  a state machine: `touchstart` arms a 200 ms timer; if the finger
+  moves > 10 px before the timer fires, it cancels and the wrap pans
+  natively. If the finger holds still long enough, the timer fires and
+  flips into "inspect mode" — subsequent touchmoves call
+  `preventDefault()` and route through `handleHover()`. `touchend`
+  fades the tooltip after 600 ms. Standard Robinhood/Wealthfront
+  pattern.
+- **Tooltip locked dimensions on mobile.** Was reflowing into different-
+  size boxes day-to-day depending on which markers were nearby. Now
+  `.chart-tooltip` is `width: 220 px; min-width: 220 px` on mobile,
+  with `text-overflow: ellipsis` on the right value cell so long event
+  names truncate inside the fixed box rather than expanding it.
+- **Hero amount + label.** Font 42 → 40 px, weight 700 → 600 (less
+  slab), color `var(--text)` → `#1a2235` (slightly lighter than the
+  near-black token). `$`-to-digit margin 2 → 1 px to match the rest of
+  the app's prefix rhythm. `.hero-label` now `white-space: normal;
+  overflow-wrap: anywhere` and on mobile drops to 13 px / 0.04 em
+  letter-spacing so "Available capital today" can't truncate to
+  "AVAILABLE CAPI…" on narrow viewports.
+- **Landscape Add-Offer modal — capped form width.** Modal-card stays
+  720 px max but the `.modal-body`, `.modal-header`, and `.modal-footer`
+  are now constrained to 520 px and centered with `margin: 0 auto`.
+  Inputs read at a comfortable ~480 px wide instead of stretching
+  edge-to-edge.
+- **At a glance — designed dashboard panel.** Each `.snap` cell now has
+  a 3 px color-coded left accent stripe (Active=violet, Confirmed=green,
+  Events=amber, Horizon=gray, Buffer=warning-amber, Bonus=success-green),
+  value-above-label layout (column-reverse), 19 px / 700 value font,
+  uppercase 11 px label. Card itself moved from `var(--card-soft)`
+  flat-no-shadow to `var(--card)` + `var(--shadow-card)`. Title gets
+  a hairline divider trailing it (`::after`) so the panel reads as an
+  intentional component rather than a flat list.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 21 — chip arrow, portrait header scroll, landscape modal, daily start-date roll**
 - **Brand mark v6 — back to chip + cleaner white arrow.** Reverted v5's
   no-chip thick-stroke design per user request. Chip is a 22×22 rounded

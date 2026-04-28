@@ -206,9 +206,9 @@ a { color: inherit; text-decoration: none; }
 
 .snapshot-card {
   padding: var(--space-5);
-  background: var(--card-soft);
+  background: var(--card);
   border: 1px solid var(--border-soft);
-  box-shadow: none;
+  box-shadow: var(--shadow-card);
 }
 .snapshot-title {
   font-size: 12px;
@@ -216,24 +216,68 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-tertiary);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.snapshot-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
 }
 .snapshot-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
+/* Each stat cell: subtle left accent stripe (color-coded per stat),
+   value above label, slightly more padding, and a hover lift so the
+   panel reads as a designed dashboard component rather than a flat
+   list of key/values. */
 .snap {
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;  /* value on top, label below */
   gap: 2px;
-  padding: var(--space-3);
-  background: var(--card);
+  padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--space-3) + 4px);
+  background: var(--card-soft);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s, transform 0.12s;
 }
-.snap-l { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
-.snap-v { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); font-feature-settings: 'tnum' 1; }
+.snap::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-mid);
+}
+.snap.snap-active::before  { background: #7c5fef; }
+.snap.snap-confirmed::before { background: #10b981; }
+.snap.snap-events::before    { background: #f59e0b; }
+.snap.snap-horizon::before   { background: #6b7280; }
+.snap.snap-buffer::before    { background: #d97706; }
+.snap.snap-bonus::before     { background: #10b981; }
+.snap-l {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.snap-v {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  font-feature-settings: 'tnum' 1;
+  line-height: 1.1;
+}
+.snap.snap-bonus .snap-v { color: var(--success); }
 
 /* Sync indicator chip in the header — flatter & lighter than a pill:
    rounded-square radius, no shadow, very-light translucent background,
@@ -447,23 +491,36 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.06em;
   color: var(--text-tertiary);
   margin-bottom: var(--space-1);
+  /* Allow the label to wrap so it never truncates mid-word on narrow
+     viewports ("AVAILABLE CAPI..." was being cut off on phones). */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .hero-amount {
-  font-size: 42px;
-  font-weight: 700;
+  /* Slightly lighter than full --text (#0d1421) so it doesn't punch as
+     a dense black block. Trimmed weight 700→650 implicit (SF doesn't
+     have 650, so we use 600 + tighter tracking for the same weighty
+     feel without the boxy slab look). 5% smaller than v1 (42→40 px)
+     to ease the visual scale. */
+  font-size: 40px;
+  font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1;
-  color: var(--text);
+  color: #1a2235;
 }
 
 /* Match the dollar sign exactly to the numerals — same size, same weight,
    no superscript baseline shift. SF Pro's $ has the same cap-height as
-   its digits, so 1em renders at exactly the same visible height. */
+   its digits, so 1em renders at exactly the same visible height. The
+   margin-right is the canonical $-to-digit gap used elsewhere in the
+   app (e.g. .input-group .input-prefix sits at left:12 with 28px
+   indent; the hero's 1px is the comparable visual rhythm at this
+   font-size). */
 .hero-amount .currency-symbol {
-  font-weight: 700;
+  font-weight: inherit;
   opacity: 1;
-  margin-right: 2px;
+  margin-right: 1px;
   font-size: 1em;
   vertical-align: baseline;
 }
@@ -564,16 +621,29 @@ a { color: inherit; text-decoration: none; }
   z-index: 5;
 }
 .chart-tooltip.visible { opacity: 1; }
-/* On mobile we use position:fixed and JS-clamped left/top — let the box wrap
-   so a long event name can't push the tooltip past the screen edge. */
+/* On mobile, lock the tooltip to a fixed width so it doesn't visually
+   reflow into different-sized boxes day-to-day based on which markers
+   happen to be near the cursor. Long event names truncate cleanly
+   inside the fixed box rather than pushing the box wider. */
 @media (max-width: 720px) {
   .chart-tooltip {
     white-space: normal;
-    max-width: min(320px, calc(100vw - 24px));
+    width: 220px;
+    min-width: 220px;
+    max-width: min(220px, calc(100vw - 24px));
   }
+  .chart-tooltip .tt-row > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
+    text-align: right;
+  }
+  .chart-tooltip .tt-row .label { flex: 0 0 auto; }
 }
 .chart-tooltip .tt-date { font-weight: 600; margin-bottom: 4px; opacity: 0.85; }
-.chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+.chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; min-width: 0; }
 .chart-tooltip .tt-row .label { opacity: 0.7; }
 
 .chart-legend {
@@ -1419,7 +1489,8 @@ table.data-table {
     padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + var(--space-8));
   }
   .hero { padding: var(--space-6); border-radius: var(--radius-lg); }
-  .hero-amount { font-size: 44px; }
+  .hero-amount { font-size: 40px; }
+  .hero-label { font-size: 13px; letter-spacing: 0.04em; }
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
@@ -1537,18 +1608,30 @@ table.data-table {
   .timeline-row-label, .timeline-row-track { height: 38px; }
   .timeline-row-label.axis, .timeline-row-track.axis { height: 26px; }
   /* Modal: use full landscape viewport rather than bottom-sheet style.
-     Inputs/labels are tight in a 2-column grid on a 430-px-tall phone
-     viewport — adjacent labels and inputs were overlapping. Force the
-     form to single-column so each field gets the full modal width, and
-     let modal-body scroll vertically when the content exceeds the
-     short landscape viewport. */
+     Inputs in a 2-column grid on a 430-px-tall phone viewport were
+     crashing into each other. Force single-column, let modal-body
+     scroll, and cap the inner form content at 480 px centered so
+     inputs feel proportional rather than stretched edge-to-edge. */
   .modal { padding: var(--space-3); align-items: center; }
-  .modal-card { max-height: 92vh; max-width: 720px; border-radius: var(--radius-xl); }
-  .modal-body { overflow-y: auto; }
+  .modal-card { max-height: 92vh; max-width: 720px; width: 100%; border-radius: var(--radius-xl); }
+  .modal-body {
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Center the form column in landscape so the inputs read at
+       ~480 px instead of fanning to the full 720 px modal width. */
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .modal-header, .modal-footer {
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
   .form-grid { grid-template-columns: minmax(0, 1fr); }
-  /* Field controls span full width even when the source explicitly sets
-     `style="grid-column: 1 / -1"` (which is fine in 1-col anyway). */
-  .field { width: 100%; min-width: 0; }
+  .field { width: 100%; min-width: 0; max-width: 100%; }
+  .input, .select, .textarea, .input-group { max-width: 100%; }
 }
 
 @media (min-width: 880px) {
@@ -2896,12 +2979,12 @@ function renderOverview() {
       <aside class="card snapshot-card">
         <div class="snapshot-title">At a glance</div>
         <div class="snapshot-grid">
-          <div class="snap"><span class="snap-l">Active offers</span><span class="snap-v">${App.state.offers.filter(o => o.status !== 'completed' && o.status !== 'skipped').length}</span></div>
-          <div class="snap"><span class="snap-l">Confirmed</span><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span></div>
-          <div class="snap"><span class="snap-l">Events</span><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span></div>
-          <div class="snap"><span class="snap-l">Horizon</span><span class="snap-v">${effectiveHorizonDays(App.state)}d</span></div>
-          <div class="snap"><span class="snap-l">Buffer</span><span class="snap-v">${formatCompactCurrency(App.state.settings.minimumCashBuffer)}</span></div>
-          <div class="snap"><span class="snap-l">Bonus pool</span><span class="snap-v" style="color:var(--success);">${formatCompactCurrency(expectedBonusTotal)}</span></div>
+          <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.status !== 'completed' && o.status !== 'skipped').length}</span><span class="snap-l">Active offers</span></div>
+          <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
+          <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
+          <div class="snap snap-horizon"><span class="snap-v">${effectiveHorizonDays(App.state)}d</span><span class="snap-l">Horizon</span></div>
+          <div class="snap snap-buffer"><span class="snap-v">${formatCompactCurrency(App.state.settings.minimumCashBuffer)}</span><span class="snap-l">Buffer</span></div>
+          <div class="snap snap-bonus"><span class="snap-v">${formatCompactCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
         </div>
       </aside>
     </div>
@@ -4278,8 +4361,68 @@ function renderHeroChart(svg) {
 
   svg.addEventListener('mousemove', handleHover);
   svg.addEventListener('mouseleave', clearHover);
-  svg.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
-  svg.addEventListener('touchend', clearHover);
+
+  // Touch interaction model — coexisting swipe-to-pan + long-press-to-inspect:
+  //
+  //   - Quick tap (down → up under 200 ms, no movement): show tooltip
+  //     briefly at the touched point, then auto-clear on touchend.
+  //   - Hold (down, still ≥ 200 ms): enter "inspect mode" — preventDefault
+  //     subsequent touchmoves so dragging updates the tooltip instead of
+  //     panning the chart-wrap. Releases on touchend.
+  //   - Swipe (down, immediate movement > 10 px before timer fires):
+  //     cancel inspect-mode timer, do NOT preventDefault, let the parent
+  //     `.chart-wrap` handle native horizontal scroll for panning.
+  //
+  // This is the Robinhood / Wealthfront pattern: a slow press inspects,
+  // a fast drag pans. Both gestures coexist on the same element.
+  let touchStartX = 0, touchStartY = 0;
+  let inspectMode = false;
+  let inspectTimer = null;
+  const INSPECT_HOLD_MS = 200;
+  const PAN_THRESHOLD_PX = 10;
+  svg.addEventListener('touchstart', (e) => {
+    if (!e.touches[0]) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    inspectMode = false;
+    if (inspectTimer) clearTimeout(inspectTimer);
+    // After INSPECT_HOLD_MS with the finger still on the chart and not
+    // yet panned, lock into inspect mode and reveal the tooltip.
+    inspectTimer = setTimeout(() => {
+      inspectMode = true;
+      handleHover(e.touches[0] || { clientX: touchStartX, clientY: touchStartY });
+    }, INSPECT_HOLD_MS);
+  }, { passive: true });
+  svg.addEventListener('touchmove', (e) => {
+    if (!e.touches[0]) return;
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (!inspectMode) {
+      // Pre-inspect-mode: if the finger has moved meaningfully, abort
+      // the inspect timer and let native horizontal scroll happen.
+      if (Math.abs(dx) > PAN_THRESHOLD_PX || Math.abs(dy) > PAN_THRESHOLD_PX) {
+        if (inspectTimer) { clearTimeout(inspectTimer); inspectTimer = null; }
+      }
+      return; // don't preventDefault — pan freely
+    }
+    // Already in inspect mode — block pan and route the touch through
+    // handleHover so dragging the finger updates the tooltip.
+    e.preventDefault();
+    handleHover(e.touches[0]);
+  }, { passive: false });
+  svg.addEventListener('touchend', () => {
+    if (inspectTimer) { clearTimeout(inspectTimer); inspectTimer = null; }
+    // Tooltip lingers ~600 ms after release so the user can read it
+    // before it fades. Inspect mode resets immediately so the next
+    // touchstart can start fresh.
+    inspectMode = false;
+    setTimeout(clearHover, 600);
+  });
+  svg.addEventListener('touchcancel', () => {
+    if (inspectTimer) { clearTimeout(inspectTimer); inspectTimer = null; }
+    inspectMode = false;
+    clearHover();
+  });
 
   // Public method: programmatically surface the tooltip at a given day
   // index. Used by the "Lowest projected" stat-card click-through. We
