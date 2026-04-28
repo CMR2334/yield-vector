@@ -562,9 +562,19 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  transition: box-shadow 0.18s;
+  transition: box-shadow 0.18s, transform 0.08s;
 }
 .stat-card:hover { box-shadow: var(--shadow-card-hover); }
+/* Clickable affordance: cursor + a tiny lift on hover, settle on press.
+   Activated by adding data-action to the stat-card so any <div> with a
+   navigation action automatically reads as a button. */
+.stat-card[data-action] { cursor: pointer; }
+.stat-card[data-action]:hover { transform: translateY(-1px); }
+.stat-card[data-action]:active { transform: translateY(0); }
+.stat-card[data-action]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
 /* Mid amber — sits between the Offer-expires tag's pale background
@@ -2586,9 +2596,9 @@ function renderOverview() {
     </section>
 
     <div class="grid grid-cols-3" style="margin-bottom: var(--space-6);">
-      ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`, 'accent')}
-      ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success')}
-      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'))}
+      ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`, 'accent', 'goto-timeline')}
+      ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success', 'goto-offers-included')}
+      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'), lowest ? 'goto-lowest' : null)}
     </div>
 
     <div class="overview-side">
@@ -2623,9 +2633,16 @@ function renderOverview() {
   `;
 }
 
-function statCard(label, value, meta = '', variant = '') {
+function statCard(label, value, meta = '', variant = '', action = null) {
+  // When `action` is provided, the card becomes a clickable navigation
+  // surface. data-action routes through onClick(); role/tabindex make it
+  // keyboard-accessible. CSS in `.stat-card[data-action]` adds the
+  // pointer + hover-lift affordance.
+  const navAttrs = action
+    ? `data-action="${action}" role="button" tabindex="0"`
+    : '';
   return `
-    <div class="stat-card">
+    <div class="stat-card" ${navAttrs}>
       <div class="stat-label">${label}</div>
       <div class="stat-value ${variant}">${value}</div>
       ${meta ? `<div class="stat-meta">${meta}</div>` : ''}
@@ -3095,7 +3112,15 @@ function renderTimeline() {
 function renderOffers() {
   const all = App.state.offers.slice();
   const filtered = all.filter(o => {
-    if (App.filters.offersStatus !== 'all' && o.status !== App.filters.offersStatus) return false;
+    // 'included' is a synthetic status used by the "Selected bonuses" stat-
+    // card click-through — it filters to offers that are currently part of
+    // the projection (confirmed status OR scenario flag), spanning multiple
+    // raw status values. Anything else is a literal status match.
+    if (App.filters.offersStatus === 'included') {
+      if (!offerIsActiveForProjection(o)) return false;
+    } else if (App.filters.offersStatus !== 'all' && o.status !== App.filters.offersStatus) {
+      return false;
+    }
     if (App.filters.offersSearch) {
       const q = App.filters.offersSearch.toLowerCase();
       if (!(o.bankName + ' ' + (o.offerName || '') + ' ' + (o.notes || '')).toLowerCase().includes(q)) return false;
@@ -3121,6 +3146,7 @@ function renderOffers() {
       <input id="offers-search-input" type="search" class="input" placeholder="Search offers..." style="max-width:280px;" data-action="offers-search" value="${escapeAttr(App.filters.offersSearch)}" autocomplete="off" />
       <select class="select" style="max-width:200px;" data-action="offers-status">
         <option value="all" ${App.filters.offersStatus === 'all' ? 'selected' : ''}>All statuses</option>
+        <option value="included" ${App.filters.offersStatus === 'included' ? 'selected' : ''}>Included in projection</option>
         ${STATUSES.map(s => `<option value="${s}" ${App.filters.offersStatus === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
       </select>
     </div>
@@ -3868,6 +3894,25 @@ function renderHeroChart(svg) {
   svg.addEventListener('mouseleave', clearHover);
   svg.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
   svg.addEventListener('touchend', clearHover);
+
+  // Public method: programmatically surface the tooltip at a given day
+  // index. Used by the "Lowest projected" stat-card click-through. We
+  // synthesize fake clientX/clientY in the SVG's bounding rect and feed
+  // them through the same handleHover() the cursor would, so there is no
+  // separate rendering path to keep in sync.
+  svg.showAtIndex = function(i) {
+    if (i < 0 || i >= proj.length) return;
+    const rect = svg.getBoundingClientRect();
+    const cx = xFor(i);
+    const cy = yFor(proj[i].availableCapital);
+    const clientX = (cx / W) * rect.width + rect.left;
+    const clientY = (cy / H) * rect.height + rect.top;
+    handleHover({ clientX, clientY });
+    // Auto-fade so the bubble doesn't stick around forever after a single
+    // tap. 5s is enough to read; user can re-tap the stat-card to repeat.
+    if (svg._showAtTimer) clearTimeout(svg._showAtTimer);
+    svg._showAtTimer = setTimeout(() => clearHover(), 5000);
+  };
 }
 
 function niceTicks(min, max, count) {
@@ -4331,6 +4376,35 @@ function onClick(e) {
 
     case 'upcoming-prev': updateUpcomingPage(Math.max(0, (App._upcomingPage || 0) - 1)); break;
     case 'upcoming-next': updateUpcomingPage((App._upcomingPage || 0) + 1); break;
+
+    // Stat-card click-throughs from the overview hero
+    case 'goto-offers-included':
+      App.filters.offersStatus = 'included';
+      App.setView('offers');
+      break;
+    case 'goto-timeline':
+      App.setView('timeline');
+      break;
+    case 'goto-lowest': {
+      // Stay on overview, scroll the chart into view, then surface the
+      // existing tooltip exactly at the lowest day. The chart's SVG element
+      // exposes a `showAtIndex` method that synthesizes the same hover the
+      // user would get by mousing over that x — so the existing tooltip
+      // path is reused, no duplicate rendering logic.
+      const proj = generateProjection(App.state);
+      const summary = summarizeProjection(proj, App.state.settings);
+      if (summary.lowest && typeof summary.lowestIdx === 'number') {
+        const wrap = document.getElementById('hero-chart-wrap');
+        if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const showAt = summary.lowestIdx;
+        // Defer until scroll likely settles; chart layout is already final.
+        setTimeout(() => {
+          const svg = document.getElementById('hero-chart');
+          if (svg && typeof svg.showAtIndex === 'function') svg.showAtIndex(showAt);
+        }, 320);
+      }
+      break;
+    }
 
     // Sync actions
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
