@@ -2511,36 +2511,27 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: SINGLE wide-arrowhead shape, no inner element.
-             4-vertex polygon, bilaterally symmetric across the NE-SW
-             axis through the tip. The tip is at (22, 6) — far upper-
-             right; the two wings sit at (4, 6) and (22, 18) — equal
-             distance from the tip on opposite sides of the symmetry
-             axis. The back-vertex (15, 11) sits slightly INWARD from
-             the wings-midpoint, giving the shape a gentle straight-line
-             concave indent on its back. A subtle white-shimmer overlay
-             on the same shape adds dimensionality near the tip without
-             introducing a second floating shape. -->
-        <svg class="brand-flourish" width="30" height="30" viewBox="0 0 24 24" fill="none"
+        <!-- Brand mark: simple rounded-square chip with the indigo gradient
+             plus a small white triangle in the upper-right. Reverted to
+             this baseline per user request after several rounds of arrow
+             iteration didn't land. -->
+        <svg class="brand-flourish" width="22" height="22" viewBox="0 0 22 22" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-chip-g" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#4338ca"/>
-              <stop offset="55%" stop-color="#7c5fef"/>
-              <stop offset="100%" stop-color="#c4b3fc"/>
+            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#a78bfa"/>
+              <stop offset="40%" stop-color="#7c6ef5"/>
+              <stop offset="70%" stop-color="#5b4fd8"/>
+              <stop offset="100%" stop-color="#312e81"/>
             </linearGradient>
-            <linearGradient id="brand-chip-shimmer" x1="22" y1="6" x2="14" y2="14" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="rgba(255,255,255,0.30)"/>
+            <linearGradient id="brand-chip-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>
               <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
             </linearGradient>
           </defs>
-          <!-- Single wide arrowhead with slight concave back -->
-          <path d="M 22 6 L 4 6 L 15 11 L 22 18 Z"
-                fill="url(#brand-chip-g)"/>
-          <!-- Same shape, shimmer overlay only — gives subtle highlight
-               near the tip without overlaying a separate shape. -->
-          <path d="M 22 6 L 4 6 L 15 11 L 22 18 Z"
-                fill="url(#brand-chip-shimmer)"/>
+          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-g)"/>
+          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-shimmer)"/>
+          <path d="M 17 5 L 12 7 L 15 10 Z" fill="#ffffff" fill-opacity="0.95"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
