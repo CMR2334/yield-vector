@@ -2511,10 +2511,16 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: simple rounded-square chip with the indigo gradient
-             plus a small white triangle in the upper-right. Reverted to
-             this baseline per user request after several rounds of arrow
-             iteration didn't land. -->
+        <!-- Brand mark: rounded-square indigo chip with a layered triangle
+             arrow inside. The arrow is rendered as three stacked layers
+             that give it a subtle dimensional / charcoal-on-gray feel:
+               1. Black/charcoal undershadow, offset slightly down-left
+                  (gives a subtle drop-shadow under the arrow).
+               2. Mid-charcoal middle layer in the same position as the
+                  shadow but a touch smaller — fills out the dark depth.
+               3. Light-gray arrow on top, the main visible glyph.
+             Together: predominantly gray, with charcoal+black layering
+             showing at the edges as faint shadow. -->
         <svg class="brand-flourish" width="22" height="22" viewBox="0 0 22 22" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
@@ -2531,7 +2537,12 @@ function renderHeader() {
           </defs>
           <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-g)"/>
           <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-shimmer)"/>
-          <path d="M 17 5 L 12 7 L 15 10 Z" fill="#ffffff" fill-opacity="0.95"/>
+          <!-- Layer 1: black undershadow, offset 0.6 SW -->
+          <path d="M 17.6 5.6 L 12.6 7.6 L 15.6 10.6 Z" fill="#0d0f15" fill-opacity="0.55"/>
+          <!-- Layer 2: charcoal mid-tone, offset 0.3 SW -->
+          <path d="M 17.3 5.3 L 12.3 7.3 L 15.3 10.3 Z" fill="#3a3d4a" fill-opacity="0.85"/>
+          <!-- Layer 3: light gray arrow (top) -->
+          <path d="M 17 5 L 12 7 L 15 10 Z" fill="#a8a8b3"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
