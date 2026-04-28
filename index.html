@@ -570,7 +570,7 @@ a { color: inherit; text-decoration: none; }
 /* Mid amber — sits between the Offer-expires tag's pale background
    (#fff5e0) and its deep brown text (#b45309). Used when Lowest projected
    touches the buffer zone (positive but below buffer). */
-.stat-value.warn { color: #e0a23a; }
+.stat-value.warn { color: #c88b2c; }
 /* Lighter red — softened from raw #ef4444 to match the Deposit Deadline tag */
 .stat-value.danger { color: #e87171; }
 /* Brighter mint green, in lockstep with .action-tag.success */
@@ -578,7 +578,7 @@ a { color: inherit; text-decoration: none; }
 /* Slightly deeper than the prior #8284f7 — closer to the wordmark indigo */
 .stat-value.accent { color: #6c6ce5; }
 /* Same mid amber as .stat-value.warn so "healthy but lighten" reads coherent */
-.stat-value.lighten { color: #e0a23a; }
+.stat-value.lighten { color: #c88b2c; }
 .stat-meta { font-size: 12px; color: var(--text-tertiary); margin-top: var(--space-1); }
 
 /* ============================================================
@@ -2429,29 +2429,33 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand chip: indigo gradient rounded square (same palette as the
-             PWA home-screen icon) with a small white tapered-shaft + triangular
-             arrowhead pointing up-right. Mirrors the iOS app icon at small
-             scale so the header reads as a miniature version of the icon. -->
+        <!-- Brand triangle: upward-pointing isoceles triangle filled with the
+             indigo gradient, soft-rounded apex. Inside, a small white
+             tapered shaft + arrowhead echo the wordmark. No outer square. -->
         <svg class="brand-arrow" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#a78bfa"/>
-              <stop offset="38%" stop-color="#7c6ef5"/>
-              <stop offset="65%" stop-color="#6366f1"/>
-              <stop offset="100%" stop-color="#312e81"/>
-            </linearGradient>
-            <linearGradient id="brand-chip-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="rgba(255,255,255,0.20)"/>
-              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            <linearGradient id="brand-tri-g" x1="2" y1="20" x2="20" y2="3" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#312e81"/>
+              <stop offset="55%" stop-color="#5b4fd8"/>
+              <stop offset="100%" stop-color="#a78bfa"/>
             </linearGradient>
           </defs>
-          <rect x="0" y="0" width="22" height="22" rx="5.6" fill="url(#brand-chip-g)"/>
-          <rect x="0" y="0" width="22" height="22" rx="5.6" fill="url(#brand-chip-shimmer)"/>
-          <!-- Tapered shaft (parallelogram): wider at base, narrower near head -->
-          <path d="M5.4 17.0 L7.4 15.0 L15.6 6.8 L14.4 8.4 Z" fill="#ffffff" fill-opacity="0.96"/>
-          <!-- Triangular arrowhead in the upper-right corner -->
-          <path d="M13.4 4.0 L18.4 4.0 L18.4 9.0 Z" fill="#ffffff" fill-opacity="0.96"/>
+          <!-- Outer triangle: rounded via stroke + linejoin so apexes aren't sharp.
+               Stroke and fill both use the gradient so the rounding reads as a
+               continuous shape, not a halo. -->
+          <path d="M11 2 L20 19 L2 19 Z"
+                fill="url(#brand-tri-g)"
+                stroke="url(#brand-tri-g)"
+                stroke-width="1.6"
+                stroke-linejoin="round"/>
+          <!-- Inner white tapered shaft: short parallelogram tilted up-right
+               toward the apex. Sits in the lower-right interior. -->
+          <path d="M7.6 17.2 L9.0 15.6 L13.4 9.8 L12.0 11.6 Z"
+                fill="#ffffff" fill-opacity="0.92"/>
+          <!-- Inner arrowhead: small triangle near the apex of the outer
+               triangle so the white mark reads as an arrow pointing up-right. -->
+          <path d="M11.0 8.4 L14.6 8.4 L14.6 12.0 Z"
+                fill="#ffffff" fill-opacity="0.92"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
@@ -2527,7 +2531,7 @@ function renderOverview() {
   // amount and the inline "Lowest $X" line.
   function shortfallTone(v) {
     if (v < 0) return 'var(--danger)';
-    if (v < buffer) return '#e0a23a'; // matches .stat-value.warn / Buffer line
+    if (v < buffer) return '#c88b2c'; // matches .stat-value.warn / Buffer line
     return 'var(--text)';
   }
   const heroAmountTone = shortfallTone(heroAvailable);
@@ -2762,7 +2766,7 @@ function renderPlanner() {
         </div>
         <div class="metric">
           <span class="label">Lowest projected</span>
-          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#e0a23a;' : 'color:#0ea968;')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
+          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#c88b2c;' : 'color:#0ea968;')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
         </div>
         <div class="metric">
           <span class="label">Candidates for optimizer</span>
@@ -3667,10 +3671,11 @@ function renderHeroChart(svg) {
     <!-- Area + line -->
     <path d="${areaPath}" fill="url(#area-grad)" />
     <path d="${linePath}" fill="none" stroke="#5b5cf6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    <!-- Today marker -->
+    <!-- Today marker — neutral gray so it doesn't read as another Outflow
+         purple bubble. Line + dot + label all use the same tertiary gray. -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#5b5cf6" stroke-width="1" stroke-dasharray="2 3" opacity="0.5" pointer-events="none"/>
-      <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#5b5cf6" stroke="white" stroke-width="2.5" pointer-events="none"/>
+      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#9099a8" stroke-width="1" stroke-dasharray="2 3" opacity="0.55" pointer-events="none"/>
+      <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#6b7280" stroke="white" stroke-width="2.5" pointer-events="none"/>
     ` : ''}
     <!-- Markers grouped by visual proximity. When two or more markers would
          overlap horizontally (≤16 SVG units apart) they stack as a vertical
@@ -3707,9 +3712,10 @@ function renderHeroChart(svg) {
       const x = xFor(t.i);
       return `<text x="${x.toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">${t.label}</text>`;
     }).join('')}
-    <!-- "Today" anchor: small accent above the chart, not on the axis line -->
+    <!-- "Today" anchor: small accent above the chart, not on the axis line.
+         Gray to match the rest of the Today line/dot. -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT - 4).toFixed(1)}" fill="#5b5cf6" font-size="11" text-anchor="middle" font-weight="600">Today</text>
+      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT - 4).toFixed(1)}" fill="#6b7280" font-size="11" text-anchor="middle" font-weight="600">Today</text>
     ` : ''}
     <!-- Horizon end label: suppress if same month as last tick, or too close -->
     ${(() => {
@@ -3724,7 +3730,7 @@ function renderHeroChart(svg) {
     <!-- Hover overlay -->
     <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="chart-hover-area"/>
     <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
-    <circle id="chart-hover-dot" cx="0" cy="0" r="5" fill="#5b5cf6" stroke="white" stroke-width="2" opacity="0"/>
+    <circle id="chart-hover-dot" cx="0" cy="0" r="5" fill="#6b7280" stroke="white" stroke-width="2" opacity="0"/>
   `;
 
   svg.innerHTML = svgContent;
