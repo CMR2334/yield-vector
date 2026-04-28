@@ -4098,6 +4098,17 @@ function bindGlobalEvents() {
   document.addEventListener('click', (e) => {
     if (e.target.id === 'modal-root') closeModal();
   });
+  // Cross-device sync: pull on focus / tab visible (throttled inside safeSync)
+  window.addEventListener('focus', () => {
+    if (Sync.isConfigured()) Sync.safeSync({ reason: 'focus' });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Sync.isConfigured()) {
+      Sync.safeSync({ reason: 'tab visible' });
+    }
+  });
+  // Tick the indicator every 30s so "Synced 2m ago" stays current
+  setInterval(updateSyncIndicator, 30000);
 }
 
 function bindViewEvents() { /* re-binding handled by event delegation */ }
