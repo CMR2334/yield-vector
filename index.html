@@ -888,11 +888,14 @@ a { color: inherit; text-decoration: none; }
   background: var(--border-soft);
 }
 
+/* Today indicator on Timeline — neutral gray (not accent purple) so it
+   doesn't compete with Outflow purple bubbles or the included-offer accent.
+   Same family as the chart's Today marker (#9099a8 line, #6b7280 pill). */
 .tl-today {
   position: absolute;
   top: 0; bottom: 0;
   width: 1px;
-  background: var(--accent);
+  background: #9099a8;
   pointer-events: none;
 }
 .tl-today::before {
@@ -901,7 +904,7 @@ a { color: inherit; text-decoration: none; }
   top: -16px;
   left: 0;
   transform: translateX(-50%);
-  background: var(--accent);
+  background: #6b7280;
   color: white;
   font-size: 10px;
   font-weight: 600;
@@ -2429,33 +2432,41 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand triangle: upward-pointing isoceles triangle filled with the
-             indigo gradient, soft-rounded apex. Inside, a small white
-             tapered shaft + arrowhead echo the wordmark. No outer square. -->
+        <!-- Brand mark: a single chunky arrow polygon pointing up-right (no
+             outer chip/box). Seven vertices form the head + shaft. A
+             same-color stroke with `stroke-linejoin: round` softens every
+             corner so the edges read as a gentle, chip-like outline rather
+             than sharp polygon points. A subtle white-ish shimmer overlay
+             is layered on top to add depth without a second color. -->
         <svg class="brand-arrow" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-tri-g" x1="2" y1="20" x2="20" y2="3" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#312e81"/>
+            <linearGradient id="brand-arrow-g" x1="2" y1="20" x2="20" y2="2" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#4338ca"/>
               <stop offset="55%" stop-color="#5b4fd8"/>
               <stop offset="100%" stop-color="#a78bfa"/>
             </linearGradient>
+            <linearGradient id="brand-arrow-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.24)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            </linearGradient>
           </defs>
-          <!-- Outer triangle: rounded via stroke + linejoin so apexes aren't sharp.
-               Stroke and fill both use the gradient so the rounding reads as a
-               continuous shape, not a halo. -->
-          <path d="M11 2 L20 19 L2 19 Z"
-                fill="url(#brand-tri-g)"
-                stroke="url(#brand-tri-g)"
-                stroke-width="1.6"
+          <!-- Arrow path: tip → upper wing → upper inner notch → shaft top-
+               left → shaft bottom-left → lower inner notch → lower wing → tip.
+               Built by rotating a rightward arrow 45° counter-clockwise around
+               the center so it points up-right. -->
+          <path d="M16.0 6.0 L8.2 5.3 L10.3 7.5 L4.6 13.1 L8.9 17.4 L14.5 11.7 L16.7 13.8 Z"
+                fill="url(#brand-arrow-g)"
+                stroke="url(#brand-arrow-g)"
+                stroke-width="2.6"
+                stroke-linejoin="round"
+                stroke-linecap="round"/>
+          <!-- Shimmer overlay on the same shape, at lower opacity, to lift
+               the upper-left face — makes the mark feel dimensional. -->
+          <path d="M16.0 6.0 L8.2 5.3 L10.3 7.5 L4.6 13.1 L8.9 17.4 L14.5 11.7 L16.7 13.8 Z"
+                fill="url(#brand-arrow-shimmer)"
+                stroke="rgba(255,255,255,0.10)"
+                stroke-width="0.5"
                 stroke-linejoin="round"/>
-          <!-- Inner white tapered shaft: short parallelogram tilted up-right
-               toward the apex. Sits in the lower-right interior. -->
-          <path d="M7.6 17.2 L9.0 15.6 L13.4 9.8 L12.0 11.6 Z"
-                fill="#ffffff" fill-opacity="0.92"/>
-          <!-- Inner arrowhead: small triangle near the apex of the outer
-               triangle so the white mark reads as an arrow pointing up-right. -->
-          <path d="M11.0 8.4 L14.6 8.4 L14.6 12.0 Z"
-                fill="#ffffff" fill-opacity="0.92"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
