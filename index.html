@@ -131,21 +131,23 @@ a { color: inherit; text-decoration: none; }
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
+  gap: 6px;
 }
 
-.brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #a78bfa 0%, #6366f1 55%, #312e81 100%);
-  display: grid;
-  place-items: center;
-  color: white;
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.45);
+.brand-arrow {
+  flex-shrink: 0;
+  display: block;
+}
+
+.brand-name {
+  background: linear-gradient(105deg, #4338ca 0%, #4f46e5 55%, #6d28d9 78%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.025em;
+  line-height: 1;
 }
 
 .primary-nav {
@@ -315,8 +317,6 @@ a { color: inherit; text-decoration: none; }
   border-radius: 50%;
   background: var(--accent);
   color: white;
-  font-size: 26px;
-  font-weight: 300;
   box-shadow: var(--shadow-fab);
   z-index: 25;
   align-items: center;
@@ -429,7 +429,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
 }
 
-.hero-amount .currency-symbol { font-weight: 500; opacity: 0.55; margin-right: 2px; font-size: 0.75em; vertical-align: 0.18em; }
+.hero-amount .currency-symbol { font-weight: 700; opacity: 0.72; margin-right: 1px; font-size: 0.62em; vertical-align: 0.22em; }
 
 .hero-meta {
   font-size: 15px;
@@ -545,9 +545,11 @@ a { color: inherit; text-decoration: none; }
 .stat-card:hover { box-shadow: var(--shadow-card-hover); }
 .stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
-.stat-value.warn { color: #b45309; }
+.stat-value.warn { color: #d97706; }
 .stat-value.danger { color: var(--danger); }
 .stat-value.success { color: var(--success); }
+.stat-value.accent { color: #8284f7; }
+.stat-value.lighten { color: #b45309; }
 .stat-meta { font-size: 12px; color: var(--text-tertiary); margin-top: var(--space-1); }
 
 /* ============================================================
@@ -618,7 +620,7 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 8px;
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: #8284f7;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -626,6 +628,23 @@ a { color: inherit; text-decoration: none; }
 .action-tag.warn { background: var(--warning-soft); color: #b45309; }
 .action-tag.success { background: var(--success-soft); color: #047857; }
 .action-tag.danger { background: var(--danger-soft); color: var(--danger); }
+
+.upcoming-pager { display: inline-flex; align-items: center; gap: 6px; }
+.upcoming-pg-btn {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 14px; font-weight: 600; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; cursor: pointer; transition: background 0.12s, opacity 0.12s;
+}
+.upcoming-pg-btn:hover:not(:disabled) { background: var(--accent-mid); }
+.upcoming-pg-btn:disabled { opacity: 0.35; cursor: default; }
+.upcoming-pg-label { font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; min-width: 30px; text-align: center; }
+.upcoming-fade { animation: upcoming-fade-in 0.22s ease-out; }
+@keyframes upcoming-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* ============================================================
    OFFER CARDS
@@ -1198,6 +1217,7 @@ table.data-table {
   .modal-footer { padding: var(--space-3) var(--space-4); }
   .form-grid { grid-template-columns: 1fr; }
   .section-header h2 { font-size: 20px; }
+  .planner-add-btn { display: none; }
   .timeline-row-label { font-size: 12px; padding: 6px 8px; }
 }
 
@@ -1353,20 +1373,33 @@ const Sync = {
   },
 
   // Schedule a debounced push after local edits.
-  schedulePush(delayMs = 1500) {
+  schedulePush(delayMs = 2500) {
     if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
     if (this.pushTimer) clearTimeout(this.pushTimer);
     this.setStatus('pending');
     this.pushTimer = setTimeout(() => this.push({ silent: true }), delayMs);
   },
 
-  // Pull from Gist; if remote newer than local, replace local.
-  // If local newer or remote empty, push local up.
-  async startupSync() {
-    if (this.startupDone) return;
-    this.startupDone = true;
+  // Timestamp-aware sync: pulls from Gist; if remote newer, replaces local
+  // (after flushing any pending push). If local newer, pushes. Safe to call
+  // from startup, focus, and visibilitychange. Throttled by SAFE_SYNC_COOLDOWN.
+  _lastSafeSyncAt: 0,
+  async safeSync({ force = false, reason = '' } = {}) {
     if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
+    const SAFE_SYNC_COOLDOWN = 5000;
+    const now = Date.now();
+    if (!force && now - this._lastSafeSyncAt < SAFE_SYNC_COOLDOWN) return;
+    this._lastSafeSyncAt = now;
+
     const cfg = this.getConfig();
+    // If a debounced push is queued, the user has unsaved local edits — flush
+    // them first so we don't clobber them by pulling.
+    if (this.pushTimer) {
+      clearTimeout(this.pushTimer);
+      this.pushTimer = null;
+      await this.push({ silent: true });
+    }
+
     this.setStatus('syncing');
     try {
       const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
@@ -1386,23 +1419,40 @@ const Sync = {
       if (remote && remoteModified > localModified) {
         // Remote wins — replace local
         App.state = remote;
-        // Don't trigger push from save: persist to localStorage directly
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
         this.lastSyncAt = Date.now();
         this.setStatus('synced');
         render();
-        toast('Pulled latest from cloud');
+        if (reason) toast(`Pulled latest from cloud (${reason})`);
       } else if (!remote || localModified > remoteModified) {
-        // Local wins — push (or seed empty Gist)
-        await this.push({ silent: true });
+        // Local newer or remote empty — push up. Skip if remoteModified > 0
+        // and local seeded with no edits (avoids overwriting with sample data
+        // on a fresh device); only push if local has been touched.
+        if (remoteModified > 0 && localModified === 0) {
+          // Local is fresh / unsaved — pull remote rather than push
+          App.state = remote;
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+          this.lastSyncAt = Date.now();
+          this.setStatus('synced');
+          render();
+          if (reason) toast(`Pulled latest from cloud (${reason})`);
+        } else {
+          await this.push({ silent: true });
+        }
       } else {
         this.lastSyncAt = Date.now();
         this.setStatus('synced');
       }
     } catch (e) {
       this.setStatus('error', e.message);
-      console.warn('Startup sync failed', e);
+      console.warn('safeSync failed', e);
     }
+  },
+
+  async startupSync() {
+    if (this.startupDone) return;
+    this.startupDone = true;
+    return this.safeSync({ force: true });
   },
 
   async pull({ silent = false } = {}) {
@@ -1576,27 +1626,27 @@ function setupPwa() {
   ctx.fillStyle = shimmer;
   ctx.fillRect(0, 0, W, W);
 
-  // White vector mark — clean upward arrow, slight diagonal
-  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  // White vector mark — custom filled arrow, tapered shaft + triangular arrowhead
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(0,0,0,0.22)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 2;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 9;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  // Shaft
+  // Tapered shaft: wider at base, narrower near arrowhead
   ctx.beginPath();
-  ctx.moveTo(48, 132);
-  ctx.lineTo(132, 48);
-  ctx.stroke();
-  // Arrowhead — two short strokes from the tip
+  ctx.moveTo(36, 144);
+  ctx.lineTo(52, 128);
+  ctx.lineTo(128, 52);
+  ctx.lineTo(116, 64);
+  ctx.closePath();
+  ctx.fill();
   ctx.shadowBlur = 0;
+  // Filled triangular arrowhead (top-right corner)
   ctx.beginPath();
-  ctx.moveTo(132, 48);
-  ctx.lineTo(132, 84);
-  ctx.moveTo(132, 48);
-  ctx.lineTo(96, 48);
-  ctx.stroke();
+  ctx.moveTo(106, 28);
+  ctx.lineTo(152, 28);
+  ctx.lineTo(152, 74);
+  ctx.closePath();
+  ctx.fill();
 
   ctx.restore();
 
@@ -2275,7 +2325,7 @@ function renderShell() {
     ${renderHeader()}
     <main class="app-main">${renderActiveView()}</main>
     ${renderMobileNav()}
-    <button class="fab" id="fab-add" aria-label="Add offer">+</button>
+    <button class="fab" id="fab-add" aria-label="Add offer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg></button>
     <div class="modal" id="modal-root"></div>
     <div class="toast" id="toast"></div>
   `;
@@ -2292,10 +2342,17 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <div class="brand-mark">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
-        </div>
-        <div class="brand-name">Yield Vector</div>
+        <svg class="brand-arrow" width="20" height="18" viewBox="0 0 20 18" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-arrow-g" x1="2" y1="16" x2="17" y2="2" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#4338ca"/>
+              <stop offset="100%" stop-color="#a78bfa"/>
+            </linearGradient>
+          </defs>
+          <line x1="2.5" y1="15.5" x2="13.6" y2="4.4" stroke="url(#brand-arrow-g)" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M17 1.5 L11.2 2.6 L15.6 7 Z" fill="url(#brand-arrow-g)"/>
+        </svg>
+        <span class="brand-name">Yield Vector</span>
       </div>
       <nav class="primary-nav">
         ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}">${l}</button>`).join('')}
@@ -2368,7 +2425,12 @@ function renderOverview() {
       ? `<span class="pill warn">${summary.belowBufferDays} day${summary.belowBufferDays === 1 ? '' : 's'} below buffer</span>`
       : `<span class="pill">Healthy through horizon</span>`;
 
-  const upcomingActions = computeUpcomingActions(App.state, 12);
+  const ACTIONS_PER_PAGE = 6;
+  const allUpcomingActions = computeUpcomingActions(App.state, 200);
+  const upcomingPageCount = Math.max(1, Math.ceil(allUpcomingActions.length / ACTIONS_PER_PAGE));
+  if (typeof App._upcomingPage !== 'number') App._upcomingPage = 0;
+  App._upcomingPage = Math.min(App._upcomingPage, upcomingPageCount - 1);
+  const upcomingActions = allUpcomingActions.slice(App._upcomingPage * ACTIONS_PER_PAGE, (App._upcomingPage + 1) * ACTIONS_PER_PAGE);
 
   return `
     <section class="hero">
@@ -2390,26 +2452,31 @@ function renderOverview() {
         <span class="chart-legend-item"><span class="legend-line" style="background:var(--accent);"></span> Available capital</span>
         <span class="chart-legend-item"><span class="legend-line dashed" style="color:var(--warning);"></span> Buffer (${formatCompactCurrency(App.state.settings.minimumCashBuffer)})</span>
         <span class="chart-legend-item"><span class="legend-swatch" style="background:#5b5cf6;"></span> Funding date</span>
-        <span class="chart-legend-item"><span class="legend-swatch" style="background:#10b981;"></span> Withdrawal eligible</span>
+        <span class="chart-legend-item"><span class="legend-swatch" style="background:#10b981;"></span> Withdrawal</span>
       </div>
     </section>
 
-    <div class="grid grid-cols-4" style="margin-bottom: var(--space-6);">
-      ${statCard('Liquid capital', formatCurrency(liquidCapital), '')}
-      ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`)}
+    <div class="grid grid-cols-3" style="margin-bottom: var(--space-6);">
+      ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`, 'accent')}
       ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success')}
-      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : ''))}
+      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'))}
     </div>
 
     <div class="overview-side">
       <section class="card">
         <div class="card-header">
           <h2>Upcoming actions</h2>
-          <span style="font-size:12px;color:var(--text-tertiary);">Next 12</span>
+          ${upcomingPageCount > 1 ? `
+            <div class="upcoming-pager">
+              <button class="upcoming-pg-btn" data-action="upcoming-prev" ${App._upcomingPage === 0 ? 'disabled' : ''} aria-label="Previous">‹</button>
+              <span class="upcoming-pg-label">${App._upcomingPage + 1} / ${upcomingPageCount}</span>
+              <button class="upcoming-pg-btn" data-action="upcoming-next" ${App._upcomingPage === upcomingPageCount - 1 ? 'disabled' : ''} aria-label="Next">›</button>
+            </div>
+          ` : ''}
         </div>
         ${upcomingActions.length === 0
           ? `<div style="padding:var(--space-6);text-align:center;color:var(--text-tertiary);font-size:14px;">No upcoming dates yet. Add an offer to get started.</div>`
-          : `<div class="action-list">${upcomingActions.map(renderActionRow).join('')}</div>`}
+          : `<div class="action-list upcoming-fade" key="${App._upcomingPage}">${upcomingActions.map(renderActionRow).join('')}</div>`}
       </section>
 
       <aside class="card snapshot-card">
@@ -2452,14 +2519,14 @@ function computeUpcomingActions(state, limit = 12) {
     if (dd) {
       const d = parseDate(dd);
       if (d && d >= TODAY && d <= horizonEnd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
-        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'warn' });
+        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger' });
       }
     }
     const we = withdrawalEligibleDate(o);
     if (we && (o.status === 'funded' || o.status === 'applied')) {
       const d = parseDate(we);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Withdrawal date', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success' });
+        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success' });
       }
     }
   }
@@ -2530,7 +2597,7 @@ function renderPlanner() {
         <p>Toggle offers in or out and see your cash projection update live.</p>
       </div>
       <div style="display:flex;gap:var(--space-2);">
-        <button class="btn btn-secondary" data-action="add-offer">+ Add offer</button>
+        <button class="btn btn-secondary planner-add-btn" data-action="add-offer">+ Add offer</button>
       </div>
     </div>
 
@@ -2546,7 +2613,7 @@ function renderPlanner() {
         </div>
         <div class="metric">
           <span class="label">Lowest projected</span>
-          <span class="value ${summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : '')}" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#b45309;' : '')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
+          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#d97706;' : 'color:var(--success);')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
         </div>
         <div class="metric">
           <span class="label">Candidates for optimizer</span>
@@ -3331,6 +3398,7 @@ function renderHeroChart(svg) {
   }
   if (buffer < minY) minY = buffer;
   if (buffer > maxY) maxY = buffer;
+  const actualMinCapital = proj.reduce((m, d) => Math.min(m, d.availableCapital), Infinity);
   const yPad = (maxY - minY) * 0.12 || 1000;
   minY = minY - yPad * 0.4;
   maxY = maxY + yPad * 0.6;
@@ -3351,7 +3419,7 @@ function renderHeroChart(svg) {
   while (true) {
     const dayOffset = Math.round((cursor - start) / 86400000);
     if (dayOffset >= proj.length) break;
-    const tooCloseToToday = isFirstTick && dayOffset < 12;
+    const tooCloseToToday = isFirstTick && dayOffset < 4;
     if (dayOffset > 0 && !tooCloseToToday) {
       // Show year too if it crosses into a new year
       // Only show the year on January (when the year actually changes), and
@@ -3392,12 +3460,13 @@ function renderHeroChart(svg) {
     }
   }
 
-  // Markers: funding dates, withdrawal dates, bonus payouts
+  // Markers: funding dates, withdrawal dates, deposit deadlines, events
   const markers = [];
   for (const o of App.state.offers) {
     if (!offerIsActiveForProjection(o)) continue;
     const fund = parseDate(lockStartDate(o));
     const withd = parseDate(withdrawalEligibleDate(o));
+    const dd = parseDate(depositDeadline(o));
     const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
     if (fund) {
       const i = Math.round((fund - start) / 86400000);
@@ -3407,12 +3476,20 @@ function renderHeroChart(svg) {
       const i = Math.round((withd - start) / 86400000);
       if (i >= 0 && i < proj.length) markers.push({ i, type: 'withdraw', label: `Withdraw ${name}`, color: '#10b981', amount: Number(o.requiredFundingAmount) || 0, bonus: Number(o.signupBonusAmount) || 0 });
     }
+    if (dd) {
+      const i = Math.round((dd - start) / 86400000);
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label: `Deposit deadline: ${name}`, color: '#ef4444', amount: Number(o.requiredFundingAmount) || 0 });
+    }
   }
   for (const e of App.state.events) {
-    if (!e.includeInProjection) continue;
-    if (e.category !== 'bonus payout') continue;
-    const i = Math.round((parseDate(e.date) - start) / 86400000);
-    if (i >= 0 && i < proj.length) markers.push({ i, type: 'bonus', label: e.eventName, color: '#10b981', amount: Number(e.amount) || 0 });
+    if (!e.includeInProjection || !e.date) continue;
+    const ed = parseDate(e.date);
+    if (!ed) continue;
+    const i = Math.round((ed - start) / 86400000);
+    if (i < 0 || i >= proj.length) continue;
+    const isBonus = e.category === 'bonus payout';
+    const color = Number(e.amount) >= 0 ? '#10b981' : '#f59e0b';
+    markers.push({ i, type: isBonus ? 'bonus' : (Number(e.amount) >= 0 ? 'event-inflow' : 'event-outflow'), label: e.eventName, color, amount: Number(e.amount) || 0 });
   }
 
   const todayIdx = Math.round((TODAY - start) / 86400000);
@@ -3436,22 +3513,52 @@ function renderHeroChart(svg) {
     }).join('')}
     <!-- Buffer line -->
     <line x1="${padL}" y1="${yFor(buffer).toFixed(1)}" x2="${W - padR}" y2="${yFor(buffer).toFixed(1)}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.7"/>
-    <!-- Zero line if visible -->
-    ${minY < 0 ? `<line x1="${padL}" y1="${yFor(0).toFixed(1)}" x2="${W - padR}" y2="${yFor(0).toFixed(1)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 4"/>` : ''}
+    <!-- Zero line only when projection actually goes negative -->
+    ${actualMinCapital < 0 ? `<line x1="${padL}" y1="${yFor(0).toFixed(1)}" x2="${W - padR}" y2="${yFor(0).toFixed(1)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 4"/>` : ''}
     <!-- Area + line -->
     <path d="${areaPath}" fill="url(#area-grad)" />
     <path d="${linePath}" fill="none" stroke="#5b5cf6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     <!-- Today marker -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#5b5cf6" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
-      <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#5b5cf6" stroke="white" stroke-width="2.5"/>
+      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#5b5cf6" stroke-width="1" stroke-dasharray="2 3" opacity="0.5" pointer-events="none"/>
+      <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#5b5cf6" stroke="white" stroke-width="2.5" pointer-events="none"/>
     ` : ''}
-    <!-- Markers -->
-    ${markers.map(m => {
-      const x = xFor(m.i);
-      const y = yFor(proj[m.i].availableCapital);
-      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.9"><title>${escapeHtml(m.label)} — ${formatDateMedium(proj[m.i].date)}</title></circle>`;
-    }).join('')}
+    <!-- Markers grouped by proximity (≤1 day apart). Cycling chevrons swap active marker. -->
+    ${(() => {
+      const sorted = markers.slice().sort((a, b) => a.i - b.i);
+      const groups = [];
+      for (const m of sorted) {
+        const last = groups[groups.length - 1];
+        if (last && Math.abs(m.i - last[last.length - 1].i) <= 1) last.push(m);
+        else groups.push([m]);
+      }
+      if (!App._chartGroupActive) App._chartGroupActive = {};
+      let out = '';
+      groups.forEach((g, gi) => {
+        const key = 'g' + g[0].i;
+        const active = App._chartGroupActive[key] || 0;
+        const idx = Math.min(active, g.length - 1);
+        const m = g[idx];
+        const x = xFor(m.i);
+        const y = yFor(proj[m.i].availableCapital);
+        out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.9" pointer-events="none"></circle>`;
+        if (g.length >= 2) {
+          // Stack indicator dots above the bubble (one per item, current is filled)
+          for (let k = 0; k < g.length; k++) {
+            const dy = -(g.length - 1) * 3 + k * 6 - 10;
+            out += `<circle cx="${x.toFixed(1)}" cy="${(y + dy).toFixed(1)}" r="1.5" fill="${k === idx ? m.color : 'rgba(155,160,170,0.6)'}" pointer-events="none"/>`;
+          }
+          // Cycling chevrons: ‹ on left if not first, › on right if not last
+          if (idx > 0) {
+            out += `<g class="chart-cycle" data-key="${key}" data-dir="-1" style="cursor:pointer;"><circle cx="${(x - 11).toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="white" stroke="${m.color}" stroke-width="1.2"/><text x="${(x - 11).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="${m.color}">‹</text></g>`;
+          }
+          if (idx < g.length - 1) {
+            out += `<g class="chart-cycle" data-key="${key}" data-dir="1" style="cursor:pointer;"><circle cx="${(x + 11).toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="white" stroke="${m.color}" stroke-width="1.2"/><text x="${(x + 11).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="${m.color}">›</text></g>`;
+          }
+        }
+      });
+      return out;
+    })()}
     <!-- X axis labels (months) -->
     ${xTicks.map(t => {
       const x = xFor(t.i);
@@ -3461,10 +3568,16 @@ function renderHeroChart(svg) {
     ${todayIdx >= 0 && todayIdx < proj.length ? `
       <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT - 4).toFixed(1)}" fill="#5b5cf6" font-size="11" text-anchor="middle" font-weight="600">Today</text>
     ` : ''}
-    <!-- Horizon end label, only if it doesn't collide with the rightmost month tick -->
-    ${(xTicks.length === 0 || xFor(proj.length - 1) - xFor(xTicks[xTicks.length - 1].i) > 32) ? `
-      <text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>
-    ` : ''}
+    <!-- Horizon end label: suppress if same month as last tick, or too close -->
+    ${(() => {
+      if (xTicks.length === 0) return `<text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>`;
+      const lastTick = xTicks[xTicks.length - 1];
+      const lastTickDate = new Date(start.getTime() + lastTick.i * 86400000);
+      const horizonDate = new Date(start.getTime() + (proj.length - 1) * 86400000);
+      const sameMonth = lastTickDate.getFullYear() === horizonDate.getFullYear() && lastTickDate.getMonth() === horizonDate.getMonth();
+      const tooClose = xFor(proj.length - 1) - xFor(lastTick.i) <= 32;
+      return (sameMonth || tooClose) ? '' : `<text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>`;
+    })()}
     <!-- Hover overlay -->
     <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="chart-hover-area"/>
     <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
@@ -3484,14 +3597,29 @@ function renderHeroChart(svg) {
 
   function markerTypeLabel(type) {
     if (type === 'fund') return 'Fund date';
-    if (type === 'withdraw') return 'Withdrawal eligible';
+    if (type === 'withdraw') return 'Withdrawal';
     if (type === 'bonus') return 'Bonus payout';
+    if (type === 'deposit-deadline') return 'Deposit deadline';
+    if (type === 'event-inflow') return 'Inflow';
+    if (type === 'event-outflow') return 'Outflow';
     return type;
+  }
+  // Lighter mid-tone for tooltip text on dark background — readable on dark bg
+  function lightenColor(hex) {
+    const map = {
+      '#5b5cf6': '#a5a6ff',  // fund purple → light
+      '#10b981': '#6ee7b7',  // green → light mint
+      '#ef4444': '#fca5a5',  // red → light pink
+      '#f59e0b': '#fcd34d',  // amber → light yellow
+    };
+    return map[hex] || hex;
   }
 
   function handleHover(evt) {
     const rect = svg.getBoundingClientRect();
     const rawX = (evt.clientX - rect.left) * (W / rect.width);
+    const rawY = (evt.clientY - rect.top) * (H / rect.height);
+    if (rawX < padL || rawX > W - padR || rawY < padT || rawY > padT + innerH) { clearHover(); return; }
     const i = Math.round(((rawX - padL) / innerW) * (proj.length - 1));
     if (i < 0 || i >= proj.length) return;
     const d = proj[i];
@@ -3516,13 +3644,15 @@ function renderHeroChart(svg) {
     if (nearMarkers.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.18);margin-top:6px;padding-top:6px;">`;
       for (const m of nearMarkers) {
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${m.color};font-weight:600;">${escapeHtml(m.label)}</span></div>`;
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${lightenColor(m.color)};font-weight:600;">${escapeHtml(m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span>${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Must fund by</span><span style="color:#fca5a5;">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'withdraw') {
           if (m.amount) html += `<div class="tt-row"><span class="label">Released</span><span>${formatCurrency(m.amount)}</span></div>`;
-          if (m.bonus) html += `<div class="tt-row"><span class="label">Bonus</span><span style="color:#10b981;">+${formatCurrency(m.bonus)}</span></div>`;
+          if (m.bonus) html += `<div class="tt-row"><span class="label">Bonus</span><span style="color:#6ee7b7;">+${formatCurrency(m.bonus)}</span></div>`;
         }
-        if (m.type === 'bonus' && m.amount) html += `<div class="tt-row"><span class="label">Payout</span><span style="color:#10b981;">+${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'bonus' && m.amount) html += `<div class="tt-row"><span class="label">Payout</span><span style="color:#6ee7b7;">+${formatCurrency(m.amount)}</span></div>`;
+        if ((m.type === 'event-inflow' || m.type === 'event-outflow') && m.amount) html += `<div class="tt-row"><span class="label">Amount</span><span style="color:${m.amount >= 0 ? '#6ee7b7' : '#fcd34d'};">${m.amount >= 0 ? '+' : ''}${formatCurrency(m.amount)}</span></div>`;
       }
       html += `</div>`;
     }
@@ -3552,10 +3682,22 @@ function renderHeroChart(svg) {
     tooltip.classList.remove('visible');
   }
 
-  hoverArea.addEventListener('mousemove', handleHover);
-  hoverArea.addEventListener('mouseleave', clearHover);
-  hoverArea.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
-  hoverArea.addEventListener('touchend', clearHover);
+  svg.addEventListener('mousemove', handleHover);
+  svg.addEventListener('mouseleave', clearHover);
+  svg.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
+  svg.addEventListener('touchend', clearHover);
+
+  // Cycling chevrons: cycle the active marker within a stack group
+  svg.addEventListener('click', (e) => {
+    const g = e.target.closest('.chart-cycle');
+    if (!g) return;
+    e.stopPropagation();
+    const key = g.getAttribute('data-key');
+    const dir = parseInt(g.getAttribute('data-dir'), 10) || 1;
+    const cur = App._chartGroupActive[key] || 0;
+    App._chartGroupActive[key] = cur + dir;
+    renderHeroChart();
+  });
 }
 
 function niceTicks(min, max, count) {
@@ -4005,6 +4147,9 @@ function onClick(e) {
     case 'apply-combo': applyOptimizerCombo(target.dataset.mask); break;
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
+
+    case 'upcoming-prev': App._upcomingPage = Math.max(0, (App._upcomingPage || 0) - 1); render(); break;
+    case 'upcoming-next': App._upcomingPage = (App._upcomingPage || 0) + 1; render(); break;
 
     // Sync actions
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
