@@ -235,35 +235,39 @@ a { color: inherit; text-decoration: none; }
 .snap-l { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
 .snap-v { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); font-feature-settings: 'tnum' 1; }
 
-/* Sync indicator pill in the header — visible on every screen size */
+/* Sync indicator chip in the header — flatter & lighter than a pill:
+   rounded-square radius, no shadow, very-light translucent background,
+   no border. Sits unobtrusively at top-right while still readable. */
 .sync-indicator {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
+  padding: 5px 10px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  background: var(--card-soft);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-soft);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  background: rgba(13, 20, 33, 0.04);
+  color: var(--text-tertiary);
+  border: none;
+  box-shadow: none;
+  transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.sync-indicator:hover { background: var(--accent-soft); border-color: var(--accent-mid); color: var(--accent); }
+.sync-indicator:hover { background: rgba(13, 20, 33, 0.07); color: var(--text-secondary); }
 .sync-dot {
-  width: 8px; height: 8px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: var(--text-tertiary);
   flex-shrink: 0;
+  /* No halo box-shadow — flat single-color dot. */
 }
-.sync-indicator[data-status="synced"] .sync-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+.sync-indicator[data-status="synced"] .sync-dot { background: var(--success); }
 .sync-indicator[data-status="syncing"] .sync-dot { background: var(--warning); animation: sync-pulse 1.1s ease-in-out infinite; }
-.sync-indicator[data-status="pending"] .sync-dot { background: var(--warning); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
-.sync-indicator[data-status="error"] .sync-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+.sync-indicator[data-status="pending"] .sync-dot { background: var(--warning); }
+.sync-indicator[data-status="error"] .sync-dot { background: var(--danger); }
 .sync-indicator[data-status="unconfigured"] .sync-dot { background: var(--text-tertiary); }
-.sync-indicator[data-status="error"] { color: var(--danger); border-color: rgba(239, 68, 68, 0.25); background: var(--danger-soft); }
+.sync-indicator[data-status="error"] { color: var(--danger); background: rgba(232, 113, 113, 0.08); }
 
 @keyframes sync-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -1071,11 +1075,15 @@ a { color: inherit; text-decoration: none; }
 
 .input, .select, .textarea {
   width: 100%;
+  display: block;
   /* Match `.field { min-width: 0 }` so inputs can shrink to the column
      width on narrow screens. Some native widgets (date, number) carry an
-     intrinsic min-width that would otherwise overflow the form column. */
+     intrinsic min-width that would otherwise overflow the form column.
+     `box-sizing: border-box` is set globally on `*`, but re-stating here
+     makes the no-overflow contract explicit at the input level. */
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border: 1.5px solid var(--border);
   background: var(--card);
@@ -1085,6 +1093,18 @@ a { color: inherit; text-decoration: none; }
   transition: border-color 0.1s, box-shadow 0.1s;
   font-family: inherit;
 }
+/* Input groups (currency-prefix, days-suffix) wrap the input in a
+   relative-position div for the absolutely-positioned prefix/suffix. The
+   wrapper itself must stay constrained so the inner input can't overflow
+   the field cell on phones — Safari's intrinsic native-control widths
+   would otherwise push the right edge past the modal. */
+.input-group {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -1093,7 +1113,6 @@ a { color: inherit; text-decoration: none; }
 .input[type="number"] { font-feature-settings: 'tnum' 1; }
 .textarea { resize: vertical; min-height: 72px; }
 
-.input-group { position: relative; }
 .input-group .input-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 14px; pointer-events: none; }
 .input-group .input-suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 13px; pointer-events: none; }
 .input-group .input { padding-left: 28px; }
@@ -1402,21 +1421,51 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  /* Mobile timeline: narrower labels column; tracks column gets a fixed
-     wide pixel width that exceeds its scroll container, so the user
-     scrolls horizontally inside the tracks-scroll. The labels-col is
-     OUTSIDE the scroll container entirely — it physically cannot move
-     when the user scrolls the tracks, so there is no z-index/stacking
-     gymnastics needed and nothing bleeds through. */
-  .timeline-labels-col { flex: 0 0 120px; }
-  .timeline-tracks-col { width: 640px; min-width: 640px; }
-  .timeline-row-label { font-size: 12px; padding: 6px 8px; }
+  /* Mobile portrait: labels column gets only enough room for short
+     bank names; tracks column fits screen (no horizontal scroll) so
+     the chart content is the dominant portion of the screen instead
+     of a 1/3-visible sliver. The wrap padding also shrinks so we
+     reclaim every available pixel. */
+  .timeline-wrap { padding: var(--space-3); }
+  .timeline-labels-col { flex: 0 0 88px; }
+  .timeline-tracks-col { width: 100%; min-width: 0; }
+  .timeline-tracks-scroll { overflow-x: hidden; }
+  .timeline-row-label {
+    font-size: 11px;
+    padding: 6px 8px;
+    /* Truncate long bank names with ellipsis instead of wrapping. */
+  }
+  .timeline-row-label > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .timeline-row-label .sub { font-size: 10px; }
+  /* Axis ticks: tighter, smaller font so 4-5 month labels fit on a
+     phone-width track without overlapping. */
+  .tl-axis-tick { font-size: 10px; }
   .modal { padding: 0; align-items: flex-end; }
-  .modal-card { max-width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  .modal-card { max-width: 100%; width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .modal-header { padding: var(--space-4); }
-  .modal-body { padding: var(--space-4); }
+  .modal-body {
+    padding: var(--space-4);
+    /* Defensive: clip horizontal overflow at the body so an over-wide
+       native control (date, number) can never push the right edge past
+       the screen. Vertical scroll for long forms still works. */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   .modal-footer { padding: var(--space-3) var(--space-4); }
-  .form-grid { grid-template-columns: 1fr; }
+  .form-grid {
+    grid-template-columns: 1fr;
+    /* Ensure the grid cells match container width — `1fr` resolves to
+       `minmax(auto, 1fr)` by default, which respects intrinsic widths.
+       `minmax(0, 1fr)` lets cells shrink below content width so long
+       hint text can't blow the column out. */
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+  .field { width: 100%; max-width: 100%; }
   .section-header h2 { font-size: 20px; }
   .planner-add-btn { display: none; }
   .timeline-row-label { font-size: 12px; padding: 6px 8px; }
@@ -2255,17 +2304,19 @@ function effectiveHorizonDays(state) {
   if (mode === '1year') return 365;
   if (mode === '2years') return 730;
   if (mode === 'custom') return Math.max(30, Math.min(1825, Number(settings.projectionHorizonDays) || 365));
-  // 'auto' — 30 days past the latest withdrawal-eligible date of active/planned
-  // offers, capped at 180 days (6 months). Distant offers stop pushing the
-  // horizon further so the chart never zooms out further than half a year.
-  let last = addDays(start, 30);
+  // 'auto' — exactly 30 days past the latest withdrawal-eligible date of
+  // active/planned offers (a hard +30 cap past the last action). Offer
+  // expirations and any other dates are ignored. If no offers, fall back
+  // to a 30-day floor so an empty planner still has a chart to look at.
+  let lastAction = null;
   for (const o of state.offers || []) {
     if (o.status === 'completed' || o.status === 'skipped') continue;
     const we = withdrawalEligibleDate(o);
     const d = we ? parseDate(we) : null;
-    if (d && d > last) last = d;
+    if (d && (lastAction == null || d > lastAction)) lastAction = d;
   }
-  return Math.max(30, Math.min(180, daysBetween(start, addDays(last, 30))));
+  if (!lastAction) return 30;
+  return Math.max(30, Math.min(180, daysBetween(start, addDays(lastAction, 30))));
 }
 
 function generateProjection(state, options = {}) {
@@ -2601,38 +2652,33 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: rounded-square indigo chip with a layered triangle
-             arrow inside. The arrow is rendered as three stacked layers
-             that give it a subtle dimensional / charcoal-on-gray feel:
-               1. Black/charcoal undershadow, offset slightly down-left
-                  (gives a subtle drop-shadow under the arrow).
-               2. Mid-charcoal middle layer in the same position as the
-                  shadow but a touch smaller — fills out the dark depth.
-               3. Light-gray arrow on top, the main visible glyph.
-             Together: predominantly gray, with charcoal+black layering
-             showing at the edges as faint shadow. -->
-        <svg class="brand-flourish" width="22" height="22" viewBox="0 0 22 22" fill="none"
+        <!-- Brand mark: a single thin gradient-stroked uptrend curve from
+             lower-left to a sharp chevron arrowhead in the upper-right.
+             No chip, no fills — pure stroke, like a financial-chart
+             trend-line. Quadratic Bezier for the shaft so it reads as
+             organic growth rather than a stock L-shape; chevron barbs
+             splay off the tip at sharp angles for an arrow that looks
+             intentional, not generic. -->
+        <svg class="brand-flourish" width="22" height="20" viewBox="0 0 22 20" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#a78bfa"/>
-              <stop offset="40%" stop-color="#7c6ef5"/>
-              <stop offset="70%" stop-color="#5b4fd8"/>
-              <stop offset="100%" stop-color="#312e81"/>
-            </linearGradient>
-            <linearGradient id="brand-chip-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>
-              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            <linearGradient id="brand-arrow-g" x1="3" y1="17" x2="18" y2="3" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#312e81"/>
+              <stop offset="55%" stop-color="#5b4fd8"/>
+              <stop offset="100%" stop-color="#a78bfa"/>
             </linearGradient>
           </defs>
-          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-g)"/>
-          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-shimmer)"/>
-          <!-- Layer 1: black undershadow, offset 0.6 SW -->
-          <path d="M 17.6 5.6 L 12.6 7.6 L 15.6 10.6 Z" fill="#0d0f15" fill-opacity="0.55"/>
-          <!-- Layer 2: charcoal mid-tone, offset 0.3 SW -->
-          <path d="M 17.3 5.3 L 12.3 7.3 L 15.3 10.3 Z" fill="#3a3d4a" fill-opacity="0.85"/>
-          <!-- Layer 3: light gray arrow (top) -->
-          <path d="M 17 5 L 12 7 L 15 10 Z" fill="#a8a8b3"/>
+          <!-- Shaft: gentle uptrend curve from tail (3, 17) through (8, 12)
+               to tip (18, 3). Rounded caps so the start fades cleanly. -->
+          <path d="M 3 17 Q 8 12 18 3"
+                stroke="url(#brand-arrow-g)" stroke-width="1.7"
+                stroke-linecap="round" fill="none"/>
+          <!-- Chevron arrowhead: two thin barbs meeting at the tip (18, 3).
+               Barbs splay at ~45° from the shaft tangent for a sharp,
+               minimal arrow — no fill, no L-corner. -->
+          <path d="M 13 3.5 L 18 3 L 17.5 8"
+                stroke="url(#brand-arrow-g)" stroke-width="1.7"
+                stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>

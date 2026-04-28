@@ -39,6 +39,44 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 19 — horizon hard-cap, mobile timeline width, form overflow, brand v4, flat sync chip**
+- **Timeline horizon cap.** `effectiveHorizonDays()` auto mode had a
+  baseline of `let last = addDays(start, 30)`, then later wrapped that
+  in `addDays(last, 30)` — so the minimum horizon was 60 days even with
+  no offers, and every offer's withdrawal date got an extra 30 baked
+  in twice. Fixed: `last` starts as `null`, only gets pushed by
+  active/planned withdrawal-eligible dates (offer expiration is still
+  ignored), and the final return is `min(180, daysBetween(start,
+  lastAction + 30))`. Empty planner → 30-day floor.
+- **Mobile-portrait timeline width.** Labels column shrunk from
+  120 px → 88 px; tracks column flipped from `width: 640px` (forcing
+  horizontal scroll) to `width: 100%; min-width: 0` so the chart fills
+  the visible portion of the screen instead of being a 1/3-visible
+  sliver. Wrap padding tightened to `var(--space-3)`, axis ticks 10 px,
+  row labels truncate with ellipsis.
+- **Modal/form overflow.** Reasserted `box-sizing: border-box;
+  width: 100%; max-width: 100%; min-width: 0` on `.input/.select/
+  .textarea` and the `.input-group` wrapper, so Safari's intrinsic
+  native-control width can't push the right edge past the modal.
+  `.modal-card` on mobile now `width: 100%`; `.modal-body` clamps with
+  `overflow-x: hidden`; form-grid uses `minmax(0, 1fr)` so cells can
+  shrink below content width.
+- **Brand mark v4 — single curved diagonal stroke.** Dropped the
+  rounded-square indigo chip + layered triangle entirely. Brand mark is
+  now one quadratic Bezier `M 3 17 Q 8 12 18 3` (uptrend curve) with a
+  3-point chevron arrowhead `M 13 3.5 L 18 3 L 17.5 8` at the tip.
+  Both paths share the same `brand-arrow-g` indigo→violet gradient,
+  stroke-width 1.7, round caps. No fills. Reads as a financial-chart
+  uptrend rather than a stock icon.
+- **Flat sync chip.** Top-right sync indicator: removed border, removed
+  the colored halo `box-shadow` from `.sync-dot`, swapped pill radius
+  for `border-radius: 8px`, and lightened background from
+  `var(--card-soft)` to `rgba(13, 20, 33, 0.04)` (very faint
+  translucency over the page bg). Dot is now a flat single-color 7 px
+  circle. The chip recedes into the chrome instead of competing with
+  the brand mark.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 18 — mobile layout fixes (chart clip, portrait sizing, landscape, form alignment)**
 - **Chart tooltip clipping (overview).** Tooltip is now appended to
   `document.body` on first show and stays there. Position is unified to
