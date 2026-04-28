@@ -39,6 +39,78 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 21 — chip arrow, portrait header scroll, landscape modal, daily start-date roll**
+- **Brand mark v6 — back to chip + cleaner white arrow.** Reverted v5's
+  no-chip thick-stroke design per user request. Chip is a 22×22 rounded
+  square with a corner-to-corner gradient (`#1e1b4b → #4338ca → #7c3aed
+  → #b69cff`) — the bottom-left is deeper navy than v3, the top-right
+  is a notable shade lighter (`#b69cff` vs `#a78bfa`) for more lift.
+  Inner arrow is no longer a layered filled triangle: it's a smooth
+  Bezier shaft `M 5.5 16.5 Q 9 12 16 6.5` plus a chevron arrowhead
+  `M 10.8 7.2 L 16.5 6 L 15.3 12`, both pure white stroke at width 2.
+  Reads as crisp vector rather than chunky stock clipart.
+- **Portrait header scrolls away.** `.app-header` was `position: sticky`
+  on every breakpoint; phones in portrait were eating ~64 px of the
+  short viewport for chrome that didn't need to follow. Added
+  `@media (max-width: 720px) and (orientation: portrait) { .app-header
+  { position: static; top: auto; } }` so it scrolls naturally with the
+  page in portrait. Landscape phones keep it sticky (handled by the
+  prior landscape media block via `--header-height: 50px`) since you
+  need quick nav access on a short screen.
+- **Landscape Add-Offer modal — single-column form.** In landscape on a
+  phone (≥720 px wide), the form-grid `auto-fit minmax(220px, 1fr)`
+  was producing 2 columns inside a 640-px modal-card; combined with a
+  430-px-tall viewport, labels and inputs were crashing into each
+  other. Added `.form-grid { grid-template-columns: minmax(0, 1fr); }`
+  inside the landscape media block, plus `.modal-body { overflow-y:
+  auto; }` so long forms scroll vertically rather than compressing.
+- **Daily projection-start-date roll.** Added `App.rollProjectionStart-
+  IfStale()` — if `settings.projectionStartDate` is older than today,
+  advance to today and save. Wired into three triggers: (1) `App.init`
+  before first render so a stale state file from yesterday rolls
+  forward immediately; (2) `visibilitychange → visible` so an app left
+  open overnight rolls forward when the user comes back; (3) a 60-s
+  `setInterval` that early-returns when the date hasn't changed —
+  cheap belt-and-suspenders for keeping a foreground tab honest. Only
+  advances, never rolls backward, so a user manually setting a future
+  start date in Settings is preserved.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 20 — fix Round 19 regressions: scroll, horizon, arrow visibility**
+- **Restored mobile chart/timeline horizontal scroll.** Round 19 set
+  `overflow: visible` and removed `min-width` from `.chart-svg` /
+  `.timeline-tracks-col` to fit screen width — the chart got compressed
+  into 1/3 of the viewport without scrollability. Reverted to the
+  pre-Round 19 model: `.chart-wrap` is `overflow-x: auto` with
+  `-webkit-overflow-scrolling: touch`; `.chart-svg` carries
+  `min-width: 600px`. Tooltip is still appended to `<body>` (Round 18)
+  so bubble-clipping is still solved.
+- **Restored timeline two-column scroll.** `.timeline-labels-col` back
+  to flex-fixed at 96 px (with belt-and-suspenders `position: sticky;
+  left: 0; z-index: 2`); `.timeline-tracks-col` back to 600 px wide
+  inside an `overflow-x: auto` scroll container. Labels stay pinned
+  while the user scrolls bars horizontally.
+- **Reverted JS preserveAspectRatio override.** The
+  `preserveAspectRatio = 'none'` kludge from Round 18 (used to stretch
+  the chart vertically when the box was taller than the viewBox) is
+  gone. Back to plain `xMidYMid meet`.
+- **Horizon for real this time.** `effectiveHorizonDays()` was still
+  counting any offer that wasn't `completed`/`skipped`, which meant
+  prospect/selected offers without `includeInScenario` checked were
+  pushing the X-axis out to October even though they don't appear on
+  the chart. Now the loop filters by the same
+  `offerIsActiveForProjection()` predicate the projection engine uses.
+  Also exposes `window._horizonDebug` (= `{ lastAction, considered }`)
+  for inspection when this surfaces again.
+- **Brand mark v5 — visible arrowhead.** v4's hairline stroke (1.7)
+  with tiny barbs read as "just a line" at 22 px. v5 bumps stroke to
+  2.4, viewBox to 24×22, lengthens the chevron barbs to ~8 px with a
+  ~32° opening angle, and shifts the tip out to (20, 3) so the
+  arrowhead has room. The barbs are at (12.5, 4.6) → (20, 3) →
+  (18.6, 11). Same indigo→violet gradient, same Bezier shaft, no
+  fills.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 19 — horizon hard-cap, mobile timeline width, form overflow, brand v4, flat sync chip**
 - **Timeline horizon cap.** `effectiveHorizonDays()` auto mode had a
   baseline of `let last = addDays(start, 30)`, then later wrapped that

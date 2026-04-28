@@ -507,22 +507,24 @@ a { color: inherit; text-decoration: none; }
   -webkit-font-smoothing: antialiased;
 }
 
-/* Mobile portrait: fit the screen — full width, reasonable min-height,
-   no horizontal scroll. The SVG stretches its viewBox vertically (we
-   switch preserveAspectRatio to "none" via JS for portrait phones) so
-   the chart actually fills the box instead of being a 130px-tall sliver. */
+/* Mobile portrait: chart needs BOTH a min-width (so the user has
+   content to scroll through) AND a horizontally-scrollable wrapper.
+   Tooltip is appended to <body> in JS (Round 18) so it renders above
+   the wrap regardless of overflow — no need for `overflow: visible`. */
 @media (max-width: 720px) and (orientation: portrait) {
   .chart-wrap {
-    overflow: visible;            /* let bubbles render outside */
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     margin: var(--space-4) 0 0 0;
     padding: 0;
-    min-height: 240px;
+    scrollbar-width: thin;
   }
   .chart-svg {
     width: 100%;
-    min-width: 0;
+    min-width: 600px;       /* user scrolls horizontally for the rest */
     height: auto;
-    aspect-ratio: 1.55 / 1;       /* ~242px tall at 375px wide */
+    display: block;
   }
 }
 
@@ -530,17 +532,18 @@ a { color: inherit; text-decoration: none; }
    and capped at a moderate height so the rest of the page is reachable. */
 @media (max-width: 1024px) and (orientation: landscape) {
   .chart-wrap {
-    overflow: visible;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
     margin: var(--space-3) 0 0 0;
     padding: 0;
-    min-height: 180px;
-    max-height: 240px;
+    max-height: 280px;
   }
   .chart-svg {
     width: 100%;
-    min-width: 0;
+    min-width: 600px;
     height: auto;
-    aspect-ratio: 2.6 / 1;
+    display: block;
   }
 }
 
@@ -1421,19 +1424,34 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  /* Mobile portrait: labels column gets only enough room for short
-     bank names; tracks column fits screen (no horizontal scroll) so
-     the chart content is the dominant portion of the screen instead
-     of a 1/3-visible sliver. The wrap padding also shrinks so we
-     reclaim every available pixel. */
+  /* Mobile portrait timeline: narrower (sticky) labels column on the
+     left so bank names are always visible, plus a wide horizontally-
+     scrollable tracks area on the right. Two separate containers
+     means the labels never participate in the scroll — they stay
+     pinned regardless of where the user scrolls the bars. */
   .timeline-wrap { padding: var(--space-3); }
-  .timeline-labels-col { flex: 0 0 88px; }
-  .timeline-tracks-col { width: 100%; min-width: 0; }
-  .timeline-tracks-scroll { overflow-x: hidden; }
+  .timeline-labels-col {
+    flex: 0 0 96px;
+    /* Sticky-belt-and-suspenders: even though labels-col is outside
+       the scroll container, position:sticky here keeps it pinned if
+       the layout is ever flattened into a single scroll context. */
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--card);
+  }
+  .timeline-tracks-col {
+    width: 600px;
+    min-width: 600px;
+  }
+  .timeline-tracks-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
   .timeline-row-label {
     font-size: 11px;
     padding: 6px 8px;
-    /* Truncate long bank names with ellipsis instead of wrapping. */
   }
   .timeline-row-label > span:first-child {
     overflow: hidden;
@@ -1441,8 +1459,6 @@ table.data-table {
     white-space: nowrap;
   }
   .timeline-row-label .sub { font-size: 10px; }
-  /* Axis ticks: tighter, smaller font so 4-5 month labels fit on a
-     phone-width track without overlapping. */
   .tl-axis-tick { font-size: 10px; }
   .modal { padding: 0; align-items: flex-end; }
   .modal-card { max-width: 100%; width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
@@ -1474,6 +1490,14 @@ table.data-table {
 @media (max-width: 480px) {
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .hero-amount { font-size: 40px; }
+}
+
+/* Portrait-only: header scrolls away naturally to reclaim ~64 px of
+   vertical space when the user is working in a chart or reading a
+   long list. Landscape (handled below) keeps the header sticky since
+   landscape phone screens are short and quick nav access matters. */
+@media (max-width: 720px) and (orientation: portrait) {
+  .app-header { position: static; top: auto; }
 }
 
 /* ============================================================
@@ -1512,9 +1536,19 @@ table.data-table {
   .timeline-wrap { padding: var(--space-4); }
   .timeline-row-label, .timeline-row-track { height: 38px; }
   .timeline-row-label.axis, .timeline-row-track.axis { height: 26px; }
-  /* Modal: use full landscape viewport rather than bottom-sheet style. */
+  /* Modal: use full landscape viewport rather than bottom-sheet style.
+     Inputs/labels are tight in a 2-column grid on a 430-px-tall phone
+     viewport — adjacent labels and inputs were overlapping. Force the
+     form to single-column so each field gets the full modal width, and
+     let modal-body scroll vertically when the content exceeds the
+     short landscape viewport. */
   .modal { padding: var(--space-3); align-items: center; }
   .modal-card { max-height: 92vh; max-width: 720px; border-radius: var(--radius-xl); }
+  .modal-body { overflow-y: auto; }
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+  /* Field controls span full width even when the source explicitly sets
+     `style="grid-column: 1 / -1"` (which is fine in 1-col anyway). */
+  .field { width: 100%; min-width: 0; }
 }
 
 @media (min-width: 880px) {
@@ -2112,6 +2146,7 @@ const App = {
       this.state = seedSampleData(this.state);
       this.save();
     }
+    this.rollProjectionStartIfStale();
     setupPwa();
     if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
     else Sync.setStatus('unconfigured');
@@ -2121,6 +2156,25 @@ const App = {
     if (Sync.isConfigured()) {
       setTimeout(() => Sync.startupSync(), 50);
     }
+  },
+
+  // Auto-roll the projection start date forward to today whenever it
+  // falls behind. Called on init, on visibilitychange (tab back from
+  // background), and once a minute via setInterval (covers the case
+  // where the app is left open overnight). Returns true if the state
+  // changed, so callers can re-render. We only advance — never roll
+  // backward — so a user explicitly setting a future start date in
+  // Settings is preserved.
+  rollProjectionStartIfStale() {
+    if (!this.state || !this.state.settings) return false;
+    const today = isoDate(new Date());
+    const cur = this.state.settings.projectionStartDate;
+    if (!cur || cur < today) {
+      this.state.settings.projectionStartDate = today;
+      this.save();
+      return true;
+    }
+    return false;
   },
 
   defaultState() {
@@ -2305,18 +2359,27 @@ function effectiveHorizonDays(state) {
   if (mode === '2years') return 730;
   if (mode === 'custom') return Math.max(30, Math.min(1825, Number(settings.projectionHorizonDays) || 365));
   // 'auto' — exactly 30 days past the latest withdrawal-eligible date of
-  // active/planned offers (a hard +30 cap past the last action). Offer
-  // expirations and any other dates are ignored. If no offers, fall back
-  // to a 30-day floor so an empty planner still has a chart to look at.
+  // offers that are ACTIVE in the projection. Confirmed offers count
+  // unconditionally; unconfirmed offers (prospect/selected) only count
+  // if the user has checked includeInScenario. This matches what's
+  // actually plotted on the chart, so the X-axis can't extend out to
+  // some prospect offer the user hasn't opted in to.
+  // Hard clamp: end = lastActionDate + 30 days. No baseline padding,
+  // no extra fudge factor anywhere. If no active offer, 30-day floor.
   let lastAction = null;
+  const debug = [];
   for (const o of state.offers || []) {
-    if (o.status === 'completed' || o.status === 'skipped') continue;
+    if (!offerIsActiveForProjection(o)) continue;
     const we = withdrawalEligibleDate(o);
     const d = we ? parseDate(we) : null;
     if (d && (lastAction == null || d > lastAction)) lastAction = d;
+    if (d) debug.push({ id: o.id, status: o.status, withdrawal: we });
   }
+  // Expose for inspection from the console: App.state && window._horizonDebug
+  if (typeof window !== 'undefined') window._horizonDebug = { lastAction, considered: debug };
   if (!lastAction) return 30;
-  return Math.max(30, Math.min(180, daysBetween(start, addDays(lastAction, 30))));
+  const days = daysBetween(start, addDays(lastAction, 30));
+  return Math.max(30, Math.min(180, days));
 }
 
 function generateProjection(state, options = {}) {
@@ -2652,32 +2715,42 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: a single thin gradient-stroked uptrend curve from
-             lower-left to a sharp chevron arrowhead in the upper-right.
-             No chip, no fills — pure stroke, like a financial-chart
-             trend-line. Quadratic Bezier for the shaft so it reads as
-             organic growth rather than a stock L-shape; chevron barbs
-             splay off the tip at sharp angles for an arrow that looks
-             intentional, not generic. -->
-        <svg class="brand-flourish" width="22" height="20" viewBox="0 0 22 20" fill="none"
+        <!-- Brand mark: rounded-square chip with a navy → light-purple
+             diagonal gradient (BL → TR), and a clean white arrow on top.
+             The chip's top-right corner is intentionally lighter than
+             previous versions for more lift; the arrow is a smooth Bezier
+             shaft + chevron arrowhead in pure stroke (no filled triangle)
+             so it reads as crisp vector rather than chunky stock clipart. -->
+        <svg class="brand-flourish" width="22" height="22" viewBox="0 0 22 22" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-arrow-g" x1="3" y1="17" x2="18" y2="3" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#312e81"/>
-              <stop offset="55%" stop-color="#5b4fd8"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
+            <!-- Bottom-left = deep navy, top-right = lighter violet/lavender.
+                 Gradient runs corner-to-corner along the diagonal of the chip. -->
+            <linearGradient id="brand-chip-g" x1="0" y1="22" x2="22" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#1e1b4b"/>
+              <stop offset="45%" stop-color="#4338ca"/>
+              <stop offset="80%" stop-color="#7c3aed"/>
+              <stop offset="100%" stop-color="#b69cff"/>
+            </linearGradient>
+            <!-- Subtle highlight overlay on the upper-left to give the chip
+                 a hint of dimensional gloss without going glossy. -->
+            <linearGradient id="brand-chip-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
             </linearGradient>
           </defs>
-          <!-- Shaft: gentle uptrend curve from tail (3, 17) through (8, 12)
-               to tip (18, 3). Rounded caps so the start fades cleanly. -->
-          <path d="M 3 17 Q 8 12 18 3"
-                stroke="url(#brand-arrow-g)" stroke-width="1.7"
+          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-g)"/>
+          <rect x="0" y="0" width="22" height="22" rx="6" fill="url(#brand-chip-shimmer)"/>
+          <!-- White arrow shaft: smooth Bezier uptrend from (5.5, 16.5)
+               to the tip at (16, 6.5). Stroke 2.0 — slightly thicker than
+               the hairline v5 stroke so the arrow has actual presence. -->
+          <path d="M 5.5 16.5 Q 9 12 16 6.5"
+                stroke="white" stroke-width="2"
                 stroke-linecap="round" fill="none"/>
-          <!-- Chevron arrowhead: two thin barbs meeting at the tip (18, 3).
-               Barbs splay at ~45° from the shaft tangent for a sharp,
-               minimal arrow — no fill, no L-corner. -->
-          <path d="M 13 3.5 L 18 3 L 17.5 8"
-                stroke="url(#brand-arrow-g)" stroke-width="1.7"
+          <!-- Chevron arrowhead: tip at (16.5, 6); barbs to (10.8, 7.2) and
+               (15.3, 12). ~8 px barbs, sharp angle, no filled triangle. -->
+          <path d="M 10.8 7.2 L 16.5 6 L 15.3 12"
+                stroke="white" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
@@ -4092,14 +4165,7 @@ function renderHeroChart(svg) {
 
   svg.innerHTML = svgContent;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  // On mobile portrait the CSS box has aspect-ratio 1.55/1 (taller than
-  // the 800x280 viewBox's 2.86/1) — switch preserveAspectRatio to "none"
-  // there so the chart stretches to fill the box instead of letterboxing
-  // to a 130px-tall sliver. handleHover() reads the rendered rect with
-  // getBoundingClientRect() and scales by W/rect.width and H/rect.height
-  // independently, so non-uniform stretch is correct for cursor mapping.
-  const portraitMobile = window.matchMedia('(max-width: 720px) and (orientation: portrait)').matches;
-  svg.setAttribute('preserveAspectRatio', portraitMobile ? 'none' : 'xMidYMid meet');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
   // Hover interactions
   const hoverArea = svg.querySelector('#chart-hover-area');
@@ -4638,12 +4704,19 @@ function bindGlobalEvents() {
     if (Sync.isConfigured()) Sync.safeSync({ reason: 'focus' });
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && Sync.isConfigured()) {
-      Sync.safeSync({ reason: 'tab visible' });
+    if (document.visibilityState === 'visible') {
+      // App left open overnight or tab returning from background —
+      // advance the projection start date if it's stale. Re-render so
+      // the chart and timeline pick up the new "today" boundary.
+      if (App.rollProjectionStartIfStale()) render();
+      if (Sync.isConfigured()) Sync.safeSync({ reason: 'tab visible' });
     }
   });
   // Tick the indicator every 30s so "Synced 2m ago" stays current
   setInterval(updateSyncIndicator, 30000);
+  // Every 60s, check if midnight has rolled past while the app was
+  // open. Cheap call — early-returns if the date hasn't changed.
+  setInterval(() => { if (App.rollProjectionStartIfStale()) render(); }, 60000);
   // Re-render on orientation change so the chart's preserveAspectRatio + CSS
   // aspect-ratio rules pick up the new orientation. Debounce so rapid
   // resize events during rotation don't thrash.
