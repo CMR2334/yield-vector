@@ -503,19 +503,41 @@ a { color: inherit; text-decoration: none; }
   -webkit-font-smoothing: antialiased;
 }
 
-/* On mobile the chart gets cramped — let it overflow horizontally with
-   a min-width so users can scroll across instead of squinting. */
-@media (max-width: 720px) {
+/* Mobile portrait: fit the screen — full width, reasonable min-height,
+   no horizontal scroll. The SVG stretches its viewBox vertically (we
+   switch preserveAspectRatio to "none" via JS for portrait phones) so
+   the chart actually fills the box instead of being a 130px-tall sliver. */
+@media (max-width: 720px) and (orientation: portrait) {
   .chart-wrap {
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    margin-left: calc(-1 * var(--space-4));
-    margin-right: calc(-1 * var(--space-4));
-    padding: 0 var(--space-4);
-    scrollbar-width: thin;
+    overflow: visible;            /* let bubbles render outside */
+    margin: var(--space-4) 0 0 0;
+    padding: 0;
+    min-height: 240px;
   }
-  .chart-svg { min-width: 720px; }
+  .chart-svg {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 1.55 / 1;       /* ~242px tall at 375px wide */
+  }
+}
+
+/* Mobile landscape: viewport is wide & short — chart fits without scroll
+   and capped at a moderate height so the rest of the page is reachable. */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .chart-wrap {
+    overflow: visible;
+    margin: var(--space-3) 0 0 0;
+    padding: 0;
+    min-height: 180px;
+    max-height: 240px;
+  }
+  .chart-svg {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    aspect-ratio: 2.6 / 1;
+  }
 }
 
 .chart-tooltip {
@@ -1004,6 +1026,10 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-4);
+  /* Stretch each field to fill its cell so the input within can pin to
+     the bottom — that way labels of different lengths (one-liner vs
+     wrapped two-liner) don't push their inputs onto different baselines. */
+  align-items: stretch;
 }
 
 .field {
@@ -1016,7 +1042,30 @@ a { color: inherit; text-decoration: none; }
      creates the modal-wide horizontal-scroll bug on phones. */
   min-width: 0;
 }
-.field label, .field-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.field label, .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* Reserve consistent vertical space so a 2-line label ("Days after signup
+     to deposit") and a 1-line label ("Status") don't push their inputs onto
+     different baselines when paired in a row. */
+  min-height: 30px;
+  display: flex;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+/* Inputs pin to the bottom of the cell. Combined with the label's reserved
+   min-height, every input in a form-grid row lines up horizontally even when
+   labels above wrap to different numbers of lines. */
+.field > .input,
+.field > .select,
+.field > .textarea,
+.field > .input-group,
+.field > .radio-group {
+  margin-top: auto;
+}
 .field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
 .field-error { font-size: 12px; color: var(--danger); margin-top: 2px; }
 
@@ -1376,6 +1425,47 @@ table.data-table {
 @media (max-width: 480px) {
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .hero-amount { font-size: 40px; }
+}
+
+/* ============================================================
+   LANDSCAPE on phones / small tablets
+   Vertical real-estate is the constraint. Compact the header, hero,
+   and timeline rows so column titles aren't truncated and the chart
+   isn't hidden behind the bottom nav.
+   ============================================================ */
+@media (max-width: 1024px) and (orientation: landscape) {
+  :root {
+    --header-height: 50px;
+    --bottom-nav-height: 56px;
+  }
+  .app-header { height: 50px; }
+  .mobile-nav { height: 56px; }
+  .mobile-nav .nav-btn { padding: 4px 8px; font-size: 10px; }
+  .mobile-nav .nav-btn svg { width: 18px; height: 18px; }
+  .app-main {
+    padding: var(--space-3) var(--space-4) calc(var(--bottom-nav-height) + var(--space-4));
+  }
+  .hero {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+  .hero-amount { font-size: 32px; line-height: 1; }
+  .hero-meta { font-size: 12px; gap: 8px; }
+  /* Section titles: keep readable but tighter top margin so they don't
+     eat the visible chart area. */
+  .section-header { margin-bottom: var(--space-3); }
+  .section-header h2 { font-size: 18px; }
+  /* Stat cards row: tighter padding so a 2x or 3x grid fits. */
+  .stat-card { padding: var(--space-3); }
+  .stat-value { font-size: 20px; }
+  .stat-label { font-size: 11px; }
+  /* Timeline rows: compress slightly so more rows fit on screen. */
+  .timeline-wrap { padding: var(--space-4); }
+  .timeline-row-label, .timeline-row-track { height: 38px; }
+  .timeline-row-label.axis, .timeline-row-track.axis { height: 26px; }
+  /* Modal: use full landscape viewport rather than bottom-sheet style. */
+  .modal { padding: var(--space-3); align-items: center; }
+  .modal-card { max-height: 92vh; max-width: 720px; border-radius: var(--radius-xl); }
 }
 
 @media (min-width: 880px) {
@@ -3956,9 +4046,14 @@ function renderHeroChart(svg) {
 
   svg.innerHTML = svgContent;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  // No explicit height — let CSS width:100% + viewBox aspect ratio drive
-  // the rendered height. Setting a fixed height attribute conflicts with
-  // preserveAspectRatio="xMidYMid meet" and breaks cursor mapping.
+  // On mobile portrait the CSS box has aspect-ratio 1.55/1 (taller than
+  // the 800x280 viewBox's 2.86/1) — switch preserveAspectRatio to "none"
+  // there so the chart stretches to fill the box instead of letterboxing
+  // to a 130px-tall sliver. handleHover() reads the rendered rect with
+  // getBoundingClientRect() and scales by W/rect.width and H/rect.height
+  // independently, so non-uniform stretch is correct for cursor mapping.
+  const portraitMobile = window.matchMedia('(max-width: 720px) and (orientation: portrait)').matches;
+  svg.setAttribute('preserveAspectRatio', portraitMobile ? 'none' : 'xMidYMid meet');
 
   // Hover interactions
   const hoverArea = svg.querySelector('#chart-hover-area');
@@ -4030,62 +4125,36 @@ function renderHeroChart(svg) {
     tooltip.innerHTML = html;
     tooltip.classList.add('visible');
 
-    // On mobile use fixed positioning to escape the overflow-x:auto container.
-    // After placing, measure the tooltip and clamp left/top so the box (which
-    // is translated -50%,-110% via CSS) cannot spill past the viewport edges.
-    if (window.innerWidth <= 720) {
-      const svgX = (cx / W) * rect.width + rect.left;
-      const svgY = (cy / H) * rect.height + rect.top;
-      tooltip.style.position = 'fixed';
-      tooltip.style.left = svgX + 'px';
-      tooltip.style.top = svgY + 'px';
-      // Force a layout pass to read the now-rendered size, then clamp.
-      const ttRect = tooltip.getBoundingClientRect();
-      const margin = 8;
-      const halfW = ttRect.width / 2;
-      const minLeft = margin + halfW;
-      const maxLeft = window.innerWidth - margin - halfW;
-      const clampedLeft = Math.max(minLeft, Math.min(maxLeft, svgX));
-      // If the tooltip would clip the top of the viewport, flip it below the
-      // dot instead of above.
-      const wantsTop = svgY - ttRect.height - 12;
-      const flipDown = wantsTop < margin;
-      tooltip.style.left = clampedLeft + 'px';
-      if (flipDown) {
-        tooltip.style.top = (svgY + 18) + 'px';
-        tooltip.style.transform = 'translate(-50%, 0)';
-      } else {
-        tooltip.style.top = svgY + 'px';
-        tooltip.style.transform = 'translate(-50%, -110%)';
-      }
+    // Tooltip is appended to <body> (see below) so position:fixed always
+    // anchors to the viewport, regardless of any ancestor overflow/scroll
+    // container. iOS Safari otherwise treats fixed-as-absolute when
+    // -webkit-overflow-scrolling: touch is on an ancestor, which is what
+    // was clipping bubble tooltips inside .chart-wrap.
+    if (tooltip.parentElement !== document.body) document.body.appendChild(tooltip);
+    const svgX = (cx / W) * rect.width + rect.left;
+    const svgY = (cy / H) * rect.height + rect.top;
+    tooltip.style.position = 'fixed';
+    tooltip.style.left = svgX + 'px';
+    tooltip.style.top = svgY + 'px';
+    tooltip.style.transform = 'translate(-50%, -110%)';
+    // Force layout, then clamp inside viewport with a small margin.
+    const ttRect = tooltip.getBoundingClientRect();
+    const margin = 8;
+    const halfW = ttRect.width / 2;
+    const minLeft = margin + halfW;
+    const maxLeft = window.innerWidth - margin - halfW;
+    const clampedLeft = Math.max(minLeft, Math.min(maxLeft, svgX));
+    // Flip below the dot if anchoring above would clip the top of the
+    // viewport (chart near the top of the page on phones).
+    const wantsTop = svgY - ttRect.height - 12;
+    const flipDown = wantsTop < margin;
+    tooltip.style.left = clampedLeft + 'px';
+    if (flipDown) {
+      tooltip.style.top = (svgY + 18) + 'px';
+      tooltip.style.transform = 'translate(-50%, 0)';
     } else {
-      const wrapRect = wrap.getBoundingClientRect();
-      const tx = (cx / W) * wrapRect.width;
-      const ty = (cy / H) * wrapRect.height;
-      tooltip.style.position = 'absolute';
-      tooltip.style.left = tx + 'px';
-      tooltip.style.top = ty + 'px';
+      tooltip.style.top = svgY + 'px';
       tooltip.style.transform = 'translate(-50%, -110%)';
-      // Clamp inside the chart-wrap so the tooltip's centered box can't
-      // extend past the left or right edge — important for Lowest-projected
-      // click-throughs near the start of the horizon, which would otherwise
-      // cut off the left side of the panel.
-      const ttRect = tooltip.getBoundingClientRect();
-      const margin = 6;
-      const halfW = ttRect.width / 2;
-      const minTx = halfW + margin;
-      const maxTx = wrapRect.width - halfW - margin;
-      const clampedTx = Math.max(minTx, Math.min(maxTx, tx));
-      // Flip below the dot if anchoring the bottom edge above would clip
-      // the top of the chart-wrap (rare on desktop, but possible if the
-      // tooltip is taller than the cursor's y position).
-      const wantsTop = ty - ttRect.height - 12;
-      const flipDown = wantsTop < margin;
-      tooltip.style.left = clampedTx + 'px';
-      if (flipDown) {
-        tooltip.style.top = (ty + 18) + 'px';
-        tooltip.style.transform = 'translate(-50%, 0)';
-      }
     }
   }
 
@@ -4529,6 +4598,16 @@ function bindGlobalEvents() {
   });
   // Tick the indicator every 30s so "Synced 2m ago" stays current
   setInterval(updateSyncIndicator, 30000);
+  // Re-render on orientation change so the chart's preserveAspectRatio + CSS
+  // aspect-ratio rules pick up the new orientation. Debounce so rapid
+  // resize events during rotation don't thrash.
+  let orientTimer = null;
+  const onResize = () => {
+    if (orientTimer) clearTimeout(orientTimer);
+    orientTimer = setTimeout(() => render(), 120);
+  };
+  window.addEventListener('orientationchange', onResize);
+  window.addEventListener('resize', onResize);
 }
 
 function bindViewEvents() { /* re-binding handled by event delegation */ }

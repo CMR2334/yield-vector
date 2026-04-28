@@ -38,6 +38,44 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 18 — mobile layout fixes (chart clip, portrait sizing, landscape, form alignment)**
+- **Chart tooltip clipping (overview).** Tooltip is now appended to
+  `document.body` on first show and stays there. Position is unified to
+  `position: fixed` + viewport coords on both desktop and mobile.
+  Root cause was `-webkit-overflow-scrolling: touch` on `.chart-wrap`
+  (mobile) — iOS Safari demotes `position:fixed` descendants of such an
+  ancestor to behave like `position:absolute`, which clipped bubbles to
+  the wrap's `overflow-y: hidden`. Moving the tooltip out of the wrap
+  side-steps that entirely.
+- **Portrait chart sizing.** Dropped `min-width: 720px` on `.chart-svg`
+  for `(max-width: 720px) and (orientation: portrait)`. Chart now fits
+  the screen width with `aspect-ratio: 1.55 / 1` (≈242 px tall at 375 px
+  wide). The viewBox is still 800×280, but `preserveAspectRatio` is
+  switched to `none` for portrait phones via JS in `renderHeroChart()`
+  so the chart stretches vertically to fill the box instead of letter-
+  boxing to a 130 px sliver. Cursor mapping in `handleHover()` already
+  scales `W/rect.width` and `H/rect.height` independently, so non-
+  uniform stretch maps correctly.
+- **Landscape orientation rules.** New
+  `@media (max-width: 1024px) and (orientation: landscape)` block:
+  header 64→50 px, bottom nav 70→56 px, hero amount 44→32 px, section
+  titles 22→18 px, timeline rows 44→38 px, modal switches from bottom-
+  sheet to centered card. Plus a separate landscape rule for
+  `.chart-wrap` with `aspect-ratio: 2.6/1` and `max-height: 240px` so
+  the chart doesn't dominate the short viewport.
+- **Form alignment in Add-Offer modal.** Labels of different lengths
+  ("Days after signup to deposit" wraps to 2 lines vs. "Status" on 1)
+  were pushing the inputs below them onto different baselines, breaking
+  row alignment. Fixed by giving `.field label, .field-label` a
+  `min-height: 30px` with `align-items: flex-end`, and pinning inputs
+  to the bottom of each cell with `margin-top: auto`. Now every input
+  in a form-grid row aligns horizontally regardless of label wrap.
+- **Re-render on rotate.** Added debounced `orientationchange` +
+  `resize` listeners (120 ms) in `bindGlobalEvents()` that call
+  `render()`, so the chart's `preserveAspectRatio` and the CSS
+  `aspect-ratio` rules pick up orientation changes immediately.
+
 ### 2026-04-28 — Session B (claude-opus-4-7)
 **Round 17 — wide-arrowhead chip + hero typography + reds + broken-line $**
 - Brand chip: outer is now a 4-vertex kite (`M 3 3 L 19 3 L 19 19 L 13 9 Z`)
