@@ -38,7 +38,9 @@
 
   --warning: #f59e0b;
   --warning-soft: #fff5e0;
-  --danger: #ef4444;
+  /* Lightened red — matches .stat-value.danger and .action-tag.danger so
+     every red in the UI reads as the same softer shade. */
+  --danger: #e87171;
   --danger-soft: #fee5e5;
   --success: #10b981;
   --success-soft: #d6f5e7;
@@ -71,8 +73,21 @@
   --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.18);
   --shadow-fab: 0 8px 24px rgba(91, 92, 246, 0.35);
 
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-sans: 'BrokenDollar', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+}
+
+/* Use Helvetica's broken-line dollar sign for ALL $ characters in the
+   app while keeping SF Pro for everything else. The unicode-range
+   limits this @font-face to ONLY the $ character (U+0024); every other
+   character falls through to the next font in the stack. Helvetica
+   Neue is reliably available on macOS and iOS — its $ glyph has the
+   vertical line broken at the top and bottom of the S, which is the
+   look the user wants. */
+@font-face {
+  font-family: 'BrokenDollar';
+  src: local('Helvetica Neue'), local('Helvetica'), local('Arial');
+  unicode-range: U+0024;
 
   --header-height: 64px;
   --bottom-nav-height: 70px;
@@ -129,12 +144,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.brand-arrow {
+.brand-flourish {
   flex-shrink: 0;
   display: block;
 }
@@ -146,9 +161,12 @@ a { color: inherit; text-decoration: none; }
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-weight: 700;
+  /* Apple-system text feel: SF Pro Display via the existing font stack,
+     semibold (600) instead of bold (700), slightly looser tracking. */
+  font-family: 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, var(--font-sans);
+  font-weight: 600;
   font-size: 17px;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.018em;
   line-height: 1;
 }
 
@@ -419,31 +437,33 @@ a { color: inherit; text-decoration: none; }
 .hero-numbers {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
   margin-bottom: var(--space-6);
 }
 
 /* Tile-style label — same casing/letter-spacing as the stat-card labels
-   below so the hero reads as the leading tile in a coherent row. */
+   below so the hero reads as the leading tile in a coherent row. Slightly
+   larger and pushed away from the dollar amount for breathing room. */
 .hero-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
 }
 
 .hero-amount {
-  font-size: 56px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1;
   color: var(--text);
 }
 
 /* Match the dollar sign exactly to the numerals — same size, same weight,
    no superscript baseline shift. */
-.hero-amount .currency-symbol { font-weight: 700; opacity: 1; margin-right: 2px; font-size: 1em; vertical-align: baseline; }
+.hero-amount .currency-symbol { font-weight: 600; opacity: 1; margin-right: 2px; font-size: 1em; vertical-align: baseline; }
 
 .hero-meta {
   font-size: 15px;
@@ -962,13 +982,27 @@ a { color: inherit; text-decoration: none; }
   gap: var(--space-4);
 }
 
-.field { display: flex; flex-direction: column; gap: 6px; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* `min-width: 0` lets the field shrink below the intrinsic size of its
+     contents (e.g. long hint text). Without this, flex/grid items have
+     `min-width: auto` which forces the cell wider than the parent and
+     creates the modal-wide horizontal-scroll bug on phones. */
+  min-width: 0;
+}
 .field label, .field-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
 .field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
 .field-error { font-size: 12px; color: var(--danger); margin-top: 2px; }
 
 .input, .select, .textarea {
   width: 100%;
+  /* Match `.field { min-width: 0 }` so inputs can shrink to the column
+     width on narrow screens. Some native widgets (date, number) carry an
+     intrinsic min-width that would otherwise overflow the form column. */
+  min-width: 0;
+  max-width: 100%;
   padding: 10px 12px;
   border: 1.5px solid var(--border);
   background: var(--card);
@@ -1072,7 +1106,15 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--border-soft);
 }
 .modal-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-.modal-body { padding: var(--space-6); overflow-y: auto; flex: 1; }
+.modal-body {
+  padding: var(--space-6);
+  overflow-y: auto;
+  /* Defensive: if any inner element overflows horizontally on narrow
+     viewports, clip it instead of letting the user scroll the whole modal
+     left/right. Vertical scroll for long forms is still preserved. */
+  overflow-x: hidden;
+  flex: 1;
+}
 .modal-footer {
   padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--border-soft);
@@ -1241,7 +1283,7 @@ table.data-table {
 }
 .banner > div { flex: 0 1 auto; }
 .banner.warn { background: var(--warning-soft); color: #92400e; border-color: rgba(245, 158, 11, 0.3); }
-.banner.danger { background: var(--danger-soft); color: #991b1b; border-color: rgba(239, 68, 68, 0.3); }
+.banner.danger { background: var(--danger-soft); color: #c95555; border-color: rgba(232, 113, 113, 0.3); }
 .banner svg { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; }
 
 .toolbar {
@@ -1289,14 +1331,31 @@ table.data-table {
   .stat-value { font-size: 22px; }
   /* Mobile timeline: pin a narrow label column on the left, give the track a
      fixed wide pixel width so months breathe and the user scrolls
-     horizontally instead of seeing crushed/overlapping labels. */
-  .timeline-row { grid-template-columns: 120px 640px; }
+     horizontally instead of seeing crushed/overlapping labels.
+     `isolation: isolate` creates a stacking context bounded to this row
+     so the sticky label's z-index reliably stacks ABOVE the track's bars
+     and axis ticks — without it, bars bleed through the sticky label as
+     the track scrolls behind it. The label gets a stronger box-shadow on
+     its right edge to visually mark the boundary between the pinned
+     label column and the scrollable track. `transform: translateZ(0)`
+     forces the label onto its own GPU layer so iOS Safari doesn't
+     produce sub-pixel ghosting during scroll. */
+  .timeline-row {
+    grid-template-columns: 120px 640px;
+    isolation: isolate;
+  }
   .timeline-row-label {
     position: sticky;
     left: 0;
-    z-index: 2;
-    box-shadow: 1px 0 0 var(--border-soft);
+    z-index: 5;
+    background: var(--card);
+    box-shadow: 8px 0 12px -6px rgba(13, 20, 33, 0.12);
+    transform: translateZ(0);
   }
+  /* Explicit lower z-index on track + bars so they always sit beneath
+     the sticky label, no matter the DOM order. */
+  .timeline-row-track { z-index: 1; }
+  .tl-bar, .tl-axis-tick, .tl-grid-line, .tl-shortfall-band, .tl-today { z-index: 1; }
   .modal { padding: 0; align-items: flex-end; }
   .modal-card { max-width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .modal-header { padding: var(--space-4); }
@@ -1572,8 +1631,11 @@ const Sync = {
     const cfg = this.getConfig();
     this.setStatus('syncing');
     try {
-      // Stamp last-modified just before sending so remote reflects the upload
+      // Stamp last-modified + reminder feed snapshot just before sending so
+      // remote reflects the upload. The feed is what an iOS Shortcut will
+      // read to build merge-style Reminders entries.
       App.state._lastModified = Date.now();
+      try { App.state._feed = computeReminderFeed(App.state); } catch {}
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
       const body = JSON.stringify({
         files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
@@ -1589,8 +1651,9 @@ const Sync = {
   },
 
   async createGist(token) {
-    // Convenience: create a private Gist seeded with current state.
+    // Convenience: create a private Gist seeded with current state + feed.
     App.state._lastModified = Date.now();
+    try { App.state._feed = computeReminderFeed(App.state); } catch {}
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
     const body = JSON.stringify({
       description: 'Yield Vector sync',
@@ -2442,41 +2505,34 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: a single chunky arrow polygon pointing up-right (no
-             outer chip/box). Seven vertices form the head + shaft. A
-             same-color stroke with stroke-linejoin: round softens every
-             corner so the edges read as a gentle, chip-like outline rather
-             than sharp polygon points. A subtle white-ish shimmer overlay
-             is layered on top to add depth without a second color. -->
-        <svg class="brand-arrow" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <!-- Brand mark: outer chip is a wide-arrowhead/kite shape — the
+             upper-right triangle of a square with the back (hypotenuse)
+             pushed inward toward the tip via an extra concave vertex at
+             (13, 9). This gives the chip the look of a wide arrowhead
+             with straight-line sides and a slight inward notch on the
+             back, no rounded corners. Inside, a wider, lighter inner
+             arrowhead points to the upper-right. -->
+        <svg class="brand-flourish" width="26" height="26" viewBox="0 0 22 22" fill="none"
+             shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-arrow-g" x1="2" y1="20" x2="20" y2="2" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#4338ca"/>
+            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#312e81"/>
               <stop offset="55%" stop-color="#5b4fd8"/>
               <stop offset="100%" stop-color="#a78bfa"/>
             </linearGradient>
-            <linearGradient id="brand-arrow-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="rgba(255,255,255,0.24)"/>
-              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-            </linearGradient>
           </defs>
-          <!-- Arrow path: tip → upper wing → upper inner notch → shaft top-
-               left → shaft bottom-left → lower inner notch → lower wing → tip.
-               Built by rotating a rightward arrow 45° counter-clockwise around
-               the center so it points up-right. -->
-          <path d="M16.0 6.0 L8.2 5.3 L10.3 7.5 L4.6 13.1 L8.9 17.4 L14.5 11.7 L16.7 13.8 Z"
-                fill="url(#brand-arrow-g)"
-                stroke="url(#brand-arrow-g)"
-                stroke-width="2.6"
-                stroke-linejoin="round"
-                stroke-linecap="round"/>
-          <!-- Shimmer overlay on the same shape, at lower opacity, to lift
-               the upper-left face — makes the mark feel dimensional. -->
-          <path d="M16.0 6.0 L8.2 5.3 L10.3 7.5 L4.6 13.1 L8.9 17.4 L14.5 11.7 L16.7 13.8 Z"
-                fill="url(#brand-arrow-shimmer)"
-                stroke="rgba(255,255,255,0.10)"
-                stroke-width="0.5"
-                stroke-linejoin="round"/>
+          <!-- Outer chip: 4-point polygon. Top edge (3,3)-(19,3),
+               right edge (19,3)-(19,19), then concave back through
+               midpoint indent (13,9) back to (3,3). All straight lines,
+               sharp corners. -->
+          <path d="M 3 3 L 19 3 L 19 19 L 13 9 Z"
+                fill="url(#brand-chip-g)"/>
+          <!-- Inner arrowhead (light gray): tip at (17, 5); barbs widened
+               to (12, 6) and (16, 10), both ~5 units from the tip at
+               +/-35 degrees off the shaft tangent. Lighter color than
+               before for a softer feel. -->
+          <path d="M 17 5 L 12 6 L 16 10 Z"
+                fill="#c8c8d0"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
@@ -2648,6 +2704,108 @@ function statCard(label, value, meta = '', variant = '', action = null) {
       ${meta ? `<div class="stat-meta">${meta}</div>` : ''}
     </div>
   `;
+}
+
+/* Reminder feed: a stable, machine-readable snapshot of every actionable
+   date in the planner. Emitted into App.state._feed on every save so the
+   same JSON the cloud Sync writes to GitHub Gist also carries the feed.
+   An iOS Shortcut (Personal Automation, daily) reads the Gist, parses
+   `_feed.items[]`, and merges into Reminders.app — preserving any user-
+   added notes/alarms/completion via per-item stable `id`s.
+
+   Each item has:
+     id       — stable across syncs (composed of offer/event id + kind)
+     title    — what shows up as the Reminder title
+     dueDate  — ISO 8601 with explicit time (09:00 local), so iOS parses
+                it as a date+time alarm rather than an all-day reminder
+     kind     — semantic tag the Shortcut can route on (list, list color)
+     notes    — short context for the Reminder body (planner-owned; the
+                Shortcut should NOT overwrite a user's added notes — see
+                SHORTCUT_SETUP.md for the merge logic)
+*/
+function computeReminderFeed(state) {
+  const items = [];
+  const stamp = (d) => (d && /^\d{4}-\d{2}-\d{2}/.test(d)) ? (d.slice(0, 10) + 'T09:00:00') : null;
+
+  for (const o of state.offers || []) {
+    if (!o.id) continue;
+    if (o.status === 'completed' || o.status === 'skipped') continue;
+    if (!offerIsActiveForProjection(o)) continue;
+    const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+
+    if (o.offerExpirationDate) {
+      const due = stamp(o.offerExpirationDate);
+      if (due) items.push({
+        id: `yv-offer-${o.id}-expires`,
+        title: `${name} — offer expires`,
+        dueDate: due,
+        kind: 'offer-expires',
+        notes: `Bonus ${formatCompactCurrency(o.signupBonusAmount)}; required funding ${formatCompactCurrency(o.requiredFundingAmount)}.`
+      });
+    }
+
+    const dd = depositDeadline(o);
+    if (dd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
+      const due = stamp(dd);
+      if (due) items.push({
+        id: `yv-offer-${o.id}-deposit`,
+        title: `${name} — fund ${formatCompactCurrency(o.requiredFundingAmount)}`,
+        dueDate: due,
+        kind: 'deposit-deadline',
+        notes: `Deposit by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`
+      });
+    }
+
+    const we = withdrawalEligibleDate(o);
+    if (we && (o.status === 'funded' || o.status === 'applied')) {
+      const due = stamp(we);
+      if (due) items.push({
+        id: `yv-offer-${o.id}-withdraw`,
+        title: `${name} — withdraw ${formatCompactCurrency(o.requiredFundingAmount)}`,
+        dueDate: due,
+        kind: 'withdrawal',
+        notes: `Funds released; bonus ${formatCompactCurrency(o.signupBonusAmount)}.`
+      });
+    }
+  }
+
+  for (const c of state.commitments || []) {
+    if (!c.id) continue;
+    if (c.status === 'cancelled' || c.status === 'completed') continue;
+    if (c.endDate) {
+      const due = stamp(c.endDate);
+      if (due) items.push({
+        id: `yv-cmt-${c.id}-end`,
+        title: `${c.commitmentName} — release`,
+        dueDate: due,
+        kind: 'commitment-end',
+        notes: `${formatCurrency(c.amount)} (${c.type}).`
+      });
+    }
+  }
+
+  for (const e of state.events || []) {
+    if (!e.id) continue;
+    if (!e.includeInProjection) continue;
+    if (e.date) {
+      const due = stamp(e.date);
+      if (due) items.push({
+        id: `yv-evt-${e.id}`,
+        title: e.eventName,
+        dueDate: due,
+        kind: Number(e.amount) >= 0 ? 'inflow' : 'outflow',
+        notes: `${formatCurrency(e.amount)}${e.category ? ' (' + e.category + ')' : ''}.`
+      });
+    }
+  }
+
+  items.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return {
+    schema: 1,
+    generatedAt: new Date().toISOString(),
+    horizonDays: effectiveHorizonDays(state),
+    items
+  };
 }
 
 function computeUpcomingActions(state, limit = 12) {
@@ -3668,7 +3826,7 @@ function renderHeroChart(svg) {
     }
     if (dd) {
       const i = Math.round((dd - start) / 86400000);
-      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label: `Deposit deadline: ${name}`, color: '#ef4444', amount: Number(o.requiredFundingAmount) || 0 });
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label: `Deposit deadline: ${name}`, color: '#e87171', amount: Number(o.requiredFundingAmount) || 0 });
     }
   }
   for (const e of App.state.events) {
@@ -3716,10 +3874,12 @@ function renderHeroChart(svg) {
     ` : ''}
     <!-- Markers grouped by visual proximity. When two or more markers would
          overlap horizontally (≤16 SVG units apart) they stack as a vertical
-         column of dots above the lowest one. Hovering anywhere within the
-         column's x-range surfaces the existing tooltip, which already
-         aggregates every nearby marker into one combined panel — so all the
-         actions on the cluster's days appear in a single readable list. -->
+         column of dots above the lowest one. Each cluster is sorted by the
+         marker's original index in the markers[] array — the tooltip
+         filter preserves that same order, so the dot at the TOP of the
+         stack corresponds to the FIRST line listed in the tooltip and the
+         dot on the line is the LAST line listed. Reading top-to-bottom
+         maps cleanly between the chart and the tooltip. -->
     ${(() => {
       const sorted = markers.slice().sort((a, b) => a.i - b.i);
       const CLUSTER_PX = 16;
@@ -3732,13 +3892,14 @@ function renderHeroChart(svg) {
       const STEP = 9; // vertical pixels between stacked dots
       let out = '';
       groups.forEach((g) => {
-        // Anchor every dot in the cluster to the first marker's x — the chart
-        // tooltip catches everything within 12 SVG units of the cursor x, so
-        // the user gets the combined panel by hovering anywhere in the column.
+        g.sort((a, b) => markers.indexOf(a) - markers.indexOf(b));
         const x = xFor(g[0].i);
         const baseY = yFor(proj[g[0].i].availableCapital);
         g.forEach((m, k) => {
-          const cy = baseY - k * STEP;
+          // First in group → top of stack; last in group sits on the line
+          // at baseY. With g.length=1 the formula collapses to baseY (no
+          // visual change for solo markers).
+          const cy = baseY - (g.length - 1 - k) * STEP;
           out += `<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.92" pointer-events="none"></circle>`;
         });
       });
@@ -3793,10 +3954,11 @@ function renderHeroChart(svg) {
   // Lighter mid-tone for tooltip text on dark background — readable on dark bg
   function lightenColor(hex) {
     const map = {
-      '#5b5cf6': '#a5a6ff',  // fund purple → light
-      '#10b981': '#6ee7b7',  // green → light mint
-      '#ef4444': '#fca5a5',  // red → light pink
-      '#f59e0b': '#fcd34d',  // amber → light yellow
+      '#5b5cf6': '#a5a6ff',  // fund purple -> light
+      '#10b981': '#6ee7b7',  // green -> light mint
+      '#e87171': '#fca5a5',  // red -> light pink
+      '#ef4444': '#fca5a5',  // legacy red -> light pink
+      '#f59e0b': '#fcd34d',  // amber -> light yellow
     };
     return map[hex] || hex;
   }
@@ -3881,6 +4043,26 @@ function renderHeroChart(svg) {
       tooltip.style.left = tx + 'px';
       tooltip.style.top = ty + 'px';
       tooltip.style.transform = 'translate(-50%, -110%)';
+      // Clamp inside the chart-wrap so the tooltip's centered box can't
+      // extend past the left or right edge — important for Lowest-projected
+      // click-throughs near the start of the horizon, which would otherwise
+      // cut off the left side of the panel.
+      const ttRect = tooltip.getBoundingClientRect();
+      const margin = 6;
+      const halfW = ttRect.width / 2;
+      const minTx = halfW + margin;
+      const maxTx = wrapRect.width - halfW - margin;
+      const clampedTx = Math.max(minTx, Math.min(maxTx, tx));
+      // Flip below the dot if anchoring the bottom edge above would clip
+      // the top of the chart-wrap (rare on desktop, but possible if the
+      // tooltip is taller than the cursor's y position).
+      const wantsTop = ty - ttRect.height - 12;
+      const flipDown = wantsTop < margin;
+      tooltip.style.left = clampedTx + 'px';
+      if (flipDown) {
+        tooltip.style.top = (ty + 18) + 'px';
+        tooltip.style.transform = 'translate(-50%, 0)';
+      }
     }
   }
 
