@@ -1328,17 +1328,19 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  /* Mobile timeline: pin a narrow label column on the left, give the track a
-     fixed wide pixel width so months breathe and the user scrolls
+  /* Mobile timeline: pin a narrow label column on the left, give the track
+     a fixed wide pixel width so months breathe and the user scrolls
      horizontally instead of seeing crushed/overlapping labels.
-     `isolation: isolate` creates a stacking context bounded to this row
-     so the sticky label's z-index reliably stacks ABOVE the track's bars
-     and axis ticks — without it, bars bleed through the sticky label as
-     the track scrolls behind it. The label gets a stronger box-shadow on
-     its right edge to visually mark the boundary between the pinned
-     label column and the scrollable track. `transform: translateZ(0)`
-     forces the label onto its own GPU layer so iOS Safari doesn't
-     produce sub-pixel ghosting during scroll. */
+
+     The bar/tick bleed-through bug fix: instead of relying solely on
+     z-index (iOS Safari sometimes mis-stacks sticky-positioned grid
+     children), we use a solid box-shadow spread to PHYSICALLY EXTEND
+     the label's white background 16px past its column boundary. That
+     gives the sticky label an extra 16px of occlusion zone beyond the
+     grid cell, which reliably hides any bar or tick that would scroll
+     in behind the label. A soft fade-out shadow further out gives a
+     subtle visual separator. `isolation: isolate` plus explicit z-index
+     on track children stays as a belt-and-braces measure. */
   .timeline-row {
     grid-template-columns: 120px 640px;
     isolation: isolate;
@@ -1346,13 +1348,12 @@ table.data-table {
   .timeline-row-label {
     position: sticky;
     left: 0;
-    z-index: 5;
+    z-index: 10;
     background: var(--card);
-    box-shadow: 8px 0 12px -6px rgba(13, 20, 33, 0.12);
-    transform: translateZ(0);
+    box-shadow:
+      16px 0 0 0 var(--card),
+      24px 0 14px -8px rgba(13, 20, 33, 0.10);
   }
-  /* Explicit lower z-index on track + bars so they always sit beneath
-     the sticky label, no matter the DOM order. */
   .timeline-row-track { z-index: 1; }
   .tl-bar, .tl-axis-tick, .tl-grid-line, .tl-shortfall-band, .tl-today { z-index: 1; }
   .modal { padding: 0; align-items: flex-end; }
