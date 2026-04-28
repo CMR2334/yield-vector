@@ -830,29 +830,43 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ============================================================
-   TIMELINE
+   TIMELINE — labels and tracks live in TWO SEPARATE CONTAINERS
+   side-by-side. The labels column never scrolls; the tracks column
+   scrolls horizontally on its own. They share no scroll parent, so
+   bars can never bleed visually behind the labels.
    ============================================================ */
 .timeline-wrap {
+  display: flex;
   background: var(--card);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.timeline-labels-col {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-soft);
+}
+
+.timeline-tracks-scroll {
+  flex: 1 1 0;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
-.timeline-svg-wrap { position: relative; }
-
-.timeline-row {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border-soft);
-  min-height: 44px;
+.timeline-tracks-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
 }
-.timeline-row:last-child { border-bottom: none; }
 
 .timeline-row-label {
+  height: 44px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -860,17 +874,28 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  border-right: 1px solid var(--border-soft);
   background: var(--card);
+  border-bottom: 1px solid var(--border-soft);
+  box-sizing: border-box;
+}
+.timeline-labels-col > .timeline-row-label:last-child { border-bottom: none; }
+.timeline-row-label.axis {
+  height: 32px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
 
 .timeline-row-track {
   position: relative;
-  display: block;
-  height: 100%;
-  min-height: 44px;
+  height: 44px;
+  border-bottom: 1px solid var(--border-soft);
+  box-sizing: border-box;
 }
+.timeline-tracks-col > .timeline-row-track:last-child { border-bottom: none; }
+.timeline-row-track.axis { height: 32px; }
 
 .tl-bar {
   position: absolute;
@@ -1328,34 +1353,15 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  /* Mobile timeline: pin a narrow label column on the left, give the track
-     a fixed wide pixel width so months breathe and the user scrolls
-     horizontally instead of seeing crushed/overlapping labels.
-
-     The bar/tick bleed-through bug fix: instead of relying solely on
-     z-index (iOS Safari sometimes mis-stacks sticky-positioned grid
-     children), we use a solid box-shadow spread to PHYSICALLY EXTEND
-     the label's white background 16px past its column boundary. That
-     gives the sticky label an extra 16px of occlusion zone beyond the
-     grid cell, which reliably hides any bar or tick that would scroll
-     in behind the label. A soft fade-out shadow further out gives a
-     subtle visual separator. `isolation: isolate` plus explicit z-index
-     on track children stays as a belt-and-braces measure. */
-  .timeline-row {
-    grid-template-columns: 120px 640px;
-    isolation: isolate;
-  }
-  .timeline-row-label {
-    position: sticky;
-    left: 0;
-    z-index: 10;
-    background: var(--card);
-    box-shadow:
-      16px 0 0 0 var(--card),
-      24px 0 14px -8px rgba(13, 20, 33, 0.10);
-  }
-  .timeline-row-track { z-index: 1; }
-  .tl-bar, .tl-axis-tick, .tl-grid-line, .tl-shortfall-band, .tl-today { z-index: 1; }
+  /* Mobile timeline: narrower labels column; tracks column gets a fixed
+     wide pixel width that exceeds its scroll container, so the user
+     scrolls horizontally inside the tracks-scroll. The labels-col is
+     OUTSIDE the scroll container entirely — it physically cannot move
+     when the user scrolls the tracks, so there is no z-index/stacking
+     gymnastics needed and nothing bleeds through. */
+  .timeline-labels-col { flex: 0 0 120px; }
+  .timeline-tracks-col { width: 640px; min-width: 640px; }
+  .timeline-row-label { font-size: 12px; padding: 6px 8px; }
   .modal { padding: 0; align-items: flex-end; }
   .modal-card { max-width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .modal-header { padding: var(--space-4); }
@@ -2505,29 +2511,34 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: pure triangle chip (upper-right half of a square,
-             3 vertices). Gradient now runs SW to NE so the deep indigo
-             sits along the hypotenuse (back of the arrow) and the light
-             violet peaks at the tip — chip reads as evenly weighted
-             rather than tipping toward the bottom-right corner.
-             Inner arrowhead is symmetric (both barbs equidistant from
-             the tip) and a touch darker than before for more contrast
-             against the lighter tip area. -->
-        <svg class="brand-flourish" width="26" height="26" viewBox="0 0 22 22" fill="none"
+        <!-- Brand mark: wide arrowhead with bilateral symmetry across its
+             NE-SW axis (tip → back-midpoint). 4-vertex polygon: tip
+             (21, 5), upper-back wing (9, 7), concave back-vertex (16, 10)
+             slightly inset toward the tip, lower-back wing (19, 17).
+             The two outer edges (tip-to-wing-1 and tip-to-wing-2) are
+             equal length so the shape is bilaterally uniform. The two
+             back edges meet at a slight inward kink (the concave indent)
+             — straight lines, not rounded. Lightened gradient (start
+             #4338ca instead of deep #312e81) and SW-to-NE direction so
+             the brightest violet peaks at the tip. Render size 30x30
+             (was 26) on a 24x24 viewBox — slightly enlarged. -->
+        <svg class="brand-flourish" width="30" height="30" viewBox="0 0 24 24" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-chip-g" x1="0" y1="22" x2="22" y2="0" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#312e81"/>
-              <stop offset="55%" stop-color="#5b4fd8"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
+            <linearGradient id="brand-chip-g" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#4338ca"/>
+              <stop offset="55%" stop-color="#7c5fef"/>
+              <stop offset="100%" stop-color="#c4b3fc"/>
             </linearGradient>
           </defs>
-          <!-- Outer chip: pure triangle, vertices at (3,3), (19,3), (19,19) -->
-          <path d="M 3 3 L 19 3 L 19 19 Z"
+          <!-- Outer arrowhead: tip, upper wing, concave back vertex, lower
+               wing. Bilaterally symmetric across the SW-NE axis. -->
+          <path d="M 21 5 L 9 7 L 16 10 L 19 17 Z"
                 fill="url(#brand-chip-g)"/>
-          <!-- Inner arrowhead (medium gray): symmetric — tip at (17, 6),
-               barbs at (13, 7) and (16, 10), each ~4.12 units from tip. -->
-          <path d="M 17 6 L 13 7 L 16 10 Z"
+          <!-- Inner arrowhead (medium gray): symmetric small arrow centered
+               near the chip's centroid. Tip (17, 8); barbs (14, 9) and
+               (16, 11), each sqrt(10) ~= 3.16 units from tip. -->
+          <path d="M 17 8 L 14 9 L 16 11 Z"
                 fill="#9a9aa6"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
@@ -3211,52 +3222,65 @@ function renderTimeline() {
 
     ${rows.length === 0
       ? renderEmptyState('No commitments to plot', 'When you add offers or capital commitments, they will appear here as horizontal bars across time.')
-      : `
-        <div class="timeline-wrap">
-          <div class="timeline-row">
-            <div class="timeline-row-label" style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;">${formatDateShort(start)} → ${formatDateShort(end)}</div>
-            <div class="timeline-row-track">
-              <div class="tl-axis">
-                ${ticks.map(t => `<span class="tl-axis-tick" style="left:${t.pct}%;">${t.label}</span>`).join('')}
-                ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
-              </div>
-            </div>
-          </div>
-          ${rows.map(r => {
+      : (() => {
+          const validRows = rows.filter(r => {
             const sPct = pctFor(r.start);
             const ePct = pctFor(r.end);
-            if (sPct == null || ePct == null || ePct <= sPct) return '';
+            return sPct != null && ePct != null && ePct > sPct;
+          });
+          const labelHtml = validRows.map(r => `
+            <div class="timeline-row-label">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label)}</span>
+              <span class="sub">${escapeHtml(r.sub)}</span>
+            </div>
+          `).join('');
+          const trackHtml = validRows.map(r => {
+            const sPct = pctFor(r.start);
+            const ePct = pctFor(r.end);
             const w = ePct - sPct;
             return `
-              <div class="timeline-row">
-                <div class="timeline-row-label">
-                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label)}</span>
-                  <span class="sub">${escapeHtml(r.sub)}</span>
+              <div class="timeline-row-track">
+                ${ticks.map(t => `<div class="tl-grid-line" style="left:${t.pct}%;"></div>`).join('')}
+                ${shortfallBands.map(b => {
+                  const left = (b.from / totalDays) * 100;
+                  const right = (b.to / totalDays) * 100;
+                  return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
+                }).join('')}
+                <div class="tl-bar ${r.status}" style="left:${sPct}%;width:${w}%;" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
+                  ${w > 8 ? formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })()) : ''}
                 </div>
-                <div class="timeline-row-track">
-                  ${ticks.map(t => `<div class="tl-grid-line" style="left:${t.pct}%;"></div>`).join('')}
-                  ${shortfallBands.map(b => {
-                    const left = (b.from / totalDays) * 100;
-                    const right = (b.to / totalDays) * 100;
-                    return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
-                  }).join('')}
-                  <div class="tl-bar ${r.status}" style="left:${sPct}%;width:${w}%;" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
-                    ${w > 8 ? formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })()) : ''}
-                  </div>
-                  ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
-                </div>
+                ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
               </div>
             `;
-          }).join('')}
-        </div>
+          }).join('');
+          return `
+            <div class="timeline-wrap">
+              <div class="timeline-labels-col">
+                <div class="timeline-row-label axis">${formatDateShort(start)} → ${formatDateShort(end)}</div>
+                ${labelHtml}
+              </div>
+              <div class="timeline-tracks-scroll">
+                <div class="timeline-tracks-col">
+                  <div class="timeline-row-track axis">
+                    <div class="tl-axis">
+                      ${ticks.map(t => `<span class="tl-axis-tick" style="left:${t.pct}%;">${t.label}</span>`).join('')}
+                      ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
+                    </div>
+                  </div>
+                  ${trackHtml}
+                </div>
+              </div>
+            </div>
 
-        <div class="chart-legend" style="margin-top:var(--space-4);">
-          <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(91,92,246,0.2);border:1.5px solid var(--accent);"></span> Confirmed</span>
-          <span class="chart-legend-item"><span class="legend-swatch" style="background:repeating-linear-gradient(45deg,rgba(91,92,246,0.10),rgba(91,92,246,0.10) 4px,rgba(91,92,246,0.18) 4px,rgba(91,92,246,0.18) 8px);border:1.5px dashed var(--accent);"></span> Hypothetical</span>
-          <span class="chart-legend-item"><span class="legend-swatch" style="background:var(--bg);border:1.5px solid var(--border-strong);"></span> Completed</span>
-          <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(239,68,68,0.18);"></span> Shortfall day</span>
-        </div>
-      `}
+            <div class="chart-legend" style="margin-top:var(--space-4);">
+              <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(91,92,246,0.2);border:1.5px solid var(--accent);"></span> Confirmed</span>
+              <span class="chart-legend-item"><span class="legend-swatch" style="background:repeating-linear-gradient(45deg,rgba(91,92,246,0.10),rgba(91,92,246,0.10) 4px,rgba(91,92,246,0.18) 4px,rgba(91,92,246,0.18) 8px);border:1.5px dashed var(--accent);"></span> Hypothetical</span>
+              <span class="chart-legend-item"><span class="legend-swatch" style="background:var(--bg);border:1.5px solid var(--border-strong);"></span> Completed</span>
+              <span class="chart-legend-item"><span class="legend-swatch" style="background:rgba(232,113,113,0.22);"></span> Shortfall day</span>
+            </div>
+          `;
+        })()
+      }
   `;
 }
 
