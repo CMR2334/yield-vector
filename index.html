@@ -25,7 +25,7 @@
   --card: #ffffff;
   --card-soft: #fafafc;
 
-  --text: #1c2030;
+  --text: #2a2e3d;
   --text-secondary: #5b6374;
   --text-tertiary: #9099a8;
   --text-inverse: #ffffff;
@@ -86,7 +86,12 @@
    look the user wants. */
 @font-face {
   font-family: 'BrokenDollar';
-  src: local('Helvetica Neue'), local('Helvetica'), local('Arial');
+  /* Apple's Avenir Next has a clearly broken-line $ glyph (vertical
+     stroke does NOT pass through the S). Try it first; fall back to
+     other options. Local() means we use the user's installed font, no
+     web download. Helvetica Neue is the last resort because its $ has
+     less obvious break depending on weight. */
+  src: local('Avenir Next'), local('Avenir'), local('Futura'), local('Helvetica'), local('Helvetica Neue');
   unicode-range: U+0024;
 
   --header-height: 64px;
@@ -454,16 +459,24 @@ a { color: inherit; text-decoration: none; }
 }
 
 .hero-amount {
-  font-size: 48px;
-  font-weight: 600;
+  font-size: 42px;
+  font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1;
   color: var(--text);
 }
 
 /* Match the dollar sign exactly to the numerals — same size, same weight,
-   no superscript baseline shift. */
-.hero-amount .currency-symbol { font-weight: 600; opacity: 1; margin-right: 2px; font-size: 1em; vertical-align: baseline; }
+   no superscript baseline shift. The Avenir-style $ from BrokenDollar
+   tends to render slightly taller than SF Pro digits, so we cap it at
+   the same effective height with a small downscale. */
+.hero-amount .currency-symbol {
+  font-weight: 700;
+  opacity: 1;
+  margin-right: 2px;
+  font-size: 0.92em;
+  vertical-align: baseline;
+}
 
 .hero-meta {
   font-size: 15px;
@@ -2505,13 +2518,10 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <!-- Brand mark: outer chip is a wide-arrowhead/kite shape — the
-             upper-right triangle of a square with the back (hypotenuse)
-             pushed inward toward the tip via an extra concave vertex at
-             (13, 9). This gives the chip the look of a wide arrowhead
-             with straight-line sides and a slight inward notch on the
-             back, no rounded corners. Inside, a wider, lighter inner
-             arrowhead points to the upper-right. -->
+        <!-- Brand mark: pure triangle chip (upper-right half of a square,
+             3 vertices, no concave back). Inside, a small flattened
+             arrowhead in the upper-right corner — wider than tall so it
+             reads as a flat wedge rather than a tall pointed triangle. -->
         <svg class="brand-flourish" width="26" height="26" viewBox="0 0 22 22" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
@@ -2521,17 +2531,13 @@ function renderHeader() {
               <stop offset="100%" stop-color="#a78bfa"/>
             </linearGradient>
           </defs>
-          <!-- Outer chip: 4-point polygon. Top edge (3,3)-(19,3),
-               right edge (19,3)-(19,19), then concave back through
-               midpoint indent (13,9) back to (3,3). All straight lines,
-               sharp corners. -->
-          <path d="M 3 3 L 19 3 L 19 19 L 13 9 Z"
+          <!-- Outer chip: pure triangle, vertices at (3,3), (19,3), (19,19) -->
+          <path d="M 3 3 L 19 3 L 19 19 Z"
                 fill="url(#brand-chip-g)"/>
-          <!-- Inner arrowhead (light gray): tip at (17, 5); barbs widened
-               to (12, 6) and (16, 10), both ~5 units from the tip at
-               +/-35 degrees off the shaft tangent. Lighter color than
-               before for a softer feel. -->
-          <path d="M 17 5 L 12 6 L 16 10 Z"
+          <!-- Inner arrowhead (light gray): flattened — only 3 units tall
+               vs. 4 units wide. Tip at (17, 6); barbs at (13, 7) and
+               (16, 9). -->
+          <path d="M 17 6 L 13 7 L 16 9 Z"
                 fill="#c8c8d0"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
