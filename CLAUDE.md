@@ -31,12 +31,20 @@ laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
    for the session to end. If 30 minutes have passed since the last push
    and you've made any committable change, push.
 
-3. **Push before the user might step away**, especially when the user
+3. **Push when conversation usage is getting close to the context limit**,
+   even if 30 minutes haven't elapsed. The user pays for unpushed work
+   if the session compacts or ends unexpectedly — flush early. Watch for:
+   the system reminder warning about context, your own internal sense
+   that the conversation is long, the conversation crossing a natural
+   work boundary, or any tool result indicating compression is imminent.
+   When in doubt, push.
+
+4. **Push before the user might step away**, especially when the user
    says something like "I have to go," "concluding for the night," or
    asks how to refresh their devices — those are signals to flush all
    pending work to `main` immediately.
 
-4. **Don't try to start `auto-push.js`** as a substitute. It's not
+5. **Don't try to start `auto-push.js`** as a substitute. It's not
    reliable enough for the user's workflow.
 
 Live URL: `https://CMR2334.github.io/yield-vector/` (rebuilt automatically

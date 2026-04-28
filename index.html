@@ -2505,13 +2505,17 @@ function renderHeader() {
     <header class="app-header">
       <div class="brand">
         <!-- Brand mark: pure triangle chip (upper-right half of a square,
-             3 vertices, no concave back). Inside, a small flattened
-             arrowhead in the upper-right corner — wider than tall so it
-             reads as a flat wedge rather than a tall pointed triangle. -->
+             3 vertices). Gradient now runs SW to NE so the deep indigo
+             sits along the hypotenuse (back of the arrow) and the light
+             violet peaks at the tip — chip reads as evenly weighted
+             rather than tipping toward the bottom-right corner.
+             Inner arrowhead is symmetric (both barbs equidistant from
+             the tip) and a touch darker than before for more contrast
+             against the lighter tip area. -->
         <svg class="brand-flourish" width="26" height="26" viewBox="0 0 22 22" fill="none"
              shape-rendering="geometricPrecision" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+            <linearGradient id="brand-chip-g" x1="0" y1="22" x2="22" y2="0" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stop-color="#312e81"/>
               <stop offset="55%" stop-color="#5b4fd8"/>
               <stop offset="100%" stop-color="#a78bfa"/>
@@ -2520,11 +2524,10 @@ function renderHeader() {
           <!-- Outer chip: pure triangle, vertices at (3,3), (19,3), (19,19) -->
           <path d="M 3 3 L 19 3 L 19 19 Z"
                 fill="url(#brand-chip-g)"/>
-          <!-- Inner arrowhead (light gray): flattened — only 3 units tall
-               vs. 4 units wide. Tip at (17, 6); barbs at (13, 7) and
-               (16, 9). -->
-          <path d="M 17 6 L 13 7 L 16 9 Z"
-                fill="#c8c8d0"/>
+          <!-- Inner arrowhead (medium gray): symmetric — tip at (17, 6),
+               barbs at (13, 7) and (16, 10), each ~4.12 units from tip. -->
+          <path d="M 17 6 L 13 7 L 16 10 Z"
+                fill="#9a9aa6"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
