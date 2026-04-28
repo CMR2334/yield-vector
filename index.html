@@ -25,7 +25,7 @@
   --card: #ffffff;
   --card-soft: #fafafc;
 
-  --text: #0d1421;
+  --text: #1c2030;
   --text-secondary: #5b6374;
   --text-tertiary: #9099a8;
   --text-inverse: #ffffff;
@@ -140,7 +140,9 @@ a { color: inherit; text-decoration: none; }
 }
 
 .brand-name {
-  background: linear-gradient(105deg, #4338ca 0%, #4f46e5 55%, #6d28d9 78%, #a78bfa 100%);
+  /* Hold the deep indigo across most of "Yield" and only let the lift bloom
+     during "Vector" — sharper diagonal, late stops. */
+  background: linear-gradient(115deg, #312e81 0%, #4338ca 58%, #5b4fd8 78%, #7c5fef 92%, #a78bfa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -417,8 +419,18 @@ a { color: inherit; text-decoration: none; }
 .hero-numbers {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin-bottom: var(--space-6);
+}
+
+/* Tile-style label — same casing/letter-spacing as the stat-card labels
+   below so the hero reads as the leading tile in a coherent row. */
+.hero-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
 }
 
 .hero-amount {
@@ -429,7 +441,9 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
 }
 
-.hero-amount .currency-symbol { font-weight: 700; opacity: 0.72; margin-right: 1px; font-size: 0.62em; vertical-align: 0.22em; }
+/* Match the dollar sign exactly to the numerals — same size, same weight,
+   no superscript baseline shift. */
+.hero-amount .currency-symbol { font-weight: 700; opacity: 1; margin-right: 2px; font-size: 1em; vertical-align: baseline; }
 
 .hero-meta {
   font-size: 15px;
@@ -502,6 +516,14 @@ a { color: inherit; text-decoration: none; }
   z-index: 5;
 }
 .chart-tooltip.visible { opacity: 1; }
+/* On mobile we use position:fixed and JS-clamped left/top — let the box wrap
+   so a long event name can't push the tooltip past the screen edge. */
+@media (max-width: 720px) {
+  .chart-tooltip {
+    white-space: normal;
+    max-width: min(320px, calc(100vw - 24px));
+  }
+}
 .chart-tooltip .tt-date { font-weight: 600; margin-bottom: 4px; opacity: 0.85; }
 .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
 .chart-tooltip .tt-row .label { opacity: 0.7; }
@@ -545,17 +567,34 @@ a { color: inherit; text-decoration: none; }
 .stat-card:hover { box-shadow: var(--shadow-card-hover); }
 .stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
-.stat-value.warn { color: #d97706; }
-.stat-value.danger { color: var(--danger); }
-.stat-value.success { color: var(--success); }
-.stat-value.accent { color: #8284f7; }
-.stat-value.lighten { color: #b45309; }
+/* Mid amber — sits between the Offer-expires tag's pale background
+   (#fff5e0) and its deep brown text (#b45309). Used when Lowest projected
+   touches the buffer zone (positive but below buffer). */
+.stat-value.warn { color: #e0a23a; }
+/* Lighter red — softened from raw #ef4444 to match the Deposit Deadline tag */
+.stat-value.danger { color: #e87171; }
+/* Brighter mint green, in lockstep with .action-tag.success */
+.stat-value.success { color: #0ea968; }
+/* Slightly deeper than the prior #8284f7 — closer to the wordmark indigo */
+.stat-value.accent { color: #6c6ce5; }
+/* Same mid amber as .stat-value.warn so "healthy but lighten" reads coherent */
+.stat-value.lighten { color: #e0a23a; }
 .stat-meta { font-size: 12px; color: var(--text-tertiary); margin-top: var(--space-1); }
 
 /* ============================================================
    UPCOMING ACTIONS
    ============================================================ */
-.action-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Reserve a full page worth of vertical space so paging to a partial last
+     page doesn't shrink the card and yank the page upward. 6 rows × ~52px. */
+  min-height: 312px;
+}
+@media (max-width: 480px) {
+  .action-list { min-height: 360px; } /* mobile rows wrap an extra line */
+}
 
 .action-row {
   display: grid;
@@ -604,12 +643,20 @@ a { color: inherit; text-decoration: none; }
 .action-day .day {
   display: block;
   font-size: 24px;
-  font-weight: 700;
-  color: #1c1c1e;  /* iOS systemLabel */
+  /* Mac Calendar feel: semibold, not heavy bold */
+  font-weight: 500;
+  color: var(--text);
   line-height: 1;
-  letter-spacing: -0.02em;
-  font-feature-settings: 'tnum' 1;
+  letter-spacing: 0;
+  /* Proportional (not tabular) figures so a narrow "1" doesn't carry extra
+     left-side bearing — under tabular-nums "16" looked right-shifted vs
+     "30" because the "1" sat in a fixed-width box with empty space on
+     its left. Proportional widths size each number to its actual glyphs
+     so the block centers naturally in the 56px cell. */
+  font-variant-numeric: proportional-nums;
+  font-feature-settings: 'pnum' 1;
 }
+.action-day .month { font-weight: 600; }
 
 .action-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .action-title { font-weight: 500; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -620,14 +667,21 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 8px;
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
-  color: #8284f7;
+  /* Default (Outflow / generic) — slightly deeper purple, in lockstep with
+     the Tied-up-today stat color so the two read as the same hue. */
+  color: #6c6ce5;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .action-tag.warn { background: var(--warning-soft); color: #b45309; }
-.action-tag.success { background: var(--success-soft); color: #047857; }
-.action-tag.danger { background: var(--danger-soft); color: var(--danger); }
+/* Brighter mint green — softer than #10b981, deeper than #059669; the same
+   tone is used by .stat-value.success so Selected bonuses and the Withdrawal
+   tag read as one hue. */
+.action-tag.success { background: var(--success-soft); color: #0ea968; }
+/* Lightened red — matches .stat-value.danger so Lowest Projected and the
+   Deposit Deadline tag read as the same shade. */
+.action-tag.danger { background: var(--danger-soft); color: #e87171; }
 
 .upcoming-pager { display: inline-flex; align-items: center; gap: 6px; }
 .upcoming-pg-btn {
@@ -755,6 +809,7 @@ a { color: inherit; text-decoration: none; }
   padding: var(--space-6);
   box-shadow: var(--shadow-card);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .timeline-svg-wrap { position: relative; }
@@ -777,6 +832,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500;
   color: var(--text);
   border-right: 1px solid var(--border-soft);
+  background: var(--card);
 }
 .timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
 
@@ -1140,11 +1196,14 @@ table.data-table {
   border-radius: var(--radius-pill);
   font-size: 14px;
   font-weight: 500;
+  text-align: center;
   box-shadow: 0 12px 32px rgba(0,0,0,0.2);
   opacity: 0;
   pointer-events: none;
   z-index: 200;
   transition: opacity 0.2s, transform 0.2s;
+  /* Cap width so the toast doesn't run edge-to-edge on phones */
+  max-width: calc(100vw - 32px);
 }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.danger { background: var(--danger); }
@@ -1161,7 +1220,13 @@ table.data-table {
   color: var(--accent-strong);
   border: 1px solid rgba(91, 92, 246, 0.2);
   margin-bottom: var(--space-4);
+  /* Center vertically; lay icon + text out so the text reads centered relative
+     to its full visual block instead of left-stuck against the icon. */
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
+.banner > div { flex: 0 1 auto; }
 .banner.warn { background: var(--warning-soft); color: #92400e; border-color: rgba(245, 158, 11, 0.3); }
 .banner.danger { background: var(--danger-soft); color: #991b1b; border-color: rgba(239, 68, 68, 0.3); }
 .banner svg { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; }
@@ -1209,7 +1274,16 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  .timeline-row { grid-template-columns: 140px 1fr; }
+  /* Mobile timeline: pin a narrow label column on the left, give the track a
+     fixed wide pixel width so months breathe and the user scrolls
+     horizontally instead of seeing crushed/overlapping labels. */
+  .timeline-row { grid-template-columns: 120px 640px; }
+  .timeline-row-label {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 1px 0 0 var(--border-soft);
+  }
   .modal { padding: 0; align-items: flex-end; }
   .modal-card { max-width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .modal-header { padding: var(--space-4); }
@@ -1637,12 +1711,14 @@ function setupPwa() {
   ctx.fillStyle = shimmer;
   ctx.fillRect(0, 0, W, W);
 
-  // White vector mark — custom filled arrow, tapered shaft + triangular arrowhead
+  // White vector mark — tapered parallelogram shaft + triangular arrowhead.
+  // Same geometric language used inside the header brand chip so the icon
+  // and the header read as one mark at two scales.
   ctx.fillStyle = '#ffffff';
   ctx.shadowColor = 'rgba(0,0,0,0.22)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 2;
-  // Tapered shaft: wider at base, narrower near arrowhead
+  // Tapered shaft: wider at base, narrower near the arrowhead
   ctx.beginPath();
   ctx.moveTo(36, 144);
   ctx.lineTo(52, 128);
@@ -1651,7 +1727,7 @@ function setupPwa() {
   ctx.closePath();
   ctx.fill();
   ctx.shadowBlur = 0;
-  // Filled triangular arrowhead (top-right corner)
+  // Triangular arrowhead (top-right corner)
   ctx.beginPath();
   ctx.moveTo(106, 28);
   ctx.lineTo(152, 28);
@@ -2007,9 +2083,9 @@ function effectiveHorizonDays(state) {
   if (mode === '1year') return 365;
   if (mode === '2years') return 730;
   if (mode === 'custom') return Math.max(30, Math.min(1825, Number(settings.projectionHorizonDays) || 365));
-  // 'auto' — 30 days past the latest withdrawal-eligible date of active/planned offers.
-  // Intentionally ignores expiration dates, commitments, and events so distant
-  // entries don't blow the horizon out to 6+ months unnecessarily.
+  // 'auto' — 30 days past the latest withdrawal-eligible date of active/planned
+  // offers, capped at 180 days (6 months). Distant offers stop pushing the
+  // horizon further so the chart never zooms out further than half a year.
   let last = addDays(start, 30);
   for (const o of state.offers || []) {
     if (o.status === 'completed' || o.status === 'skipped') continue;
@@ -2017,7 +2093,7 @@ function effectiveHorizonDays(state) {
     const d = we ? parseDate(we) : null;
     if (d && d > last) last = d;
   }
-  return Math.max(30, Math.min(1825, daysBetween(start, addDays(last, 30))));
+  return Math.max(30, Math.min(180, daysBetween(start, addDays(last, 30))));
 }
 
 function generateProjection(state, options = {}) {
@@ -2336,7 +2412,7 @@ function renderShell() {
     ${renderHeader()}
     <main class="app-main">${renderActiveView()}</main>
     ${renderMobileNav()}
-    <button class="fab" id="fab-add" aria-label="Add offer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg></button>
+    <button class="fab" id="fab-add" data-action="add-offer" aria-label="Add offer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" pointer-events="none"><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg></button>
     <div class="modal" id="modal-root"></div>
     <div class="toast" id="toast"></div>
   `;
@@ -2353,15 +2429,29 @@ function renderHeader() {
   return `
     <header class="app-header">
       <div class="brand">
-        <svg class="brand-arrow" width="20" height="18" viewBox="0 0 20 18" fill="none" aria-hidden="true">
+        <!-- Brand chip: indigo gradient rounded square (same palette as the
+             PWA home-screen icon) with a small white tapered-shaft + triangular
+             arrowhead pointing up-right. Mirrors the iOS app icon at small
+             scale so the header reads as a miniature version of the icon. -->
+        <svg class="brand-arrow" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
           <defs>
-            <linearGradient id="brand-arrow-g" x1="2" y1="16" x2="17" y2="2" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#4338ca"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
+            <linearGradient id="brand-chip-g" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#a78bfa"/>
+              <stop offset="38%" stop-color="#7c6ef5"/>
+              <stop offset="65%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#312e81"/>
+            </linearGradient>
+            <linearGradient id="brand-chip-shimmer" x1="0" y1="0" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.20)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
             </linearGradient>
           </defs>
-          <line x1="2.5" y1="15.5" x2="13.6" y2="4.4" stroke="url(#brand-arrow-g)" stroke-width="1.7" stroke-linecap="round"/>
-          <path d="M17 1.5 L11.2 2.6 L15.6 7 Z" fill="url(#brand-arrow-g)"/>
+          <rect x="0" y="0" width="22" height="22" rx="5.6" fill="url(#brand-chip-g)"/>
+          <rect x="0" y="0" width="22" height="22" rx="5.6" fill="url(#brand-chip-shimmer)"/>
+          <!-- Tapered shaft (parallelogram): wider at base, narrower near head -->
+          <path d="M5.4 17.0 L7.4 15.0 L15.6 6.8 L14.4 8.4 Z" fill="#ffffff" fill-opacity="0.96"/>
+          <!-- Triangular arrowhead in the upper-right corner -->
+          <path d="M13.4 4.0 L18.4 4.0 L18.4 9.0 Z" fill="#ffffff" fill-opacity="0.96"/>
         </svg>
         <span class="brand-name">Yield Vector</span>
       </div>
@@ -2429,6 +2519,19 @@ function renderOverview() {
 
   const heroAvailable = today ? today.availableCapital : liquidCapital;
   const heroLowest = lowest ? lowest.availableCapital : heroAvailable;
+  const buffer = Number(App.state.settings.minimumCashBuffer) || 0;
+
+  // Tone for any "lowest" or "available" dollar value: red if it would go
+  // negative, buffer-yellow if it dips into the buffer zone (positive but
+  // under the buffer floor), normal text otherwise. Used for both the hero
+  // amount and the inline "Lowest $X" line.
+  function shortfallTone(v) {
+    if (v < 0) return 'var(--danger)';
+    if (v < buffer) return '#e0a23a'; // matches .stat-value.warn / Buffer line
+    return 'var(--text)';
+  }
+  const heroAmountTone = shortfallTone(heroAvailable);
+  const heroLowestTone = shortfallTone(heroLowest);
 
   const lowestPill = summary.shortfallDays > 0
     ? `<span class="pill danger">${summary.shortfallDays} shortfall day${summary.shortfallDays === 1 ? '' : 's'}</span>`
@@ -2446,13 +2549,13 @@ function renderOverview() {
   return `
     <section class="hero">
       <div class="hero-numbers">
-        <div class="hero-amount">
-          <span class="currency-symbol">$</span>${Math.max(0, Math.round(heroAvailable)).toLocaleString('en-US')}
+        <div class="hero-label">Available capital today</div>
+        <div class="hero-amount" style="color:${heroAmountTone};">
+          <span class="currency-symbol">${heroAvailable < 0 ? '-$' : '$'}</span>${Math.abs(Math.round(heroAvailable)).toLocaleString('en-US')}
         </div>
         <div class="hero-meta">
-          <span>Available capital today</span>
           ${lowestPill}
-          ${lowest && summary.lowestIdx > 0 ? `<span style="color:var(--text-tertiary);">Lowest <strong style="color:${heroLowest < 0 ? 'var(--danger)' : 'var(--text)'};">${formatCompactCurrency(heroLowest)}</strong> on ${formatDateMedium(lowest.date)}</span>` : ''}
+          ${lowest && summary.lowestIdx > 0 ? `<span style="color:var(--text-tertiary);">Lowest <strong style="color:${heroLowestTone};">${formatCompactCurrency(heroLowest)}</strong> on ${formatDateMedium(lowest.date)}</span>` : ''}
         </div>
       </div>
       <div class="chart-wrap" id="hero-chart-wrap">
@@ -2561,6 +2664,41 @@ function computeUpcomingActions(state, limit = 12) {
   return items.slice(0, limit);
 }
 
+/* Targeted update for the Upcoming-Actions pager. A full render() would
+   rebuild every section on the overview page, which (a) burns work and
+   (b) reflows enough surrounding DOM that the document's scroll position
+   gets nudged upward when the new page has fewer rows. Swapping just the
+   action-list innerHTML keeps the section height pinned (min-height in CSS)
+   and the page stays exactly where the user left it. */
+function updateUpcomingPage(nextPage) {
+  const ACTIONS_PER_PAGE = 6;
+  const all = computeUpcomingActions(App.state, 200);
+  const pageCount = Math.max(1, Math.ceil(all.length / ACTIONS_PER_PAGE));
+  const clamped = Math.max(0, Math.min(pageCount - 1, nextPage));
+  if (clamped === App._upcomingPage) return;
+  App._upcomingPage = clamped;
+  const slice = all.slice(clamped * ACTIONS_PER_PAGE, (clamped + 1) * ACTIONS_PER_PAGE);
+  const list = document.querySelector('.action-list');
+  if (list) {
+    list.innerHTML = slice.map(renderActionRow).join('');
+    // Re-trigger the fade-in animation for the new page
+    list.classList.remove('upcoming-fade');
+    void list.offsetWidth; // force reflow so the animation restarts
+    list.classList.add('upcoming-fade');
+    list.setAttribute('key', clamped);
+  }
+  // Update pager controls in place
+  const pager = document.querySelector('.upcoming-pager');
+  if (pager) {
+    const prev = pager.querySelector('[data-action="upcoming-prev"]');
+    const next = pager.querySelector('[data-action="upcoming-next"]');
+    const label = pager.querySelector('.upcoming-pg-label');
+    if (prev) prev.toggleAttribute('disabled', clamped === 0);
+    if (next) next.toggleAttribute('disabled', clamped === pageCount - 1);
+    if (label) label.textContent = `${clamped + 1} / ${pageCount}`;
+  }
+}
+
 function renderActionRow(item) {
   const month = item.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const day = item.date.getDate();
@@ -2624,7 +2762,7 @@ function renderPlanner() {
         </div>
         <div class="metric">
           <span class="label">Lowest projected</span>
-          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#d97706;' : 'color:var(--success);')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
+          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#e0a23a;' : 'color:#0ea968;')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
         </div>
         <div class="metric">
           <span class="label">Candidates for optimizer</span>
@@ -3089,7 +3227,7 @@ function renderSettings() {
         <div class="field">
           <label for="s-horizon-mode">Projection horizon</label>
           <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
-            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 month past last bonus)</option>
+            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 month past last bonus, max 6 months)</option>
             <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
             <option value="6months" ${s.projectionHorizonMode === '6months' ? 'selected' : ''}>6 months</option>
             <option value="1year" ${s.projectionHorizonMode === '1year' ? 'selected' : ''}>1 year</option>
@@ -3318,7 +3456,7 @@ function renderSyncSection() {
             <li>Paste the token above, leave Gist ID empty, then click <strong>Create new Gist</strong>. The app will create a private Gist and fill in the ID for you.</li>
             <li>On every other device: open the same URL, paste the same token + Gist ID, click <strong>Save &amp; test</strong>. Your data appears.</li>
           </ol>
-          <p style="margin-top:8px;font-size:12px;">Pushes are debounced (~1.5s after edits stop). Conflict rule: whichever device wrote last wins, based on the embedded <code>_lastModified</code> timestamp.</p>
+          <p style="margin-top:8px;font-size:12px;">Pushes are debounced (~2.5s after edits stop). Conflict rule: whichever device wrote last wins, based on the embedded <code>_lastModified</code> timestamp.</p>
         </div>
       </div>
     </section>
@@ -3534,39 +3672,33 @@ function renderHeroChart(svg) {
       <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#5b5cf6" stroke-width="1" stroke-dasharray="2 3" opacity="0.5" pointer-events="none"/>
       <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#5b5cf6" stroke="white" stroke-width="2.5" pointer-events="none"/>
     ` : ''}
-    <!-- Markers grouped by proximity (≤1 day apart). Cycling chevrons swap active marker. -->
+    <!-- Markers grouped by visual proximity. When two or more markers would
+         overlap horizontally (≤16 SVG units apart) they stack as a vertical
+         column of dots above the lowest one. Hovering anywhere within the
+         column's x-range surfaces the existing tooltip, which already
+         aggregates every nearby marker into one combined panel — so all the
+         actions on the cluster's days appear in a single readable list. -->
     ${(() => {
       const sorted = markers.slice().sort((a, b) => a.i - b.i);
+      const CLUSTER_PX = 16;
       const groups = [];
       for (const m of sorted) {
         const last = groups[groups.length - 1];
-        if (last && Math.abs(m.i - last[last.length - 1].i) <= 1) last.push(m);
+        if (last && Math.abs(xFor(m.i) - xFor(last[last.length - 1].i)) <= CLUSTER_PX) last.push(m);
         else groups.push([m]);
       }
-      if (!App._chartGroupActive) App._chartGroupActive = {};
+      const STEP = 9; // vertical pixels between stacked dots
       let out = '';
-      groups.forEach((g, gi) => {
-        const key = 'g' + g[0].i;
-        const active = App._chartGroupActive[key] || 0;
-        const idx = Math.min(active, g.length - 1);
-        const m = g[idx];
-        const x = xFor(m.i);
-        const y = yFor(proj[m.i].availableCapital);
-        out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.9" pointer-events="none"></circle>`;
-        if (g.length >= 2) {
-          // Stack indicator dots above the bubble (one per item, current is filled)
-          for (let k = 0; k < g.length; k++) {
-            const dy = -(g.length - 1) * 3 + k * 6 - 10;
-            out += `<circle cx="${x.toFixed(1)}" cy="${(y + dy).toFixed(1)}" r="1.5" fill="${k === idx ? m.color : 'rgba(155,160,170,0.6)'}" pointer-events="none"/>`;
-          }
-          // Cycling chevrons: ‹ on left if not first, › on right if not last
-          if (idx > 0) {
-            out += `<g class="chart-cycle" data-key="${key}" data-dir="-1" style="cursor:pointer;"><circle cx="${(x - 11).toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="white" stroke="${m.color}" stroke-width="1.2"/><text x="${(x - 11).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="${m.color}">‹</text></g>`;
-          }
-          if (idx < g.length - 1) {
-            out += `<g class="chart-cycle" data-key="${key}" data-dir="1" style="cursor:pointer;"><circle cx="${(x + 11).toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="white" stroke="${m.color}" stroke-width="1.2"/><text x="${(x + 11).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="${m.color}">›</text></g>`;
-          }
-        }
+      groups.forEach((g) => {
+        // Anchor every dot in the cluster to the first marker's x — the chart
+        // tooltip catches everything within 12 SVG units of the cursor x, so
+        // the user gets the combined panel by hovering anywhere in the column.
+        const x = xFor(g[0].i);
+        const baseY = yFor(proj[g[0].i].availableCapital);
+        g.forEach((m, k) => {
+          const cy = baseY - k * STEP;
+          out += `<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.92" pointer-events="none"></circle>`;
+        });
       });
       return out;
     })()}
@@ -3670,13 +3802,34 @@ function renderHeroChart(svg) {
     tooltip.innerHTML = html;
     tooltip.classList.add('visible');
 
-    // On mobile use fixed positioning to escape the overflow-x:auto container
+    // On mobile use fixed positioning to escape the overflow-x:auto container.
+    // After placing, measure the tooltip and clamp left/top so the box (which
+    // is translated -50%,-110% via CSS) cannot spill past the viewport edges.
     if (window.innerWidth <= 720) {
       const svgX = (cx / W) * rect.width + rect.left;
       const svgY = (cy / H) * rect.height + rect.top;
       tooltip.style.position = 'fixed';
       tooltip.style.left = svgX + 'px';
       tooltip.style.top = svgY + 'px';
+      // Force a layout pass to read the now-rendered size, then clamp.
+      const ttRect = tooltip.getBoundingClientRect();
+      const margin = 8;
+      const halfW = ttRect.width / 2;
+      const minLeft = margin + halfW;
+      const maxLeft = window.innerWidth - margin - halfW;
+      const clampedLeft = Math.max(minLeft, Math.min(maxLeft, svgX));
+      // If the tooltip would clip the top of the viewport, flip it below the
+      // dot instead of above.
+      const wantsTop = svgY - ttRect.height - 12;
+      const flipDown = wantsTop < margin;
+      tooltip.style.left = clampedLeft + 'px';
+      if (flipDown) {
+        tooltip.style.top = (svgY + 18) + 'px';
+        tooltip.style.transform = 'translate(-50%, 0)';
+      } else {
+        tooltip.style.top = svgY + 'px';
+        tooltip.style.transform = 'translate(-50%, -110%)';
+      }
     } else {
       const wrapRect = wrap.getBoundingClientRect();
       const tx = (cx / W) * wrapRect.width;
@@ -3684,6 +3837,7 @@ function renderHeroChart(svg) {
       tooltip.style.position = 'absolute';
       tooltip.style.left = tx + 'px';
       tooltip.style.top = ty + 'px';
+      tooltip.style.transform = 'translate(-50%, -110%)';
     }
   }
 
@@ -3697,18 +3851,6 @@ function renderHeroChart(svg) {
   svg.addEventListener('mouseleave', clearHover);
   svg.addEventListener('touchmove', (e) => { e.preventDefault(); handleHover(e.touches[0]); }, { passive: false });
   svg.addEventListener('touchend', clearHover);
-
-  // Cycling chevrons: cycle the active marker within a stack group
-  svg.addEventListener('click', (e) => {
-    const g = e.target.closest('.chart-cycle');
-    if (!g) return;
-    e.stopPropagation();
-    const key = g.getAttribute('data-key');
-    const dir = parseInt(g.getAttribute('data-dir'), 10) || 1;
-    const cur = App._chartGroupActive[key] || 0;
-    App._chartGroupActive[key] = cur + dir;
-    renderHeroChart();
-  });
 }
 
 function niceTicks(min, max, count) {
@@ -3764,11 +3906,11 @@ function showOfferModal(offerId = null) {
       </div>
       <form class="modal-body" id="offer-form">
         <div class="form-grid">
-          <div class="field" style="grid-column: span 2;">
+          <div class="field" style="grid-column: 1 / -1;">
             <label for="f-bank">Bank name *</label>
             <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" />
           </div>
-          <div class="field" style="grid-column: span 2;">
+          <div class="field" style="grid-column: 1 / -1;">
             <label for="f-offer">Offer name (optional)</label>
             <input id="f-offer" class="input" type="text" placeholder="Sapphire Banking, Priority $1500…" value="${escapeAttr(o.offerName)}" name="offerName" />
           </div>
@@ -3940,7 +4082,7 @@ function showCommitmentModal(commitmentId = null) {
       </div>
       <form class="modal-body" id="commitment-form">
         <div class="form-grid">
-          <div class="field" style="grid-column: span 2;">
+          <div class="field" style="grid-column: 1 / -1;">
             <label for="c-name">Name *</label>
             <input id="c-name" class="input" type="text" required value="${escapeAttr(c.commitmentName)}" name="commitmentName" />
           </div>
@@ -4028,7 +4170,7 @@ function showEventModal(eventId = null) {
       </div>
       <form class="modal-body" id="event-form">
         <div class="form-grid">
-          <div class="field" style="grid-column: span 2;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
+          <div class="field" style="grid-column: 1 / -1;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
           <div class="field"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div>
           <div class="field"><label for="e-amount">Amount * (negative for outflows)</label>
             <div class="input-group"><span class="input-prefix">$</span>
@@ -4170,8 +4312,8 @@ function onClick(e) {
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
 
-    case 'upcoming-prev': App._upcomingPage = Math.max(0, (App._upcomingPage || 0) - 1); render(); break;
-    case 'upcoming-next': App._upcomingPage = (App._upcomingPage || 0) + 1; render(); break;
+    case 'upcoming-prev': updateUpcomingPage(Math.max(0, (App._upcomingPage || 0) - 1)); break;
+    case 'upcoming-next': updateUpcomingPage((App._upcomingPage || 0) + 1); break;
 
     // Sync actions
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
