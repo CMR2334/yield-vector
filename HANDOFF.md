@@ -39,6 +39,28 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 23 — PWA icon = header brand mark (pixel-identical at scale)**
+- Rewrote `setupPwa()` so the canvas-rendered home-screen icon mirrors
+  the inline SVG brand mark in `renderHeader()` exactly. Header is a
+  22×22 viewBox; canvas is 180×180; every coord is multiplied by
+  `S = 180/22 ≈ 8.18`. No more divergence between the two glyphs.
+- **Locked reference (keep both in sync if either is edited):**
+  - rect 22×22, rx=6
+  - chip gradient (BL→TR, x1=0 y1=22 x2=22 y2=0):
+    `0% #1e1b4b · 45% #4338ca · 80% #7c3aed · 100% #b69cff`
+  - shimmer (x1=0 y1=0 x2=14 y2=14):
+    `0% rgba(255,255,255,0.18) · 100% rgba(255,255,255,0)`
+  - shaft `M 5.5 16.5 Q 9 12 16 6.5`, white stroke 2 round
+  - arrowhead `M 10.8 7.2 L 16.5 6 L 15.3 12`, same stroke
+  Comment block at the top of `setupPwa()` reproduces this so future
+  edits hit both files.
+- Updated both theme-color references (the `<meta name="theme-color">`
+  in the `<head>` and the manifest's `theme_color`) from the legacy
+  `#5b5cf6` to `#4338ca` — pulled from the chip's mid-gradient so the
+  iOS status-bar tint and Android task-switcher header harmonize with
+  the icon rather than the old standalone accent.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 22 — chart pan/long-press, fixed tooltip, hero, landscape modal, At a glance**
 - **Chart touch model — coexisting swipe-pan + long-press-inspect.** The
   old `touchmove` handler called `e.preventDefault()` which blocked the

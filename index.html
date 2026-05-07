@@ -2011,14 +2011,30 @@ function updateSyncIndicator() {
    PWA: runtime-generated icon + manifest, no external assets
    ============================================================ */
 function setupPwa() {
-  // Yield Vector home-screen icon: two-tier diagonal split (Wealthfront-
-  // inspired) with a subtle white upward-vector mark.
+  // Yield Vector home-screen icon — pixel-identical (modulo raster vs.
+  // vector) to the inline SVG brand mark in renderHeader(). The header
+  // SVG is a 22×22 viewBox; this canvas is 180×180. Every coordinate
+  // below is the header coord × (180/22) ≈ 8.18181818, so the icon
+  // and the header read as the same mark at two scales.
+  //
+  // Header reference (LOCKED — keep in sync if either is edited):
+  //   - rect 22×22, rx=6
+  //   - chip gradient (BL→TR, x1=0 y1=22 x2=22 y2=0):
+  //       0%   #1e1b4b     45%  #4338ca
+  //       80%  #7c3aed    100%  #b69cff
+  //   - shimmer (x1=0 y1=0 x2=14 y2=14):
+  //       0%   rgba(255,255,255,0.18)
+  //       100% rgba(255,255,255,0)
+  //   - arrow shaft:  M 5.5 16.5 Q 9 12 16 6.5    stroke=#fff w=2 round
+  //   - arrowhead:    M 10.8 7.2 L 16.5 6 L 15.3 12  same stroke
   const c = document.createElement('canvas');
   c.width = 180; c.height = 180;
   const ctx = c.getContext('2d');
-  const W = 180, R = 38;
+  const W = 180;
+  const S = W / 22;            // header→canvas scale
+  const R = 6 * S;             // 49.09 — corner radius
 
-  // Round corners via clip
+  // Round-corner clip (rx=6 in header, rx=49 here)
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(R, 0);
@@ -2033,45 +2049,39 @@ function setupPwa() {
   ctx.closePath();
   ctx.clip();
 
-  // Smooth diagonal gradient — violet top-left fading to deep indigo bottom-right
-  const grad = ctx.createLinearGradient(0, 0, W, W);
-  grad.addColorStop(0, '#a78bfa');
-  grad.addColorStop(0.38, '#7c6ef5');
-  grad.addColorStop(0.65, '#6366f1');
-  grad.addColorStop(1, '#312e81');
+  // Chip gradient: corner-to-corner, bottom-left → top-right
+  const grad = ctx.createLinearGradient(0, W, W, 0);
+  grad.addColorStop(0.00, '#1e1b4b');
+  grad.addColorStop(0.45, '#4338ca');
+  grad.addColorStop(0.80, '#7c3aed');
+  grad.addColorStop(1.00, '#b69cff');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, W);
 
-  // Subtle luminosity highlight to give depth without harshness
-  const shimmer = ctx.createLinearGradient(0, 0, W * 0.7, W * 0.7);
-  shimmer.addColorStop(0, 'rgba(255,255,255,0.14)');
+  // Upper-left shimmer overlay — same stops/extent as the header SVG
+  const shimmer = ctx.createLinearGradient(0, 0, 14 * S, 14 * S);
+  shimmer.addColorStop(0, 'rgba(255,255,255,0.18)');
   shimmer.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = shimmer;
   ctx.fillRect(0, 0, W, W);
 
-  // White vector mark — tapered parallelogram shaft + triangular arrowhead.
-  // Same geometric language used inside the header brand chip so the icon
-  // and the header read as one mark at two scales.
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(0,0,0,0.22)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 2;
-  // Tapered shaft: wider at base, narrower near the arrowhead
+  // White arrow — same Bezier shaft + chevron arrowhead as the header.
+  // Stroke width 2 in header → 2 × S ≈ 16.36 here.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2 * S;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Shaft: M 5.5 16.5 Q 9 12 16 6.5
   ctx.beginPath();
-  ctx.moveTo(36, 144);
-  ctx.lineTo(52, 128);
-  ctx.lineTo(128, 52);
-  ctx.lineTo(116, 64);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  // Triangular arrowhead (top-right corner)
+  ctx.moveTo(5.5 * S, 16.5 * S);
+  ctx.quadraticCurveTo(9 * S, 12 * S, 16 * S, 6.5 * S);
+  ctx.stroke();
+  // Arrowhead: M 10.8 7.2 L 16.5 6 L 15.3 12
   ctx.beginPath();
-  ctx.moveTo(106, 28);
-  ctx.lineTo(152, 28);
-  ctx.lineTo(152, 74);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(10.8 * S, 7.2 * S);
+  ctx.lineTo(16.5 * S, 6 * S);
+  ctx.lineTo(15.3 * S, 12 * S);
+  ctx.stroke();
 
   ctx.restore();
 
@@ -2080,6 +2090,12 @@ function setupPwa() {
   const fav = document.getElementById('favicon');
   if (apple) apple.href = dataUrl;
   if (fav) fav.href = dataUrl;
+  // Sync the <meta name="theme-color"> too — it controls the iOS Safari
+  // status-bar tint and the Android task-switcher header. Pick a color
+  // pulled from the chip's mid-gradient so the OS chrome harmonizes
+  // with the icon rather than being the old standalone accent.
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute('content', '#4338ca');
   // Web App Manifest (Android/Chrome)
   const manifest = {
     name: 'Yield Vector',
@@ -2088,7 +2104,7 @@ function setupPwa() {
     start_url: location.pathname,
     scope: location.pathname,
     background_color: '#f5f5f7',
-    theme_color: '#5b5cf6',
+    theme_color: '#4338ca',
     icons: [
       { src: dataUrl, sizes: '180x180', type: 'image/png', purpose: 'any maskable' }
     ]
