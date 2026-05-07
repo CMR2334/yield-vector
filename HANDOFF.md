@@ -39,6 +39,33 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 26 — modal form containment wall (date-input cutoff fix)**
+- Fields 5 + 6 of the Add-Offer modal ("Offer expires", "Planned signup
+  date") were still overflowing on iOS even after the Round 24 flex-
+  column rewrite. Root cause: `<input type="date">` on iOS Safari
+  carries an intrinsic min-width from the native chevron/spinner UI
+  baked into the user-agent stylesheet — exceeds `width: 100%` even
+  with `box-sizing: border-box`.
+- Added a dedicated "MODAL FORM CONTAINMENT — BLAST RADIUS CONTROL"
+  CSS block with `!important` on every relevant property and selector
+  in the modal subtree:
+  `.modal .field, .modal .form-grid > *, .modal .input-group,
+   .modal .radio-group, .modal .input, .modal .select, .modal .textarea
+   { width: 100% !important; max-width: 100% !important;
+     min-width: 0 !important; box-sizing: border-box !important;
+     flex-shrink: 1 !important; }`
+  Plus `.modal .field, .modal .form-grid > * { grid-column: 1 / -1
+  !important }` to neutralize any inline `style="grid-column"` and
+  `.modal, .modal-card, .modal-body, .modal .form-grid { overflow-x:
+  hidden !important }` as a final clip.
+- Added a date/number-specific override:
+  `.modal .input[type="date"|"datetime-local"|"time"|"number"]
+   { -webkit-appearance: none !important; appearance: none !important; }`
+  — strips iOS's intrinsic native-control width so the inputs collapse
+  to the modal-sized box we give them. The native picker still works
+  on tap; only the visual chrome is stripped.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 25 — sync input pre-fill (defensive, with legacy fallback)**
 - Symptom: Gist token + ID fields empty on load even though credentials
   were saved on this device. The HTML-attribute path
