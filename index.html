@@ -4065,6 +4065,37 @@ function renderEmptyState(title, body, action = null, actionLabel = null) {
 function renderChartsAfterMount() {
   const heroChart = document.getElementById('hero-chart');
   if (heroChart) renderHeroChart(heroChart);
+  // Defensive sync-input pre-fill: even though renderSyncSection() sets
+  // value="..." in the HTML template from Sync.getConfig(), set the
+  // .value DOM property directly here too so anything that empties an
+  // input between render and paint (browser autocomplete clearing,
+  // HTML-attribute quirks, etc.) gets corrected. Read from both the
+  // canonical Sync.getConfig() AND App.state.settings as a fallback —
+  // covers any case where credentials ended up on App.state instead
+  // of in the dedicated localStorage key.
+  prefillSyncInputs();
+  updateSyncButtonsLive();
+}
+
+function prefillSyncInputs() {
+  const gistInput = document.getElementById('sync-gist');
+  const tokenInput = document.getElementById('sync-token');
+  if (!gistInput && !tokenInput) return;
+  const cfg = Sync.getConfig() || {};
+  const settings = (App.state && App.state.settings) || {};
+  // Resolution order: Sync config (canonical) → App.state.settings
+  // (legacy fallback for older state files). Key aliases cover both
+  // naming conventions that have appeared in past code.
+  const gistId = cfg.gistId || settings.gistId || settings.gistID || '';
+  const token  = cfg.token  || settings.gistToken || settings.token || '';
+  if (gistInput && gistInput.value === '' && gistId) gistInput.value = gistId;
+  if (tokenInput && tokenInput.value === '' && token) tokenInput.value = token;
+  // If we recovered creds from App.state.settings (legacy path), promote
+  // them into the canonical Sync config so subsequent isConfigured()
+  // calls succeed and the user doesn't have to re-save.
+  if ((gistId && !cfg.gistId) || (token && !cfg.token)) {
+    if (gistId && token) Sync.setConfig({ gistId, token });
+  }
 }
 
 function renderHeroChart(svg) {

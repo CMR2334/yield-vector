@@ -39,6 +39,24 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 25 — sync input pre-fill (defensive, with legacy fallback)**
+- Symptom: Gist token + ID fields empty on load even though credentials
+  were saved on this device. The HTML-attribute path
+  (`value="${escapeAttr(cfg.gistId || '')}"`) should have been enough,
+  but something between render and paint was wiping the values.
+- Fix: added `prefillSyncInputs()` that runs in `renderChartsAfterMount()`
+  on every render. Sets `.value` directly on the DOM input elements,
+  bypassing any HTML-attribute or autocomplete quirks. Then calls
+  `updateSyncButtonsLive()` so the Pull/Push/Disconnect buttons reflect
+  the post-prefill state on first paint, not after the next keystroke.
+- **Legacy fallback.** Resolution order is now
+  `Sync.getConfig() → App.state.settings.{gistId,gistToken}` so if any
+  prior version of the app stored credentials on `App.state` (or some
+  device's state was synced from one that did), they're recovered and
+  promoted into the canonical `SYNC_CONFIG_KEY` storage so subsequent
+  `isConfigured()` calls succeed without a manual re-save.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 24 — sync buttons live-enable, modal/form hardening, hero amount diet**
 - **Sync Pull/Push/Disconnect were stuck disabled** until "Save & test"
   was clicked, even after credentials were typed — looked broken. Two
