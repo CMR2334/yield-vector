@@ -3713,13 +3713,12 @@ function renderOfferCardWithActions(o) {
   const card = renderOfferCard(o);
   const actions = `
     <div class="offer-actions" style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);">
-      <button class="btn btn-ghost btn-sm" data-action="edit-offer" data-id="${o.id}">Edit</button>
       <button class="btn btn-ghost btn-sm" data-action="duplicate-offer" data-id="${o.id}">Duplicate</button>
-      <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}">Convert</button>
+      <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}" title="Lock this offer in as a commitment on your timeline">Commit</button>
       <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}">
         ${STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
       </select>
-      <button class="btn btn-ghost btn-sm btn-danger" data-action="delete-offer" data-id="${o.id}" aria-label="Delete">×</button>
+      <button class="btn btn-ghost btn-sm btn-danger" data-action="delete-offer" data-id="${o.id}" aria-label="Delete">Delete</button>
     </div>
   `;
   // Insert actions inside the offer-card, just before its closing tag.
@@ -4648,7 +4647,7 @@ function showOfferModal(offerId = null) {
             </div>
           </div>
           <div class="field">
-            <label for="f-days-remain">Days funds must remain *</label>
+            <label for="f-days-remain" id="days-remain-label">Funds must remain deposited through day * (from ${o.lockStartsFrom === 'open date' ? 'account opening' : 'funded date'})</label>
             <div class="input-group with-suffix">
               <input id="f-days-remain" class="input" type="number" min="0" step="1" required value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
               <span class="input-suffix">days</span>
@@ -4662,9 +4661,11 @@ function showOfferModal(offerId = null) {
           <div class="field">
             <label>Days counted from</label>
             <div class="radio-group">
-              <input type="radio" id="lsf-fund" name="lockStartsFrom" value="funded date" ${o.lockStartsFrom !== 'open date' ? 'checked' : ''} />
+              <input type="radio" id="lsf-fund" name="lockStartsFrom" value="funded date" ${o.lockStartsFrom !== 'open date' ? 'checked' : ''}
+                onchange="document.getElementById('days-remain-label').textContent='Funds must remain deposited through day * (from funded date)'" />
               <label for="lsf-fund">Funded date</label>
-              <input type="radio" id="lsf-open" name="lockStartsFrom" value="open date" ${o.lockStartsFrom === 'open date' ? 'checked' : ''} />
+              <input type="radio" id="lsf-open" name="lockStartsFrom" value="open date" ${o.lockStartsFrom === 'open date' ? 'checked' : ''}
+                onchange="document.getElementById('days-remain-label').textContent='Funds must remain deposited through day * (from account opening)'" />
               <label for="lsf-open">Open date</label>
             </div>
             <span class="field-hint">Where the bank measures the hold from. <strong>Open date</strong> = e.g. US Bank "60 days from open" — funding later means a shorter actual lock. <strong>Funded date</strong> = e.g. Citi "keep $50k for 60 days from deposit". Money is always treated as tied up only from when you actually deposit.</span>
