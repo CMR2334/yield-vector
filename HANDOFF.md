@@ -39,6 +39,36 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 24 — sync buttons live-enable, modal/form hardening, hero amount diet**
+- **Sync Pull/Push/Disconnect were stuck disabled** until "Save & test"
+  was clicked, even after credentials were typed — looked broken. Two
+  changes: (1) `updateSyncButtonsLive()` runs from `onInput()` whenever
+  `#sync-gist` or `#sync-token` changes, toggling `disabled` based on
+  whether both fields have non-empty values; (2) the click handlers
+  for `sync-pull` / `sync-push` now call `ensureSyncConfigSaved()`
+  first, which auto-persists typed credentials before the action runs.
+  Net effect: type both fields → buttons light up → click Pull → it
+  works without an intermediate Save click.
+- **Add-Offer form sizing — non-negotiable rules.** Mobile-portrait
+  AND mobile-landscape modal blocks now both use the same recipe:
+  `.modal-card { width: calc(100% - 32px); max-width: 480px; margin:
+  auto }`, `.form-grid { display: flex; flex-direction: column;
+  gap: 12px }` (NOT grid — neutralizes any inline `style="grid-column"`
+  via `.field[style*="grid-column"] { grid-column: auto !important }`),
+  and a defensive `width: 100%; max-width: 100%; min-width: 0;
+  box-sizing: border-box` on every input/select/textarea/input-group.
+  Landscape no longer fans inputs across 720 px — they cap at 480 px
+  centered, matching portrait visual rhythm.
+- **Hero amount.** Down 40 → 38 px (5% smaller per spec), color
+  lightened `#1a2235 → #2a3245` (less heft), `.hero-amount
+  .currency-symbol` now `margin: 0; padding: 0; letter-spacing: 0`
+  so the gap between `$` and the first digit is pure typographic
+  kerning rather than CSS-injected — matching the rest of the app
+  where dollar values are emitted as a single concat
+  `'$' + n.toLocaleString()` string. Breakpoints scaled to match:
+  720 px 36 px, 480 px 34 px, landscape 28 px.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 23 — PWA icon = header brand mark (pixel-identical at scale)**
 - Rewrote `setupPwa()` so the canvas-rendered home-screen icon mirrors
   the inline SVG brand mark in `renderHeader()` exactly. Header is a

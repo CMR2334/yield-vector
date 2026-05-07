@@ -498,32 +498,37 @@ a { color: inherit; text-decoration: none; }
 }
 
 .hero-amount {
-  /* Slightly lighter than full --text (#0d1421) so it doesn't punch as
-     a dense black block. Trimmed weight 700→650 implicit (SF doesn't
-     have 650, so we use 600 + tighter tracking for the same weighty
-     feel without the boxy slab look). 5% smaller than v1 (42→40 px)
-     to ease the visual scale. */
-  font-size: 40px;
+  /* 38 px (5% smaller than the prior 40 px), weight 600, lighter color
+     (#2a3245 vs #1a2235) for less visual heft. The whole value renders
+     as a single string ("$175,000") inside one <span> for the digits +
+     one for the symbol — both inline with margin/padding 0 so the gap
+     between $ and the first digit is exactly typographic kerning, not
+     a pixel of CSS margin. Other dollar displays in the app (stat
+     cells, tooltips, "Tied up today") use plain string concat
+     ("$" + n.toLocaleString()), so this matches them by virtue of
+     having no CSS-injected gap either. */
+  font-size: 38px;
   font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1;
-  color: #1a2235;
+  color: #2a3245;
 }
 
-/* Match the dollar sign exactly to the numerals — same size, same weight,
-   no superscript baseline shift. SF Pro's $ has the same cap-height as
-   its digits, so 1em renders at exactly the same visible height. The
-   margin-right is the canonical $-to-digit gap used elsewhere in the
-   app (e.g. .input-group .input-prefix sits at left:12 with 28px
-   indent; the hero's 1px is the comparable visual rhythm at this
-   font-size). */
+/* Currency symbol: same size, same weight, ZERO margin between $ and
+   the first digit. Consistent with formatCurrency() / formatCompact-
+   Currency() output everywhere else in the app, which produces "$X"
+   as a single string with no separator. */
 .hero-amount .currency-symbol {
   font-weight: inherit;
   opacity: 1;
-  margin-right: 1px;
+  margin: 0;
+  padding: 0;
   font-size: 1em;
   vertical-align: baseline;
+  display: inline;
+  letter-spacing: 0;
 }
+.hero-amount .currency-symbol + * { margin-left: 0; padding-left: 0; }
 
 .hero-meta {
   font-size: 15px;
@@ -1489,7 +1494,7 @@ table.data-table {
     padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + var(--space-8));
   }
   .hero { padding: var(--space-6); border-radius: var(--radius-lg); }
-  .hero-amount { font-size: 40px; }
+  .hero-amount { font-size: 36px; }
   .hero-label { font-size: 13px; letter-spacing: 0.04em; }
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
@@ -1536,23 +1541,17 @@ table.data-table {
   .modal-header { padding: var(--space-4); }
   .modal-body {
     padding: var(--space-4);
-    /* Defensive: clip horizontal overflow at the body so an over-wide
-       native control (date, number) can never push the right edge past
-       the screen. Vertical scroll for long forms still works. */
     overflow-x: hidden;
     overflow-y: auto;
   }
   .modal-footer { padding: var(--space-3) var(--space-4); }
-  .form-grid {
-    grid-template-columns: 1fr;
-    /* Ensure the grid cells match container width — `1fr` resolves to
-       `minmax(auto, 1fr)` by default, which respects intrinsic widths.
-       `minmax(0, 1fr)` lets cells shrink below content width so long
-       hint text can't blow the column out. */
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
-  }
-  .field { width: 100%; max-width: 100%; }
+  /* Same flex-column rule as landscape so every field is uniform width
+     regardless of any `style="grid-column"` annotations in the source. */
+  .form-grid { display: flex; flex-direction: column; gap: 12px; }
+  .field { width: 100%; max-width: 100%; min-width: 0; }
+  .field > * { max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .input, .select, .textarea, .input-group { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .field[style*="grid-column"] { grid-column: auto !important; }
   .section-header h2 { font-size: 20px; }
   .planner-add-btn { display: none; }
   .timeline-row-label { font-size: 12px; padding: 6px 8px; }
@@ -1560,7 +1559,7 @@ table.data-table {
 
 @media (max-width: 480px) {
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
-  .hero-amount { font-size: 40px; }
+  .hero-amount { font-size: 34px; }
 }
 
 /* Portrait-only: header scrolls away naturally to reclaim ~64 px of
@@ -1593,7 +1592,7 @@ table.data-table {
     padding: var(--space-4);
     border-radius: var(--radius-lg);
   }
-  .hero-amount { font-size: 32px; line-height: 1; }
+  .hero-amount { font-size: 28px; line-height: 1; }
   .hero-meta { font-size: 12px; gap: 8px; }
   /* Section titles: keep readable but tighter top margin so they don't
      eat the visible chart area. */
@@ -1607,31 +1606,39 @@ table.data-table {
   .timeline-wrap { padding: var(--space-4); }
   .timeline-row-label, .timeline-row-track { height: 38px; }
   .timeline-row-label.axis, .timeline-row-track.axis { height: 26px; }
-  /* Modal: use full landscape viewport rather than bottom-sheet style.
-     Inputs in a 2-column grid on a 430-px-tall phone viewport were
-     crashing into each other. Force single-column, let modal-body
-     scroll, and cap the inner form content at 480 px centered so
-     inputs feel proportional rather than stretched edge-to-edge. */
+  /* Modal: cap at 480 px centered so inputs feel proportional rather
+     than stretched edge-to-edge across a 720+ px landscape viewport.
+     Single-column form is non-negotiable here — 2-column grids on a
+     short landscape phone crash labels into adjacent inputs. */
   .modal { padding: var(--space-3); align-items: center; }
-  .modal-card { max-height: 92vh; max-width: 720px; width: 100%; border-radius: var(--radius-xl); }
+  .modal-card {
+    max-height: 92vh;
+    max-width: 480px;
+    width: calc(100% - 32px);
+    margin: auto;
+    border-radius: var(--radius-xl);
+  }
   .modal-body {
     overflow-y: auto;
     overflow-x: hidden;
-    /* Center the form column in landscape so the inputs read at
-       ~480 px instead of fanning to the full 720 px modal width. */
-    max-width: 520px;
-    margin-left: auto;
-    margin-right: auto;
+    padding: var(--space-4);
   }
-  .modal-header, .modal-footer {
-    max-width: 520px;
-    margin-left: auto;
-    margin-right: auto;
-    width: 100%;
+  .modal-header, .modal-footer { padding: var(--space-3) var(--space-4); }
+  /* Force single-column flex (NOT grid) so every field is the same
+     width, no matter what `style="grid-column"` annotations the source
+     puts on individual fields. */
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
-  .form-grid { grid-template-columns: minmax(0, 1fr); }
   .field { width: 100%; min-width: 0; max-width: 100%; }
-  .input, .select, .textarea, .input-group { max-width: 100%; }
+  .field > * { max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .input, .select, .textarea, .input-group { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+  /* Spanned grid-column overrides on individual fields are no-ops in a
+     flex column — neutralize them defensively in case any inline style
+     makes them try to behave like grid items. */
+  .field[style*="grid-column"] { grid-column: auto !important; }
 }
 
 @media (min-width: 880px) {
@@ -3964,9 +3971,15 @@ function renderSyncSection() {
         </div>
       </div>
 
-      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-4);">
-        <button class="btn btn-primary" data-action="sync-save">Save & test</button>
+      <div id="sync-buttons" style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-4);">
+        <button class="btn btn-primary" data-action="sync-save">Save &amp; test</button>
         <button class="btn btn-secondary" data-action="sync-create-gist">Create new Gist</button>
+        <!-- Pull/Push/Disconnect: enabled whenever credentials are *present*
+             — either already saved (Sync.isConfigured()) or just typed into
+             the inputs above. updateSyncButtonsLive() re-evaluates on every
+             keystroke so the buttons light up as soon as you've entered
+             both fields. The click handlers also auto-save first, so the
+             user doesn't have to click "Save & test" before pulling. -->
         <button class="btn btn-secondary" data-action="sync-pull" ${configured ? '' : 'disabled'}>Pull now</button>
         <button class="btn btn-secondary" data-action="sync-push" ${configured ? '' : 'disabled'}>Push now</button>
         <button class="btn btn-ghost btn-danger" data-action="sync-disconnect" ${configured ? '' : 'disabled'}>Disconnect</button>
@@ -4971,8 +4984,8 @@ function onClick(e) {
     // Sync actions
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
     case 'sync-save': saveSyncConfigFromForm(); break;
-    case 'sync-pull': Sync.pull(); break;
-    case 'sync-push': Sync.push(); break;
+    case 'sync-pull': ensureSyncConfigSaved().then(ok => { if (ok) Sync.pull(); }); break;
+    case 'sync-push': ensureSyncConfigSaved().then(ok => { if (ok) Sync.push(); }); break;
     case 'sync-create-gist': createGistFromForm(); break;
     case 'sync-disconnect': if (confirm('Disconnect cloud sync? Your local data is kept; nothing is deleted from the Gist.')) { Sync.disconnect(); render(); toast('Disconnected'); } break;
   }
@@ -5041,6 +5054,11 @@ function onInput(e) {
     App.filters.offersSearch = el.value;
     clearTimeout(window._searchTimer);
     window._searchTimer = setTimeout(() => render(), 120);
+  }
+  // Live-enable sync buttons as the user types credentials. No save/render
+  // needed — just toggle the disabled attribute on the action buttons.
+  if (el.id === 'sync-gist' || el.id === 'sync-token') {
+    updateSyncButtonsLive();
   }
 }
 
@@ -5164,6 +5182,40 @@ function applyOptimizerCombo(maskStr) {
 /* ============================================================
    SYNC FORM HANDLERS
    ============================================================ */
+// If the user has typed credentials but hasn't clicked "Save & test" yet,
+// persist them to localStorage on first Pull/Push so the call goes
+// through. Returns true if Sync is configured (or just got configured),
+// false if the user hasn't typed enough to save (in which case the
+// caller should bail and let the toast guide them).
+async function ensureSyncConfigSaved() {
+  if (Sync.isConfigured()) return true;
+  const gistInput = document.getElementById('sync-gist');
+  const tokenInput = document.getElementById('sync-token');
+  const gistId = gistInput ? gistInput.value.trim() : '';
+  const token = tokenInput ? tokenInput.value.trim() : '';
+  if (!gistId || !token) {
+    toast('Enter Gist ID and token first, then click Save & test', 'danger');
+    return false;
+  }
+  Sync.setConfig({ gistId, token });
+  return true;
+}
+
+// Live-enable the Pull/Push/Disconnect buttons as soon as the user has
+// typed both credentials, even before "Save & test" is clicked. Called
+// from onInput() whenever a sync field changes. Without this, the
+// buttons stay disabled until first save and the user thinks the whole
+// thing is broken.
+function updateSyncButtonsLive() {
+  const gistInput = document.getElementById('sync-gist');
+  const tokenInput = document.getElementById('sync-token');
+  if (!gistInput || !tokenInput) return;
+  const hasInputCreds = Boolean(gistInput.value.trim() && tokenInput.value.trim());
+  const enabled = Sync.isConfigured() || hasInputCreds;
+  document.querySelectorAll('#sync-buttons [data-action="sync-pull"], #sync-buttons [data-action="sync-push"], #sync-buttons [data-action="sync-disconnect"]')
+    .forEach(b => b.toggleAttribute('disabled', !enabled));
+}
+
 async function saveSyncConfigFromForm() {
   const gistInput = document.getElementById('sync-gist');
   const tokenInput = document.getElementById('sync-token');
