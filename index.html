@@ -341,11 +341,13 @@ a { color: inherit; text-decoration: none; }
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--bottom-nav-height);
+  /* Height must grow to include safe-area-inset-bottom so padding
+     doesn't eat into the content area (border-box accounting). */
+  height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: saturate(1.6) blur(14px);
   border-top: 1px solid var(--border-soft);
-  padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   justify-content: space-around;
 }
@@ -373,7 +375,7 @@ a { color: inherit; text-decoration: none; }
 .fab {
   position: fixed;
   display: none;
-  bottom: calc(var(--bottom-nav-height) + 12px);
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px);
   right: 16px;
   width: 56px;
   height: 56px;
@@ -1552,7 +1554,7 @@ table.data-table {
   .mobile-nav { display: flex; }
   .fab { display: flex; }
   .app-main {
-    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + var(--space-8));
+    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-8));
   }
   .hero { padding: var(--space-6); border-radius: var(--radius-lg); }
   .hero-amount { font-size: 36px; }
@@ -2876,7 +2878,7 @@ function renderHeader() {
     overview:  'M3 10L12 2l9 8v11H3V10zM9 21V14h6v7',
     planner:   'M13 2L4 14h8L10 22 20 11h-8L13 2z',
     timeline:  'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14',
-    offers:    'M2 5h20v14H2V5zM2 10h20M6 15h4',
+    offers:    'M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M12 3L3 10h18L12 3z',
     settings:  'M4 6h16M4 12h16M4 18h16M8 4v4M12 10v4M16 16v4'
   };
   const views = [
@@ -2953,8 +2955,8 @@ function renderMobileNav() {
     ['planner', 'Plan', 'M13 2L4 14h8L10 22 20 11h-8L13 2z'],
     // Timeline: calendar grid
     ['timeline', 'Timeline', 'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14'],
-    // Offers: credit card
-    ['offers', 'Offers', 'M2 5h20v14H2V5zM2 10h20M6 15h4'],
+    // Offers: bank building (columns + base)
+    ['offers', 'Offers', 'M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M12 3L3 10h18L12 3z'],
     // Settings: adjustment sliders
     ['settings', 'Settings', 'M4 6h16M4 12h16M4 18h16M8 4v4M12 10v4M16 16v4']
   ];
