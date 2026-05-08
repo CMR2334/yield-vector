@@ -4331,13 +4331,17 @@ function renderHeroChart(svg) {
          maps cleanly between the chart and the tooltip. -->
     ${(() => {
       const sorted = markers.slice().sort((a, b) => a.i - b.i);
-      const CLUSTER_PX = 16;
+      // Only stack dots that would literally overlap (dot diameter = 8px).
+      // 9px threshold means centers must be within one dot-width to merge.
+      const CLUSTER_PX = 9;
       const groups = [];
       for (const m of sorted) {
         const last = groups[groups.length - 1];
         if (last && Math.abs(xFor(m.i) - xFor(last[last.length - 1].i)) <= CLUSTER_PX) last.push(m);
         else groups.push([m]);
       }
+      // Expose groups so the hover handler can use the same clusters.
+      svg._markerGroups = groups;
       const STEP = 9; // vertical pixels between stacked dots
       let out = '';
       groups.forEach((g) => {
@@ -4427,8 +4431,15 @@ function renderHeroChart(svg) {
     hoverDot.setAttribute('cy', cy);
     hoverDot.setAttribute('opacity', '1');
 
-    // Find any markers within ~12 SVG units of the cursor x
-    const nearMarkers = markers.filter(m => Math.abs(xFor(m.i) - rawX) < 12);
+    // Find all markers in any cluster whose center is within 12 SVG units
+    // of the cursor. Using cluster groups ensures hovering near any dot in
+    // a stack reveals all events in that stack, not just the closest one.
+    const groups = svg._markerGroups || [];
+    const nearMarkers = [];
+    for (const g of groups) {
+      const gx = xFor(g[0].i);
+      if (Math.abs(gx - rawX) < 12) { for (const m of g) nearMarkers.push(m); }
+    }
 
     let html = `
       <div class="tt-date">${formatDateLong(d.date)}</div>
