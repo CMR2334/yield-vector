@@ -2876,7 +2876,7 @@ function renderShell() {
 function renderHeader() {
   const NAV_ICONS = {
     overview:  'M3 10L12 2l9 8v11H3V10zM9 21V14h6v7',
-    planner:   'M13 2L4 14h8L10 22 20 11h-8L13 2z',
+    planner:   'M12 2a10 10 0 100 20A10 10 0 0012 2zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z',
     timeline:  'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14',
     offers:    'M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M12 3L3 10h18L12 3z',
     settings:  'M4 6h16M4 12h16M4 18h16M8 4v4M12 10v4M16 16v4'
@@ -2951,8 +2951,8 @@ function renderMobileNav() {
   const items = [
     // Home: house with door
     ['overview', 'Home', 'M3 10L12 2l9 8v11H3V10zM9 21V14h6v7'],
-    // Plan: lightning bolt
-    ['planner', 'Plan', 'M13 2L4 14h8L10 22 20 11h-8L13 2z'],
+    // Plan: compass
+    ['planner', 'Plan', 'M12 2a10 10 0 100 20A10 10 0 0012 2zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z'],
     // Timeline: calendar grid
     ['timeline', 'Timeline', 'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14'],
     // Offers: bank building (columns + base)
@@ -4431,14 +4431,17 @@ function renderHeroChart(svg) {
     hoverDot.setAttribute('cy', cy);
     hoverDot.setAttribute('opacity', '1');
 
-    // Find all markers in any cluster whose center is within 12 SVG units
-    // of the cursor. Using cluster groups ensures hovering near any dot in
-    // a stack reveals all events in that stack, not just the closest one.
+    // Trigger radius: proportional to the projection length so the
+    // event tooltip appears only when the cursor is genuinely near the
+    // marker, regardless of how long the horizon is.
+    // 1.2 × one-day width, clamped to [6, 10] SVG units.
+    const oneDaySvg = innerW / Math.max(1, proj.length - 1);
+    const triggerPx = Math.min(10, Math.max(6, oneDaySvg * 1.2));
     const groups = svg._markerGroups || [];
     const nearMarkers = [];
     for (const g of groups) {
       const gx = xFor(g[0].i);
-      if (Math.abs(gx - rawX) < 12) { for (const m of g) nearMarkers.push(m); }
+      if (Math.abs(gx - rawX) < triggerPx) { for (const m of g) nearMarkers.push(m); }
     }
 
     let html = `
