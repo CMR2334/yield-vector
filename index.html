@@ -980,8 +980,8 @@ a { color: inherit; text-decoration: none; }
   height: 44px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: var(--space-2) var(--space-3);
+  justify-content: flex-start;
+  padding: 5px var(--space-3) 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
@@ -996,8 +996,17 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  justify-content: center;
 }
-.timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+/* Name span: truncate with ellipsis; line-height 1.35 ensures descenders (g,y,p) aren't clipped */
+.tl-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+  min-width: 0;
+}
+.timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; line-height: 1.3; }
 
 .timeline-row-track {
   position: relative;
@@ -1590,13 +1599,14 @@ table.data-table {
     scrollbar-width: thin;
   }
   .timeline-row-label {
-    font-size: 11px;
-    padding: 6px 8px;
+    font-size: 12px;
+    padding: 5px 8px 6px;
   }
   .timeline-row-label > span:first-child {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.35;
   }
   .timeline-row-label .sub { font-size: 10px; }
   .tl-axis-tick { font-size: 10px; }
@@ -1618,7 +1628,6 @@ table.data-table {
   .field[style*="grid-column"] { grid-column: auto !important; }
   .section-header h2 { font-size: 20px; }
   .planner-add-btn { display: none; }
-  .timeline-row-label { font-size: 12px; padding: 6px 8px; }
 }
 
 @media (max-width: 480px) {
@@ -1669,6 +1678,7 @@ table.data-table {
   /* Timeline rows: compress slightly so more rows fit on screen. */
   .timeline-wrap { padding: var(--space-4); }
   .timeline-row-label, .timeline-row-track { height: 38px; }
+  .timeline-row-label { padding-top: 3px; padding-bottom: 4px; }
   .timeline-row-label.axis, .timeline-row-track.axis { height: 26px; }
   /* Modal: cap at 480 px centered so inputs feel proportional rather
      than stretched edge-to-edge across a 720+ px landscape viewport.
@@ -3624,7 +3634,7 @@ function renderTimeline() {
           });
           const labelHtml = validRows.map(r => `
             <div class="timeline-row-label">
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label)}</span>
+              <span class="tl-row-name">${escapeHtml(r.label)}</span>
               <span class="sub">${escapeHtml(r.sub)}</span>
             </div>
           `).join('');
