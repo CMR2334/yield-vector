@@ -175,6 +175,9 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500;
   color: var(--text-secondary);
   transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .nav-btn:hover { color: var(--text); background: var(--accent-soft); }
@@ -1249,7 +1252,9 @@ a { color: inherit; text-decoration: none; }
   /* Ensure empty date inputs match the height of text inputs */
   min-height: 44px !important;
   height: 44px !important;
-  line-height: 44px !important;
+  line-height: normal !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 .checkbox-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: 4px 0; }
@@ -2867,6 +2872,13 @@ function renderShell() {
 }
 
 function renderHeader() {
+  const NAV_ICONS = {
+    overview:  'M3 10L12 2l9 8v11H3V10zM9 21V14h6v7',
+    planner:   'M13 2L4 14h8L10 22 20 11h-8L13 2z',
+    timeline:  'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14',
+    offers:    'M2 5h20v14H2V5zM2 10h20M6 15h4',
+    settings:  'M4 6h16M4 12h16M4 18h16M8 4v4M12 10v4M16 16v4'
+  };
   const views = [
     ['overview', 'Overview'],
     ['planner', 'Planner'],
@@ -2918,7 +2930,7 @@ function renderHeader() {
         <span class="brand-name">Yield Vector</span>
       </div>
       <nav class="primary-nav">
-        ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}">${l}</button>`).join('')}
+        ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_ICONS[k]}"/></svg>${l}</button>`).join('')}
       </nav>
       <div class="header-trailing">
         ${renderSyncIndicator()}
