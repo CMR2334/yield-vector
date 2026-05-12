@@ -39,6 +39,55 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-04-28 — Session C (claude-opus-4-7)
+**Round 27 — offer types (DD / Held / Other) + US business-day math**
+- **New offer-type field** on `Offer`: `offerType: 'new-funds-held' |
+  'direct-deposit' | 'other'`, default `'new-funds-held'` on new offers
+  and back-filled for any legacy offer that loads without one.
+- **directDeposits[]** array on DD offers: `{ plannedDate, amount }`
+  per entry. Modal renders a dynamic add/remove sub-form for these
+  (renderDdRow, addDdRow, removeDdRow, readDdRowsFromForm). DD entries
+  section is hidden unless the type radio is set to direct-deposit;
+  toggle wired via a local form `change` listener inside
+  `showOfferModal()` so it doesn't leak into the global event bus.
+- **Business-day calendar** — `usFederalHolidays(year)` computes the
+  11 Fed/ACH holidays dynamically each year. Fixed-date holidays
+  follow the standard Sat→Fri, Sun→Mon observed shift; floating ones
+  (MLK 3rd-Mon-Jan, Memorial last-Mon-May, Thanksgiving 4th-Thu-Nov,
+  etc.) compute via `_nthWeekdayOfMonth` and `_lastWeekdayOfMonth`.
+  Cached per year. Helpers: `isUsBankHoliday`, `isBusinessDay`,
+  `nextBusinessDay`, plus `directDepositEffectiveDate(dd)` which
+  returns the YYYY-MM-DD of the next business day if the user-entered
+  plannedDate is a weekend/holiday, else the planned date itself.
+- **Decisions applied per the user's "ship it"**:
+  1. `requiredFundingAmount` stays as the bank's target on DD offers.
+     `directDeposits[]` is the planned hits. Both visible. (a)
+  2. DD hold period starts after the FINAL DD effective date —
+     `lockStartDate(o) = max(dd.effectiveDate)` for DD offers,
+     `withdrawalEligibleDate(o) = lockStart + daysFundsMustRemain`. (a)
+  3. Lossless: store the user-entered plannedDate; derive
+     effectiveDate on the fly. Card shows both (with a "⇢" hint and
+     tooltip "Planned X shifted to next business day") so the user
+     can see why the chart shifted. (a)
+- **Projection engine** updated: for DD offers, each DD applies its
+  own `applyCommitment(amount, effectiveDate, withdrawalEligibleDate)`
+  so tied-up capital accumulates step-wise as each DD lands rather
+  than appearing as one block at the final DD date.
+- **Visual differentiation:**
+  - Card: type chip in the chip row (`DD` teal / `Held` indigo /
+    `Other` neutral). DD offers also render a teal-tinted
+    `.offer-dds` block with one row per DD: `DD N · $X · Mon Jan 5`
+    plus a `⇢` glyph when the planned date was shifted forward.
+  - Chart: per-DD fund markers (`#2d9cdb` teal) replace the single
+    `#5b5cf6` indigo fund marker for DD offers. New `dd-fund` marker
+    type, light-color `#8ecae6` in tooltip, new legend swatch.
+    Deposit-deadline marker is suppressed for DD offers (the
+    deadline concept doesn't apply once you're tracking individual
+    DD dates).
+- **Validation:** `isOfferComplete()` and `offerIssues()` require
+  `directDeposits.length > 0` and `every(dd => date && amount > 0)`
+  for DD offers. Held/Other behave as before.
+
+### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 26 — modal form containment wall (date-input cutoff fix)**
 - Fields 5 + 6 of the Add-Offer modal ("Offer expires", "Planned signup
   date") were still overflowing on iOS even after the Round 24 flex-
