@@ -1,20 +1,13 @@
 /**
- * auto-push.js — watches for file changes and auto-commits/pushes to GitHub
+ * auto-push.js — watches index.html and auto-commits/pushes to GitHub on save.
  *
- * Setup (one-time):
- *   1. cd /Users/collinrekowski/Automation/Churning
- *   2. git init
- *   3. git add index.html
- *   4. git commit -m "initial"
- *   5. Create a repo on github.com (e.g. "Churning"), then:
- *      git remote add origin https://github.com/YOUR_USERNAME/Churning.git
- *      git branch -M main
- *      git push -u origin main
- *   6. On GitHub: Settings → Pages → Source: "Deploy from a branch" → main / root
- *   7. npm install   (installs chokidar)
- *   8. node auto-push.js
+ * Repo:     https://github.com/CMR2334/yield-vector
+ * Live URL: https://CMR2334.github.io/yield-vector/
  *
- * Your app will then live at: https://YOUR_USERNAME.github.io/Churning/
+ * Usage:
+ *   node auto-push.js
+ *
+ * Requires: gh auth done, remote set, Pages enabled on main/root.
  */
 
 const chokidar = require('chokidar');
