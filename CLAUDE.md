@@ -1,5 +1,15 @@
 # Yield Vector — Claude Code Instructions
 
+## Pre-Approved Access
+Collin pre-approves all Bash, Read, Edit, Write, and computer-use actions for:
+- All paths under /Users/collinrekowski/Automation/
+- ~/Library/LaunchAgents/
+- /tmp/
+No need to request confirmation for these locations in any session.
+See ../USER_PROFILE.md for full working preferences.
+
+
+
 ## Read first
 **At the start of every session, read [HANDOFF.md](HANDOFF.md).** It is the
 cross-session changelog — recent rounds describe what the previous session
@@ -78,3 +88,8 @@ This project runs with `bypassPermissions` mode — all tool calls (Bash, Read, 
 node auto-push.js   # watches index.html, auto-commits + pushes on save
 ```
 Requires: `gh auth login` done once, remote set to GitHub, GitHub Pages enabled on main/root.
+
+## Shared Documentation
+- User profile and preferences: /Users/collinrekowski/Automation/USER_PROFILE.md
+- Workflow preferences: /Users/collinrekowski/Automation/PREFERENCES.md
+- Automation workspace overview: /Users/collinrekowski/Automation/CONTEXT.md
