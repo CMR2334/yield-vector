@@ -3754,7 +3754,7 @@ function renderTimeline() {
     if (!App.filters.timelineShowCompleted && c.status === 'completed') continue;
     rows.push({
       id: c.id,
-      label: c.commitmentName.replace(/ — Bonus$/, ''),
+      label: c.commitmentName.replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, ''),
       sub: `${formatCurrency(c.amount)} · ${c.type === 'minimum balance' ? 'Min Bal' : c.type}`,
       start: parseDate(c.startDate),
       end: parseDate(c.endDate),
@@ -3773,7 +3773,7 @@ function renderTimeline() {
     if (!sStart || !sEnd) continue;
     rows.push({
       id: o.id,
-      label: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`,
+      label: (() => { const n = (o.offerName || '').replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, '').trim(); return n ? `${o.bankName} — ${n}` : o.bankName; })(),
       sub: `${formatCurrency(o.requiredFundingAmount)} · ${STATUS_LABELS[o.status] || o.status}`,
       start: sStart,
       end: sEnd,
