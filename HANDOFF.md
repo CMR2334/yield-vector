@@ -39,6 +39,16 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-05-17 — Session (claude-sonnet-4-6)
+**Round 30 — README.md**
+- Created `README.md` at repo root. Covers: what the app does, live URL, local dev
+  (no build step, `node auto-push.js`), architecture (single-file PWA, key function
+  table), offer types, business-day logic, GitHub Pages deploy protocol, task
+  workflow (HANDOFF/AGENTS/CHANGELOG/SHORTCUT_SETUP), and pending items (iOS
+  Reminders Shortcut, DoC URL ingestion).
+- Applied Rounds 28–29 fixes (OTHER centering, modal field order, timeline
+  min-height) to the worktree branch so it stays in sync with main.
+
+### 2026-05-17 — Session (claude-sonnet-4-6)
 **Round 29 — Timeline label polish**
 - `commitmentName()`: no longer appends " Bonus" fallback — uses `bankName` only
 - Timeline label strips `/ — Bonus$/` from existing stored commitment names (`~line 3757`)
