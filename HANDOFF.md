@@ -38,6 +38,12 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-17 — Session (claude-sonnet-4-6)
+**Round 29 — Timeline label polish**
+- `commitmentName()`: no longer appends " Bonus" fallback — uses `bankName` only
+- "minimum balance" type sub-label now shows "Min Bal" instead of full string
+- Mobile timeline left column narrowed from 96px → 80px
+
 ### 2026-05-16 — Session (claude-sonnet-4-6)
 **Round 28 — OTHER centering, modal field order, timeline compression**
 - **OTHER button centering** (`~line 1334`): Added `flex-wrap: nowrap` to
