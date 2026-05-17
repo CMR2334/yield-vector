@@ -38,6 +38,28 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-16 — Session (claude-sonnet-4-6)
+**Round 28 — OTHER centering, modal field order, timeline compression**
+- **OTHER button centering** (`~line 1334`): Added `flex-wrap: nowrap` to
+  `.radio-group` and converted labels to flex containers
+  (`display:flex; align-items:center; justify-content:center; flex:1 1 0%;
+  min-width:0`) so all three offer-type options render at equal width with
+  truly centered text regardless of content length or iOS flex quirks.
+- **Modal field order** (`~line 4903`): Moved "Bonus amount" field to appear
+  BEFORE "Offer type" in the add/edit offer modal. New order: Bank name →
+  Offer name → Bonus amount → Offer type → DD section → Required funding → …
+- **Timeline row heights** (`~line 1020, 1052, 1050, 1721`):
+  - `.timeline-row-label` and `.timeline-row-track`: changed `height: 44px`
+    to `min-height: 44px` so rows can grow if content overflows.
+  - `.timeline-row-label .sub`: added `white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis` to prevent sub text (e.g. "$1,500 · Confirmed")
+    from wrapping in the narrow 96px label column, which was the root cause
+    of clipping. With nowrap, label and track heights stay synchronized.
+  - Landscape `@media` override: removed the aggressive `height: 38px`
+    compression (replaced with `min-height: 44px` matching portrait) and
+    restored normal padding (`5px/6px`) so the sub line is never clipped.
+    Axis rows similarly relaxed: `height: 26px` → `min-height: 32px`.
+
 ### 2026-04-28 — Session C (claude-opus-4-7)
 **Round 27 — offer types (DD / Held / Other) + US business-day math**
 - **New offer-type field** on `Offer`: `offerType: 'new-funds-held' |
