@@ -41,6 +41,7 @@ This matters because:
 ### 2026-05-17 — Session (claude-sonnet-4-6)
 **Round 29 — Timeline label polish**
 - `commitmentName()`: no longer appends " Bonus" fallback — uses `bankName` only
+- Timeline label strips `/ — Bonus$/` from existing stored commitment names (`~line 3757`)
 - "minimum balance" type sub-label now shows "Min Bal" instead of full string
 - Mobile timeline left column narrowed from 96px → 80px
 
