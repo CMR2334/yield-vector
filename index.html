@@ -1626,7 +1626,7 @@ table.data-table {
      pinned regardless of where the user scrolls the bars. */
   .timeline-wrap { padding: var(--space-3); }
   .timeline-labels-col {
-    flex: 0 0 96px;
+    flex: 0 0 80px;
     /* Sticky-belt-and-suspenders: even though labels-col is outside
        the scroll container, position:sticky here keeps it pinned if
        the layout is ever flattened into a single scroll context. */
@@ -2893,7 +2893,7 @@ function convertOfferToCommitment(offer) {
   if (!start || !end) return null;
   return {
     id: uid('cmt'),
-    commitmentName: `${offer.bankName} — ${offer.offerName || 'Bonus'}`,
+    commitmentName: offer.offerName ? `${offer.bankName} — ${offer.offerName}` : offer.bankName,
     sourceBonusOfferId: offer.id,
     amount: Number(offer.requiredFundingAmount),
     startDate: start,
@@ -3755,7 +3755,7 @@ function renderTimeline() {
     rows.push({
       id: c.id,
       label: c.commitmentName,
-      sub: `${formatCurrency(c.amount)} · ${c.type}`,
+      sub: `${formatCurrency(c.amount)} · ${c.type === 'minimum balance' ? 'Min Bal' : c.type}`,
       start: parseDate(c.startDate),
       end: parseDate(c.endDate),
       status: c.status,
