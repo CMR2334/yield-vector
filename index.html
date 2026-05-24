@@ -4047,11 +4047,11 @@ function renderSettings() {
         </div>
         <div class="field">
           <label for="s-buffer">Minimum cash buffer</label>
+          <span class="field-hint">Days below this threshold are flagged but not breached.</span>
           <div class="input-group">
             <span class="input-prefix">$</span>
             <input id="s-buffer" type="number" step="100" class="input" value="${s.minimumCashBuffer}" data-setting="minimumCashBuffer" />
           </div>
-          <span class="field-hint">Days below this threshold are flagged but not breached.</span>
         </div>
         <div class="field">
           <label for="s-start">Projection start date</label>
@@ -4059,6 +4059,7 @@ function renderSettings() {
         </div>
         <div class="field">
           <label for="s-horizon-mode">Projection horizon</label>
+          <span class="field-hint">Currently showing <strong>${effectiveHorizonDays(App.state)} days</strong>.</span>
           <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
             <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 month past last bonus, max 6 months)</option>
             <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
@@ -4067,7 +4068,6 @@ function renderSettings() {
             <option value="2years" ${s.projectionHorizonMode === '2years' ? 'selected' : ''}>2 years</option>
             <option value="custom" ${s.projectionHorizonMode === 'custom' ? 'selected' : ''}>Custom days…</option>
           </select>
-          <span class="field-hint">Currently showing <strong>${effectiveHorizonDays(App.state)} days</strong>.</span>
         </div>
         ${(s.projectionHorizonMode === 'custom') ? `
         <div class="field">
@@ -4076,8 +4076,8 @@ function renderSettings() {
         </div>` : ''}
         <div class="field">
           <label for="s-max">Optimizer max candidates</label>
-          <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
           <span class="field-hint">Brute force evaluates 2^n subsets. 15 ≈ 32k subsets.</span>
+          <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
         </div>
         <div class="field">
           <label>Default lock interval start</label>
@@ -4257,13 +4257,13 @@ function renderSyncSection() {
       <div class="form-grid">
         <div class="field">
           <label for="sync-gist">Gist ID</label>
-          <input id="sync-gist" class="input" type="text" placeholder="e.g. a1b2c3d4e5..." value="${escapeAttr(cfg.gistId || '')}" autocomplete="off" spellcheck="false" />
           <span class="field-hint">From the Gist URL: <code>gist.github.com/&lt;you&gt;/<strong>this-part</strong></code></span>
+          <input id="sync-gist" class="input" type="text" placeholder="e.g. a1b2c3d4e5..." value="${escapeAttr(cfg.gistId || '')}" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
           <label for="sync-token">Personal Access Token</label>
-          <input id="sync-token" class="input" type="password" placeholder="ghp_... or github_pat_..." value="${escapeAttr(cfg.token || '')}" autocomplete="off" spellcheck="false" />
           <span class="field-hint">Stored locally per device. Scope: only <strong>gist</strong>.</span>
+          <input id="sync-token" class="input" type="password" placeholder="ghp_... or github_pat_..." value="${escapeAttr(cfg.token || '')}" autocomplete="off" spellcheck="false" />
         </div>
       </div>
 
