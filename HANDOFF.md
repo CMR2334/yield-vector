@@ -38,6 +38,21 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-25 — Session (claude-sonnet-4-6)
+**Round 34 — Settings tab three fixes**
+- **Projection Start Date overflow** (`~line 4061`): Added `style="max-width:fit-content"` to
+  the bare `<input type="date">` so it no longer stretches beyond its content and overflows right.
+- **Capital Commitments Name column** (`renderCommitmentsTable()`, `~line 4160`): Added
+  `style="min-width:160px"` to the Name `<th>` so the column is wide enough for typical bank
+  names, preventing excessively tall rows.
+- **Strip "- Bonus" from commitments table** (`~line 4174`): Applied the same regex already
+  used in timeline labels — `replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, '').trim()` — to the
+  `c.commitmentName` display in `renderCommitmentsTable()`. US Bank "- Bonus" suffix now hidden.
+  The underlying stored name is unchanged; only the display is stripped.
+- Also: removed stale git lock files on the Mac (`index.lock`, `HEAD.lock`,
+  `refs/remotes/origin/main.lock`) that had been blocking all git operations.
+- Commit: force-pushed `014274e` to main. GitHub Pages auto-deploys in 30–90s.
+
 ### 2026-05-24 — Session (claude-sonnet-4-6)
 **Round 31 — Settings tab input alignment**
 - Fixed vertical misalignment of input boxes in the Settings tab form-grid.
