@@ -38,6 +38,21 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-24 — Session (claude-sonnet-4-6)
+**Round 31 — Settings tab input alignment**
+- Fixed vertical misalignment of input boxes in the Settings tab form-grid.
+- Root cause: `.field` uses `display:flex; flex-direction:column` with `margin-top:auto`
+  on inputs to bottom-pin them. Fields with a `.field-hint` *below* the input had the
+  hint consuming space at the very bottom, so those inputs landed higher than hint-free
+  fields — visually misaligned.
+- Fix: moved all `.field-hint` spans to appear **above** their input/select/input-group
+  in the HTML (between the label and the control). This is a common "helper text"
+  pattern. The `margin-top:auto` on the control now correctly pushes it to the bottom
+  in every cell regardless of hint presence.
+- Changed fields: Minimum cash buffer, Projection horizon, Optimizer max candidates,
+  Gist ID, Personal Access Token (all in `renderSettingsTab()`).
+- Commit: `d0057f0` — pushed to main, GitHub Pages auto-deploys.
+
 ### 2026-05-17 — Session (claude-sonnet-4-6)
 **Round 30 — README.md**
 - Created `README.md` at repo root. Covers: what the app does, live URL, local dev
