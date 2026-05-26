@@ -917,6 +917,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .chip {
+  display: inline-block;
   font-size: 11px;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
@@ -4157,7 +4158,7 @@ function renderCommitmentsTable() {
       <table class="data-table">
         <thead>
           <tr>
-            <th style="min-width:160px;">Name</th>
+            <th>Name</th>
             <th class="num">Amount</th>
             <th>Start</th>
             <th>End</th>
