@@ -38,6 +38,56 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-28 — Session (claude-sonnet-4-6)
+**Round 35 — Task watcher remediation (remote, Collin away for a week)**
+
+This session worked exclusively on the `task-watcher.js` system, NOT Yield Vector UI.
+Changes are in `/Users/collinrekowski/Automation/`, not in this repo.
+
+**What was done (all remotely, no Mac interaction required):**
+
+1. **Created `capone-offers/CLAUDE.md`** — The project directory was completely empty (no
+   CLAUDE.md), so every watcher-invoked claude session in that dir exited immediately.
+   File now gives claude the full context: what the project is, how to read the Apple Note
+   via osascript, how to check GitHub issues, pre-approved access, bypassPermissions note.
+
+2. **Added `readNoteViaOsascript()` to `task-watcher.js`** — New function that tries
+   `/usr/bin/osascript` inline to read Notes before falling back to `read-note.app`.
+   Strips HTML (`<br>` → newline, tags stripped, entities decoded) so output is parseable
+   by the existing `parseChecklistItems()` function. Both approaches still fail in mtime-only
+   mode (TCC permission not granted for background process) — same behavior as before —
+   but the new approach is simpler and has a different TCC identity, which may behave
+   differently once Collin is back.
+
+3. **Modified `readNote()` in `task-watcher.js`** — Now tries `readNoteViaOsascript` first.
+   On success, returns content immediately. On failure, logs "osascript Notes read failed...
+   -- trying read-note.app" and falls through to read-note.app. On read-note.app success,
+   returns content with no failure count increment (osascript failure ≠ Notes permission failure).
+
+4. **Updated non-notes-trigger claude prompt** — When claude is invoked from a GitHub issue
+   change or mtime trigger, it now gets explicit osascript instructions to try reading the
+   Apple Note directly, including how to strip HTML and parse checklist items.
+
+5. **Updated `prime-notes-permission.sh`** — Now auto-restarts the watcher after a successful
+   permission grant, instead of just printing restart instructions.
+
+6. **Watcher restarted** — Running cleanly. Correct startup sequence confirmed in log:
+   "osascript Notes read failed... -- trying read-note.app" → mtime-only mode → "Task Watcher is running."
+
+**What CANNOT be done remotely:**
+- Granting Apple Notes TCC permission — requires clicking the dialog in System Settings or
+  in the permission prompt. When Collin returns, run `./prime-notes-permission.sh` from Terminal;
+  it will now auto-restart the watcher after the click. After that, the watcher will be in
+  content-comparison mode.
+
+**Watcher status as of this session:**
+- Running (launchd auto-start on login) ✓
+- GitHub ETag polling: 30-min interval, auth valid ✓
+- Notes mode: mtime-only (expected — TCC permission pending)
+- capone-offers now has CLAUDE.md ✓
+
+---
+
 ### 2026-05-25 — Session (claude-sonnet-4-6)
 **Round 34 — Settings tab three fixes**
 - **Projection Start Date overflow** (`~line 4061`): Added `style="max-width:fit-content"` to
