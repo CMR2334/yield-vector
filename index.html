@@ -3777,7 +3777,7 @@ function renderTimeline() {
     if (!sStart || !sEnd) continue;
     rows.push({
       id: o.id,
-      label: (() => { const n = (o.offerName || '').replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, '').trim(); return n ? `${o.bankName} — ${n}` : o.bankName; })(),
+      label: o.bankName,
       sub: `${formatCurrency(o.requiredFundingAmount)} · ${STATUS_LABELS[o.status] || o.status}`,
       start: sStart,
       end: sEnd,
