@@ -5064,7 +5064,7 @@ function renderHeroChart(svg) {
 
     let html = `
       <div class="tt-date">${formatDateLong(d.date)}</div>
-      <div class="tt-row"><span class="label">Available</span><span style="color:#dadcff;"><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
+      <div class="tt-row"><span class="label">Available</span><span style="color:#8e90ff;"><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
       <div class="tt-row"><span class="label">Tied up</span><span>${formatCurrency(d.totalTiedUp)}</span></div>
       ${d.netEventsToDate !== 0 ? `<div class="tt-row"><span class="label">Net events</span><span>${(d.netEventsToDate >= 0 ? '+' : '') + formatCurrency(d.netEventsToDate)}</span></div>` : ''}
     `;
