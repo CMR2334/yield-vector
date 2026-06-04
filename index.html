@@ -743,8 +743,25 @@ a { color: inherit; text-decoration: none; }
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   transition: background 0.1s;
+  position: relative;
+  /* Reserve 6px on the left so the optional offer-color stripe doesn't
+     shove the day/title columns inward when present. */
+  padding-left: calc(var(--space-4) + 2px);
 }
 .action-row:hover { background: var(--bg); }
+/* Per-offer color stripe — 3px vertical bar pinned to the row's left
+   edge. Only appears when the action's offer has a color set; rows for
+   commitments and capital events stay un-striped. */
+.action-row.has-color::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--offer-color);
+}
 
 /* Mobile: tighter columns, tag wraps under the title so nothing collides */
 @media (max-width: 480px) {
@@ -3534,24 +3551,25 @@ function computeUpcomingActions(state, limit = 12) {
   const items = [];
   for (const o of state.offers) {
     if (o.status === 'completed' || o.status === 'skipped') continue;
+    const offerColor = offerColorHex(o); // '' when none — caller hides the stripe
     if (o.offerExpirationDate) {
       const d = parseDate(o.offerExpirationDate);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn' });
+        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn', color: offerColor });
       }
     }
     const dd = depositDeadline(o);
     if (dd) {
       const d = parseDate(dd);
       if (d && d >= TODAY && d <= horizonEnd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
-        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger' });
+        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger', color: offerColor });
       }
     }
     const we = withdrawalEligibleDate(o);
     if (we && (o.status === 'funded' || o.status === 'applied')) {
       const d = parseDate(we);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success' });
+        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success', color: offerColor });
       }
     }
   }
@@ -3614,7 +3632,7 @@ function renderActionRow(item) {
   const month = item.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const day = item.date.getDate();
   return `
-    <div class="action-row">
+    <div class="action-row${item.color ? ' has-color' : ''}"${item.color ? ` style="--offer-color:${item.color};"` : ''}>
       <div class="action-day">
         <span class="month">${month}</span>
         <span class="day">${day}</span>
@@ -4832,7 +4850,7 @@ function renderHeroChart(svg) {
     if (nearMarkers.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.18);margin-top:6px;padding-top:6px;">`;
       for (const m of nearMarkers) {
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${lightenColor(m.color)};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${lightenColor(m.color)};font-weight:600;display:inline-flex;align-items:center;gap:5px;">${m.offerColor ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${m.offerColor};flex-shrink:0;"></span>` : ''}${escapeHtml(m.name || m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span>${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:#8ecae6;">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:#fca5a5;">${formatCurrency(m.amount)}</span></div>`;
