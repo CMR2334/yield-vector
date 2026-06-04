@@ -4479,9 +4479,10 @@ function renderEventsTable() {
           <tr>
             <th>Event</th>
             <th>Date</th>
-            <th class="num">Amount</th>
+            <th style="text-align:center;">Amount</th>
             <th>Category</th>
-            <th>In projection</th>
+            <th style="text-align:center;">Include</th>
+            <th style="text-align:center;">Display</th>
             <th></th>
           </tr>
         </thead>
@@ -4490,9 +4491,10 @@ function renderEventsTable() {
             <tr>
               <td><div style="font-weight:500;">${escapeHtml(e.eventName)}</div>${e.notes ? `<div style="font-size:11px;color:var(--text-tertiary);">${escapeHtml(e.notes)}</div>` : ''}</td>
               <td>${formatDateMedium(e.date)}</td>
-              <td class="num" style="color:${e.amount >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:600;">${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}</td>
+              <td style="text-align:center;color:${e.amount >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:600;font-feature-settings:'tnum' 1;">${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}</td>
               <td><span class="chip chip-muted">${escapeHtml(e.category)}</span></td>
-              <td>${e.includeInProjection ? '✓' : '—'}</td>
+              <td style="text-align:center;">${e.includeInProjection ? '✓' : '—'}</td>
+              <td style="text-align:center;">${e.showOnChart !== false ? '✓' : '—'}</td>
               <td>
                 <div class="row-action-buttons">
                   <button class="btn-icon" data-action="edit-event" data-id="${e.id}" aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
@@ -5732,8 +5734,8 @@ function showEventModal(eventId = null) {
           </div>
           <div class="field" style="grid-column:1/-1;">
             <label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label>
-            <label class="checkbox-row" style="margin-top:6px;"><input type="checkbox" name="showOnChart" ${e.showOnChart !== false ? 'checked' : ''} /><span>Show on Overview chart</span></label>
-            <span class="field-hint">Uncheck "Show on chart" to keep the event in your running balance without cluttering the chart with markers — useful for paychecks and recurring bills.</span>
+            <label class="checkbox-row" style="margin-top:6px;"><input type="checkbox" name="showOnChart" ${e.showOnChart !== false ? 'checked' : ''} /><span>Display on Overview chart</span></label>
+            <span class="field-hint">Uncheck "Display on chart" to keep the event in your running balance without cluttering the chart with markers — useful for paychecks and recurring bills.</span>
           </div>
           <div class="field">
             <label for="e-recur">Recurrence</label>
