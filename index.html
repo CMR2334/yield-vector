@@ -749,6 +749,9 @@ a { color: inherit; text-decoration: none; }
   padding-left: calc(var(--space-4) + 2px);
 }
 .action-row:hover { background: var(--bg); }
+.action-row.clickable { cursor: pointer; }
+.action-row.clickable:active { transform: translateY(0.5px); }
+.action-row.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Per-offer color stripe — 3px vertical bar pinned to the row's left
    edge. Only appears when the action's offer has a color set; rows for
    commitments and capital events stay un-striped. */
@@ -1929,7 +1932,7 @@ const OFFER_COLOR_PALETTE = [
   { name: 'amber',   hex: '#d97706', label: 'Amber' },
   { name: 'orange',  hex: '#ea580c', label: 'Orange' },
   { name: 'rose',    hex: '#e11d48', label: 'Rose' },
-  { name: 'pink',    hex: '#db2777', label: 'Pink' },
+  { name: 'pink',    hex: '#d6336c', label: 'Pink' },
   { name: 'violet',  hex: '#8b5cf6', label: 'Violet' },
   { name: 'brown',   hex: '#92400e', label: 'Brown' },
   { name: 'slate',   hex: '#475569', label: 'Slate' }
@@ -3551,25 +3554,25 @@ function computeUpcomingActions(state, limit = 12) {
   const items = [];
   for (const o of state.offers) {
     if (o.status === 'completed' || o.status === 'skipped') continue;
-    const offerColor = offerColorHex(o); // '' when none — caller hides the stripe
+    const offerColor = offerColorHex(o);
     if (o.offerExpirationDate) {
       const d = parseDate(o.offerExpirationDate);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn', color: offerColor });
+        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn', color: offerColor, targetKind: 'offer', targetId: o.id });
       }
     }
     const dd = depositDeadline(o);
     if (dd) {
       const d = parseDate(dd);
       if (d && d >= TODAY && d <= horizonEnd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
-        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger', color: offerColor });
+        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger', color: offerColor, targetKind: 'offer', targetId: o.id });
       }
     }
     const we = withdrawalEligibleDate(o);
     if (we && (o.status === 'funded' || o.status === 'applied')) {
       const d = parseDate(we);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success', color: offerColor });
+        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success', color: offerColor, targetKind: 'offer', targetId: o.id });
       }
     }
   }
@@ -3578,7 +3581,7 @@ function computeUpcomingActions(state, limit = 12) {
     if (c.endDate) {
       const d = parseDate(c.endDate);
       if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Commitment release', name: c.commitmentName, sub: formatCompactCurrency(c.amount), tag: 'success' });
+        items.push({ date: d, kind: 'Commitment release', name: c.commitmentName, sub: formatCompactCurrency(c.amount), tag: 'success', targetKind: 'commitment', targetId: c.id });
       }
     }
   }
@@ -3586,7 +3589,7 @@ function computeUpcomingActions(state, limit = 12) {
     if (!e.includeInProjection) continue;
     const d = parseDate(e.date);
     if (d && d >= TODAY && d <= horizonEnd) {
-      items.push({ date: d, kind: e.amount >= 0 ? 'Inflow' : 'Outflow', name: e.eventName, sub: formatCurrency(e.amount), tag: e.amount >= 0 ? 'success' : '' });
+      items.push({ date: d, kind: e.amount >= 0 ? 'Inflow' : 'Outflow', name: e.eventName, sub: formatCurrency(e.amount), tag: e.amount >= 0 ? 'success' : '', targetKind: 'event', targetId: e.id });
     }
   }
   items.sort((a, b) => a.date - b.date);
@@ -3632,7 +3635,7 @@ function renderActionRow(item) {
   const month = item.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const day = item.date.getDate();
   return `
-    <div class="action-row${item.color ? ' has-color' : ''}"${item.color ? ` style="--offer-color:${item.color};"` : ''}>
+    <div class="action-row${item.color ? ' has-color' : ''}${item.targetKind ? ' clickable' : ''}"${item.color ? ` style="--offer-color:${item.color};"` : ''}${item.targetKind ? ` data-action="open-action-target" data-target-kind="${item.targetKind}" data-target-id="${escapeAttr(item.targetId)}" role="button" tabindex="0"` : ''}>
       <div class="action-day">
         <span class="month">${month}</span>
         <span class="day">${day}</span>
@@ -4846,6 +4849,45 @@ function renderHeroChart(svg) {
     };
     return map[hex] || hex;
   }
+  // Programmatic lightening for offer-palette colors so they read on
+  // the dark tooltip BG. HSL: raise L to ~72%, gentle desaturation so
+  // the navy/brown/slate don't blow out to neon. Used for the bank-
+  // name and amount columns in marker rows when an offer color is set.
+  function lightenHexForDark(hex) {
+    if (!hex || hex[0] !== '#') return hex;
+    let h = hex.slice(1);
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let hh, s, l = (max + min) / 2;
+    if (max === min) { hh = s = 0; }
+    else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: hh = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: hh = (b - r) / d + 2; break;
+        case b: hh = (r - g) / d + 4; break;
+      }
+      hh /= 6;
+    }
+    l = 0.74;
+    s = Math.max(s * 0.85, 0.42);
+    function hue2rgb(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    }
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const toHex = v => Math.round(v * 255).toString(16).padStart(2, '0');
+    return '#' + toHex(hue2rgb(p, q, hh + 1/3)) + toHex(hue2rgb(p, q, hh)) + toHex(hue2rgb(p, q, hh - 1/3));
+  }
 
   function handleHover(evt) {
     const rect = svg.getBoundingClientRect();
@@ -4886,16 +4928,25 @@ function renderHeroChart(svg) {
     if (nearMarkers.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.18);margin-top:6px;padding-top:6px;">`;
       for (const m of nearMarkers) {
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label">${markerTypeLabel(m.type)}</span><span style="color:${lightenColor(m.color)};font-weight:600;display:inline-flex;align-items:center;gap:5px;">${m.offerColor ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${m.offerColor};flex-shrink:0;"></span>` : ''}${escapeHtml(m.name || m.label)}</span></div>`;
-        if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span>${formatCurrency(m.amount)}</span></div>`;
-        if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:#8ecae6;">${formatCurrency(m.amount)}</span></div>`;
-        if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:#fca5a5;">${formatCurrency(m.amount)}</span></div>`;
+        // New tooltip style: drop the bullet. Left label = lightened
+        // event-type color (so "Direct deposit" itself is teal). Right
+        // side (bank name + amount) = lightened OFFER color when set,
+        // else lightened event color. Result: event-type reads at a
+        // vertical scan via labels; per-offer identity reads via the
+        // right-side text color.
+        const evColor = lightenColor(m.color);
+        const offerLight = m.offerColor ? lightenHexForDark(m.offerColor) : '';
+        const idColor = offerLight || evColor;
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'withdraw') {
-          if (m.amount) html += `<div class="tt-row"><span class="label">Released</span><span>${formatCurrency(m.amount)}</span></div>`;
-          if (m.bonus) html += `<div class="tt-row"><span class="label">Bonus</span><span style="color:#6ee7b7;">+${formatCurrency(m.bonus)}</span></div>`;
+          if (m.amount) html += `<div class="tt-row"><span class="label">Released</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
+          if (m.bonus) html += `<div class="tt-row"><span class="label">Bonus</span><span style="color:${idColor};">+${formatCurrency(m.bonus)}</span></div>`;
         }
-        if (m.type === 'bonus' && m.amount) html += `<div class="tt-row"><span class="label">Payout</span><span style="color:#6ee7b7;">+${formatCurrency(m.amount)}</span></div>`;
-        if ((m.type === 'event-inflow' || m.type === 'event-outflow') && m.amount) html += `<div class="tt-row"><span class="label">Amount</span><span style="color:${m.amount >= 0 ? '#6ee7b7' : '#fcd34d'};">${m.amount >= 0 ? '+' : ''}${formatCurrency(m.amount)}</span></div>`;
+        if (m.type === 'bonus' && m.amount) html += `<div class="tt-row"><span class="label">Payout</span><span style="color:${idColor};">+${formatCurrency(m.amount)}</span></div>`;
+        if ((m.type === 'event-inflow' || m.type === 'event-outflow') && m.amount) html += `<div class="tt-row"><span class="label">Amount</span><span style="color:${idColor};">${m.amount >= 0 ? '+' : ''}${formatCurrency(m.amount)}</span></div>`;
       }
       html += `</div>`;
     }
@@ -5490,14 +5541,29 @@ function showEventModal(eventId = null) {
       </div>
       <form class="modal-body" id="event-form">
         <div class="form-grid">
-          <div class="field" style="grid-column: 1 / -1;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
+          <div class="field"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
           <div class="field"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div>
+          <!-- Linked-offer selector: required when category = bonus payout
+               (visibility toggled via JS on the change event below). Auto-
+               fills the Name field with the offer's bank/offer name on
+               selection so the chart marker matches the offer card. -->
+          <div class="field" id="e-offer-field" style="grid-column:1/-1;${e.category === 'bonus payout' ? '' : 'display:none;'}">
+            <label for="e-offer">Linked offer *</label>
+            <select id="e-offer" class="select" name="sourceBonusOfferId">
+              <option value="">— Select offer —</option>
+              ${App.state.offers.filter(o => o.status !== 'skipped').map(o => {
+                const lbl = o.bankName + (o.offerName ? ' — ' + o.offerName : '');
+                return `<option value="${o.id}" ${e.sourceBonusOfferId === o.id ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+              }).join('')}
+            </select>
+            <span class="field-hint">Bonus payouts must match an existing offer so naming and identity color stay in sync with the offer card.</span>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
           <div class="field"><label for="e-amount">Amount * (negative for outflows)</label>
             <div class="input-group"><span class="input-prefix">$</span>
               <input id="e-amount" class="input" type="number" step="0.01" required value="${e.amount}" name="amount" />
             </div>
           </div>
-          <div class="field"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
           <div class="field"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
           <div class="field" style="grid-column:1/-1;"><label for="e-notes">Notes</label><textarea id="e-notes" class="textarea" name="notes">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
@@ -5509,7 +5575,32 @@ function showEventModal(eventId = null) {
     </div>
   `;
   modal.classList.add('open');
-  setTimeout(() => document.getElementById('e-name')?.focus(), 50);
+  setTimeout(() => {
+    document.getElementById('e-name')?.focus();
+    // Show/hide the linked-offer field based on category; auto-fill the
+    // Name when an offer is picked under "bonus payout" so the chart
+    // marker and the offer card stay name-consistent without the user
+    // having to retype the bank name.
+    const form = document.getElementById('event-form');
+    if (!form) return;
+    const offerField = form.querySelector('#e-offer-field');
+    const offerSelect = form.querySelector('#e-offer');
+    const nameInput = form.querySelector('#e-name');
+    form.addEventListener('change', (ev) => {
+      if (ev.target.id === 'e-cat') {
+        const isBonus = ev.target.value === 'bonus payout';
+        if (offerField) offerField.style.display = isBonus ? '' : 'none';
+        if (offerSelect) offerSelect.required = isBonus;
+      }
+      if (ev.target.id === 'e-offer') {
+        const opt = ev.target.selectedOptions[0];
+        const catEl = form.querySelector('#e-cat');
+        if (opt && opt.value && catEl && catEl.value === 'bonus payout' && nameInput) {
+          nameInput.value = opt.textContent.trim();
+        }
+      }
+    });
+  }, 50);
 }
 
 function readEventForm(idArg) {
@@ -5523,7 +5614,7 @@ function readEventForm(idArg) {
     date: data.date,
     amount: Number(data.amount),
     category: data.category,
-    sourceBonusOfferId: null,
+    sourceBonusOfferId: data.sourceBonusOfferId || null,
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
     notes: data.notes || ''
   };
@@ -5534,6 +5625,27 @@ function closeModal() {
   modal.classList.remove('open');
   modal.innerHTML = '';
   delete modal.dataset.strictClose;
+}
+
+// Route an "Upcoming actions" row click to the right edit-modal opener.
+// Offers go to the offers tab + open their card (so the user sees their
+// other offers as context); commitments and events open their edit modal
+// in place over the current view, since there's no dedicated tab for
+// either and the user just wants to fix the date or amount.
+function openActionTarget(kind, id) {
+  if (!kind || !id) return;
+  if (kind === 'offer') {
+    if (App.view !== 'offers') {
+      App.setView('offers');
+      setTimeout(() => showOfferModal(id), 80);
+    } else {
+      showOfferModal(id);
+    }
+  } else if (kind === 'commitment') {
+    showCommitmentModal(id);
+  } else if (kind === 'event') {
+    showEventModal(id);
+  }
 }
 
 /* ============================================================
@@ -5569,6 +5681,14 @@ function bindGlobalEvents() {
     if (e.key === 'Escape') {
       const modal = document.getElementById('modal-root');
       if (!modal?.dataset.strictClose) closeModal();
+    }
+    // Activate keyboard-focused upcoming-action rows with Enter or Space
+    if (e.key === 'Enter' || e.key === ' ') {
+      const row = e.target && e.target.closest && e.target.closest('.action-row.clickable');
+      if (row) {
+        e.preventDefault();
+        openActionTarget(row.dataset.targetKind, row.dataset.targetId);
+      }
     }
   });
   // Close modal on backdrop click (suppressed for offer modal to prevent losing in-progress data)
@@ -5642,6 +5762,7 @@ function onClick(e) {
 
     case 'add-event': showEventModal(); break;
     case 'edit-event': showEventModal(id); break;
+    case 'open-action-target': openActionTarget(target.dataset.targetKind, target.dataset.targetId); break;
     case 'delete-event': if (confirm('Delete this event?')) deleteEvent(id); break;
     case 'delete-event-from-modal': if (confirm('Delete this event?')) { deleteEvent(id); closeModal(); } break;
     case 'save-event': saveEventFromForm(id, target.dataset.isedit === '1'); break;
@@ -5848,6 +5969,12 @@ function saveEventFromForm(id, isEdit) {
   if (!ev) return;
   if (!ev.eventName) { toast('Name required', 'danger'); return; }
   if (!ev.date || !parseDate(ev.date)) { toast('Date required', 'danger'); return; }
+  // Bonus-payout events must link to an offer so the chart marker name
+  // and the offer-color dot stay in sync with the underlying offer card.
+  if (ev.category === 'bonus payout' && !ev.sourceBonusOfferId) {
+    toast('Bonus payout must be linked to an offer', 'danger');
+    return;
+  }
   App.update(s => {
     const idx = s.events.findIndex(x => x.id === id);
     if (idx >= 0) s.events[idx] = ev;
