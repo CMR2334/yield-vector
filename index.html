@@ -4913,17 +4913,17 @@ function renderHeroChart(svg) {
   }
   // Lighter mid-tone for tooltip text on dark background — readable on dark bg
   function lightenColor(hex) {
-    // Brighter event-type colors so the tooltip's left label (Withdrawal,
-    // Direct deposit, etc.) pops more on the dark BG. Each value below
-    // is the prior lightened tone bumped ~10–15% toward pure white in
-    // HSL, with saturation preserved so the hue stays recognizable.
+    // Very-bright tooltip event-type colors. Pushed to ~86% lightness
+    // in HSL while preserving hue — leaves enough saturation that
+    // "this is the indigo one" still reads, but the labels themselves
+    // pop crisply against the dark tooltip BG.
     const map = {
-      '#5b5cf6': '#c4c5ff',  // fund purple -> light + brighter
-      '#2d9cdb': '#aeddf2',  // DD teal -> light + brighter
-      '#10b981': '#8af0c5',  // green -> light + brighter
-      '#e87171': '#ffc1c1',  // red -> light + brighter
-      '#ef4444': '#ffc1c1',  // legacy red -> light + brighter
-      '#f59e0b': '#ffe27a',  // amber -> light + brighter
+      '#5b5cf6': '#dadcff',  // fund purple -> very light
+      '#2d9cdb': '#cdebfa',  // DD teal -> very light
+      '#10b981': '#b2f5d8',  // green -> very light mint
+      '#e87171': '#ffd6d6',  // red -> very light pink
+      '#ef4444': '#ffd6d6',  // legacy red -> very light pink
+      '#f59e0b': '#fff0a8',  // amber -> very light yellow
     };
     return map[hex] || hex;
   }
@@ -4999,7 +4999,7 @@ function renderHeroChart(svg) {
 
     let html = `
       <div class="tt-date">${formatDateLong(d.date)}</div>
-      <div class="tt-row"><span class="label">Available</span><span style="color:#c4c5ff;"><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
+      <div class="tt-row"><span class="label">Available</span><span style="color:#dadcff;"><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
       <div class="tt-row"><span class="label">Tied up</span><span>${formatCurrency(d.totalTiedUp)}</span></div>
       ${d.netEventsToDate !== 0 ? `<div class="tt-row"><span class="label">Net events</span><span>${(d.netEventsToDate >= 0 ? '+' : '') + formatCurrency(d.netEventsToDate)}</span></div>` : ''}
     `;
