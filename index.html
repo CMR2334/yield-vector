@@ -4487,10 +4487,24 @@ function renderHeroChart(svg) {
   // For direct-deposit offers, emit one fund marker per planned DD
   // (teal-tinted to differentiate from the held-offer indigo fund
   // marker) so each individual deposit shows on the chart.
+  //
+  // Tooltip naming: prefer bank-only ("Wings CU") to keep the tooltip
+  // narrow. Only fall back to bank + offer name ("Chase — Sapphire
+  // $1500") when the same bank has 2+ active offers in the projection —
+  // i.e. only when bank-alone would be ambiguous.
+  const activeOffers = App.state.offers.filter(o => offerIsActiveForProjection(o));
+  const bankActiveCount = new Map();
+  for (const o of activeOffers) {
+    bankActiveCount.set(o.bankName, (bankActiveCount.get(o.bankName) || 0) + 1);
+  }
+  const displayName = (o) => {
+    const ambiguous = (bankActiveCount.get(o.bankName) || 0) > 1;
+    return ambiguous && o.offerName ? `${o.bankName} — ${o.offerName}` : o.bankName;
+  };
   const markers = [];
   for (const o of App.state.offers) {
     if (!offerIsActiveForProjection(o)) continue;
-    const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+    const name = displayName(o);
     const withd = parseDate(withdrawalEligibleDate(o));
     const ddl = parseDate(depositDeadline(o));
     if ((o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && Array.isArray(o.directDeposits)) {
