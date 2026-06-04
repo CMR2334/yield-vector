@@ -4823,7 +4823,11 @@ function renderHeroChart(svg) {
     // the projection engine still consumes the event normally.
     if (e.showOnChart === false) continue;
     const isBonus = e.category === 'bonus payout';
-    const color = Number(e.amount) >= 0 ? '#10b981' : '#f59e0b';
+    // Inflows green, outflows RED (was amber — matched the buffer
+    // dashed-line color, which made outflows read as "warning" rather
+    // than "money leaving". Red matches the deposit-deadline marker
+    // because both represent money required to exit your account.)
+    const color = Number(e.amount) >= 0 ? '#10b981' : '#e87171';
     let label = e.eventName || '';
     let evOfferColor = '';
     if (isBonus) {
@@ -5076,7 +5080,11 @@ function renderHeroChart(svg) {
         const evColor = lightenColor(m.color);
         const offerLight = m.offerColor ? lightenHexForDark(m.offerColor) : '';
         const idColor = offerLight || evColor;
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        // The .label class applies opacity:0.7 by default (for the
+        // muted "Available" / "Tied up" rows at the top). The event-
+        // type labels need full opacity so the lightened hues actually
+        // pop — override inline.
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};opacity:1;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
