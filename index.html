@@ -4804,6 +4804,11 @@ function renderHeroChart(svg) {
   const chartHorizonEnd = proj[proj.length - 1].date;
   for (const e of App.state.events) {
     if (!e.includeInProjection || !e.date) continue;
+    // Per-event chart visibility: lets the user keep a paycheck or a
+    // recurring bill in the running balance without spawning a marker
+    // every payday. showOnChart === false hides the chart bubble but
+    // the projection engine still consumes the event normally.
+    if (e.showOnChart === false) continue;
     const isBonus = e.category === 'bonus payout';
     const color = Number(e.amount) >= 0 ? '#10b981' : '#f59e0b';
     let label = e.eventName || '';
@@ -5652,10 +5657,12 @@ function showEventModal(eventId = null) {
     sourceBonusOfferId: null,
     recurrence: { kind: 'none', everyDays: 7, endDate: '' },
     includeInProjection: true,
+    showOnChart: true,
     notes: ''
   };
-  // Back-compat default for events saved before the recurrence field existed
+  // Back-compat defaults for events saved before these fields existed
   if (!e.recurrence) e.recurrence = { kind: 'none', everyDays: 7, endDate: '' };
+  if (e.showOnChart === undefined) e.showOnChart = true;
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -5689,7 +5696,11 @@ function showEventModal(eventId = null) {
             </div>
             <span class="field-hint">Sign is set automatically from the category — Inflow / Bonus payout are positive; Outflow / Fee are negative. Correction and Other use whatever sign you enter.</span>
           </div>
-          <div class="field"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label>
+            <label class="checkbox-row" style="margin-top:6px;"><input type="checkbox" name="showOnChart" ${e.showOnChart !== false ? 'checked' : ''} /><span>Show on Overview chart</span></label>
+            <span class="field-hint">Uncheck "Show on chart" to keep the event in your running balance without cluttering the chart with markers — useful for paychecks and recurring bills.</span>
+          </div>
           <div class="field">
             <label for="e-recur">Recurrence</label>
             <select id="e-recur" class="select" name="recurrenceKind">
@@ -5796,6 +5807,7 @@ function readEventForm(idArg) {
       endDate: data.recurrenceEndDate || ''
     },
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
+    showOnChart: form.querySelector('[name="showOnChart"]').checked,
     notes: data.notes || ''
   };
 }
