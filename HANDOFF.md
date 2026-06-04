@@ -38,6 +38,64 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-05-28 — Session C (claude-opus-4-7)
+**Round 36 — LOCKED tooltip color recipe (do not drift)**
+
+The user signed off on these values as the final tooltip color treatment.
+Do NOT re-tune unless explicitly asked. Each value below has been
+iteratively dialed in over many rounds — random "make it brighter" or
+"make it darker" passes will undo the careful balance.
+
+**Locked: chart marker fill colors (also the legend swatches)**
+- Initial funding (held offers): `#5b5cf6`
+- Direct deposit (DD offers): `#2d9cdb`
+- Withdrawal: `#10b981`
+- Deposit deadline: `#e87171`
+- Bonus payout: `#10b981` (inherits inflow green)
+- Inflow event: `#10b981`
+- **Outflow event: `#e87171`** (red, NOT amber `#f59e0b` — amber was
+  the buffer color and made outflows read as "warning", not "money
+  leaving the account")
+
+**Locked: tooltip "Available" amount color**
+- `#8e90ff` — sits about ⅓ of the way between the trendline's raw
+  `#5b5cf6` and pure white. Same hue family as the trendline so it
+  reads as "this is the line you're hovering".
+
+**Locked: tooltip left-label color map (`labelLift`)**
+The left labels ("Direct deposit", "Fund date", "Withdrawal", etc.)
+need a slight lift on dark BG so they read as crisply as the legend
+swatches do on the white card BG. Greens/blues/purples below; reds
+and amber pop fine at raw saturation and stay raw.
+```js
+const labelLift = {
+  '#5b5cf6': '#8a8cff',   // indigo → lifted purple
+  '#2d9cdb': '#5cb4e4',   // sky    → lifted blue
+  '#10b981': '#6ee7b7',   // green  → lifted mint
+  // Red `#e87171` and amber `#f59e0b` stay raw
+};
+const evColor = labelLift[m.color] || m.color;
+```
+
+**Locked: right-side identity color (`idColor`)**
+- When the offer has a color set: `lightenHexForDark(m.offerColor)` —
+  HSL-based programmatic lighten to ~74% L. Matches the offer card's
+  identity dot in Upcoming Actions and the bank's color stripe.
+- When no offer color: falls back to `evColor` (the lifted event
+  color above). So an outflow "Rent" reads in lifted-red, matching
+  the left "Outflow" label and the legend swatch.
+
+**Locked: opacity + weight on event-type labels**
+- `opacity: 1` inline override (the `.label` class baseline is
+  `opacity: 0.7` for muted rows like "Available" / "Tied up").
+- `font-weight: 600`.
+
+**Critical implementation note:** the raw colors above are reused in
+multiple places (chart marker fills, legend swatches, lookup keys in
+`labelLift`). If any one is changed, the others fall out of sync
+silently. Search for the exact hex (`#5b5cf6`, `#2d9cdb`, `#10b981`,
+`#e87171`) before editing — there are usually 3+ occurrences.
+
 ### 2026-05-28 — Session (claude-sonnet-4-6)
 **Round 35 — Task watcher remediation (remote, Collin away for a week)**
 
