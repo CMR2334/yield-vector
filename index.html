@@ -5077,13 +5077,19 @@ function renderHeroChart(svg) {
         // else lightened event color. Result: event-type reads at a
         // vertical scan via labels; per-offer identity reads via the
         // right-side text color.
-        // Right-side identity color: lightened offer color when one
-        // is set (so the right column matches the offer-card identity
-        // dot), otherwise the RAW saturated event color (so "Rent" on
-        // an outflow reads as red, matching the legend swatch and the
-        // left "Outflow" label). No more washed-out lightened fallback.
+        // Tooltip label color: indigo + sky read slightly muted on the
+        // dark BG compared to how they look on the white legend chip BG,
+        // so lift only those two a notch. Green/red/amber pop fine at
+        // full saturation against dark — leave raw. The result is the
+        // tooltip's "Fund date" / "Direct deposit" labels read with the
+        // same vibrancy as their swatch in the key below.
+        const labelLift = { '#5b5cf6': '#8a8cff', '#2d9cdb': '#5cb4e4' };
+        const evColor = labelLift[m.color] || m.color;
+        // Right-side identity color: lightened offer color when set
+        // (matches offer-card identity dot), otherwise the lifted
+        // event color (matches the left label + legend swatch).
         const offerLight = m.offerColor ? lightenHexForDark(m.offerColor) : '';
-        const idColor = offerLight || m.color;
+        const idColor = offerLight || evColor;
         // Left label uses the RAW saturated event color (same hex as
         // the swatch in the chart legend below) so "Direct deposit"
         // / "Deposit deadline" / "Fund date" / etc. read with the
@@ -5091,7 +5097,7 @@ function renderHeroChart(svg) {
         // washed out / dull on the dark BG. Bumped to weight 600 so
         // the contrast against the ~7:1 dark BG is comfortable.
         // Override .label's baseline opacity:0.7 inline.
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${m.color};opacity:1;font-weight:600;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};opacity:1;font-weight:600;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
