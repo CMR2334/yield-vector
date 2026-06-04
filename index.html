@@ -5077,14 +5077,21 @@ function renderHeroChart(svg) {
         // else lightened event color. Result: event-type reads at a
         // vertical scan via labels; per-offer identity reads via the
         // right-side text color.
-        const evColor = lightenColor(m.color);
+        // Right-side identity color: lightened offer color when one
+        // is set (so the right column matches the offer-card identity
+        // dot), otherwise the RAW saturated event color (so "Rent" on
+        // an outflow reads as red, matching the legend swatch and the
+        // left "Outflow" label). No more washed-out lightened fallback.
         const offerLight = m.offerColor ? lightenHexForDark(m.offerColor) : '';
-        const idColor = offerLight || evColor;
-        // The .label class applies opacity:0.7 by default (for the
-        // muted "Available" / "Tied up" rows at the top). The event-
-        // type labels need full opacity so the lightened hues actually
-        // pop — override inline.
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};opacity:1;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        const idColor = offerLight || m.color;
+        // Left label uses the RAW saturated event color (same hex as
+        // the swatch in the chart legend below) so "Direct deposit"
+        // / "Deposit deadline" / "Fund date" / etc. read with the
+        // same vibrancy as the key chips. Lightened versions looked
+        // washed out / dull on the dark BG. Bumped to weight 600 so
+        // the contrast against the ~7:1 dark BG is comfortable.
+        // Override .label's baseline opacity:0.7 inline.
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${m.color};opacity:1;font-weight:600;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
