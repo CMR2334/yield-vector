@@ -4681,7 +4681,28 @@ function renderHeroChart(svg) {
     if (i < 0 || i >= proj.length) continue;
     const isBonus = e.category === 'bonus payout';
     const color = Number(e.amount) >= 0 ? '#10b981' : '#f59e0b';
-    markers.push({ i, type: isBonus ? 'bonus' : (Number(e.amount) >= 0 ? 'event-inflow' : 'event-outflow'), label: e.eventName, color, amount: Number(e.amount) || 0 });
+    // Bonus-payout rows: the tooltip's left label already says "Bonus
+    // payout" — strip any redundant "bonus payout" suffix from the
+    // event name so "US Bank bonus payout" displays as "US Bank".
+    // Also pick up the linked offer's identity color if the event has
+    // a sourceBonusOfferId pointer.
+    let label = e.eventName || '';
+    let evOfferColor = '';
+    if (isBonus) {
+      label = label.replace(/\s*[—–-]?\s*bonus\s*payout\s*$/i, '').trim() || label;
+      if (e.sourceBonusOfferId) {
+        const linked = App.state.offers.find(x => x.id === e.sourceBonusOfferId);
+        if (linked) evOfferColor = offerColorHex(linked);
+      }
+    }
+    markers.push({
+      i,
+      type: isBonus ? 'bonus' : (Number(e.amount) >= 0 ? 'event-inflow' : 'event-outflow'),
+      label,
+      color,
+      offerColor: evOfferColor,
+      amount: Number(e.amount) || 0
+    });
   }
 
   const todayIdx = Math.round((TODAY - start) / 86400000);
