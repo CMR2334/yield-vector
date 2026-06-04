@@ -2855,9 +2855,22 @@ function simpleReturn(offer) {
 }
 
 function annualizedReturn(offer) {
+  // Annualize on the user's ACTUAL days unavailable — from
+  // business-day-aware lockStartDate through business-day-aware
+  // withdrawalEligibleDate. This matches the projection's view of
+  // "days my money is tied up" and matches the "Days tied up" stat
+  // on the offer card. Falls back to the bank's stated hold count
+  // when the offer is too incomplete to compute the real interval
+  // (e.g. no funding date yet).
   const r = simpleReturn(offer);
-  if (r == null || !offer.daysFundsMustRemain || offer.daysFundsMustRemain <= 0) return null;
-  return r * 365 / offer.daysFundsMustRemain;
+  if (r == null) return null;
+  let days = null;
+  const ls = parseDate(lockStartDate(offer));
+  const we = parseDate(withdrawalEligibleDate(offer));
+  if (ls && we) days = daysBetween(ls, we);
+  if (!days || days <= 0) days = Number(offer.daysFundsMustRemain) || 0;
+  if (!days || days <= 0) return null;
+  return r * 365 / days;
 }
 
 function isOfferComplete(offer) {
@@ -3959,7 +3972,7 @@ function renderOfferCard(o) {
         </div>
         <div class="offer-stat">
           <span class="offer-stat-label">Annualized</span>
-          <span class="offer-stat-value ${ar != null ? 'success' : 'muted'}" title="Annualized return on tied-up capital. = (bonus / required funding) × 365 / lock days.">${ar != null ? formatPercent(ar) : '—'}</span>
+          <span class="offer-stat-value ${ar != null ? 'success' : 'muted'}" title="Annualized return on tied-up capital. = (bonus / required funding) × 365 / actual days tied up. Uses business-day-adjusted lock window — weekend/holiday shifts are reflected.">${ar != null ? formatPercent(ar) : '—'}</span>
         </div>
       </div>
       <div class="offer-dates">
