@@ -3595,7 +3595,7 @@ function computeReminderFeed(state) {
     if (!offerIsActiveForProjection(o)) continue;
     const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
 
-    if (o.offerExpirationDate) {
+    if (o.offerExpirationDate && !CONFIRMED_OFFER_STATUSES.has(o.status)) {
       const due = stamp(o.offerExpirationDate);
       if (due) items.push({
         id: `yv-offer-${o.id}-expires`,
@@ -3676,7 +3676,7 @@ function computeUpcomingActions(state, limit = 12) {
   for (const o of state.offers) {
     if (o.status === 'completed' || o.status === 'skipped') continue;
     const offerColor = offerColorHex(o);
-    if (o.offerExpirationDate) {
+    if (o.offerExpirationDate && !CONFIRMED_OFFER_STATUSES.has(o.status)) {
       const d = parseDate(o.offerExpirationDate);
       if (d && d >= TODAY && d <= horizonEnd) {
         items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn', color: offerColor, targetKind: 'offer', targetId: o.id });
