@@ -3364,8 +3364,9 @@ function renderOverview() {
       </div>
       <div class="chart-legend">
         <span class="chart-legend-item"><span class="legend-swatch" style="background:#10b981;"></span> Withdrawal</span>
-        <span class="chart-legend-item"><span class="legend-swatch" style="background:#5b5cf6;"></span> Funding date</span>
+        <span class="chart-legend-item"><span class="legend-swatch" style="background:#5b5cf6;"></span> Initial funding</span>
         <span class="chart-legend-item"><span class="legend-swatch" style="background:#2d9cdb;"></span> Direct deposit</span>
+        <span class="chart-legend-item"><span class="legend-swatch" style="background:#e87171;"></span> Deposit deadline</span>
         <span class="chart-legend-item"><span class="legend-line" style="background:var(--accent);"></span> Available capital</span>
         <span class="chart-legend-item"><span class="legend-line dashed" style="color:var(--warning);"></span> Buffer (${formatCompactCurrency(App.state.settings.minimumCashBuffer)})</span>
       </div>
@@ -4729,7 +4730,7 @@ function renderHeroChart(svg) {
           // at baseY. With g.length=1 the formula collapses to baseY (no
           // visual change for solo markers).
           const cy = baseY - (g.length - 1 - k) * STEP;
-          out += `<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${m.color}" stroke="${m.offerColor || 'white'}" stroke-width="${m.offerColor ? '2.2' : '2'}" opacity="0.95" pointer-events="none"></circle>`;
+          out += `<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${m.color}" stroke="white" stroke-width="2" opacity="0.92" pointer-events="none"></circle>`;
         });
       });
       return out;
