@@ -2394,6 +2394,62 @@ function startOfDay(d) {
   return x;
 }
 
+/* ============================================================
+   RECURRING CAPITAL EVENTS
+   ============================================================
+   Capital events may carry a `recurrence` object describing how often
+   they repeat:
+     { kind: 'none' | 'weekly' | 'biweekly' | 'monthly' | 'custom',
+       everyDays: number,    // only used when kind === 'custom'
+       endDate:  'YYYY-MM-DD' (optional — empty means "through horizon")
+     }
+   expandEventInstances() materializes all instances within a window so
+   the projection engine and chart marker code can treat each one as
+   an independent event without knowing it came from a recurring rule.
+*/
+function expandEventInstances(e, horizonStartDate, horizonEndDate) {
+  const startDate = parseDate(e.date);
+  if (!startDate) return [];
+  const amount = Number(e.amount);
+  if (!Number.isFinite(amount) || amount === 0) return [];
+  const rec = e.recurrence || {};
+  const kind = rec.kind || 'none';
+  const startMs = horizonStartDate ? horizonStartDate.getTime() : -Infinity;
+  const endMs = horizonEndDate ? horizonEndDate.getTime() : Infinity;
+  if (kind === 'none') {
+    const t = startDate.getTime();
+    if (t < startMs || t > endMs) return [];
+    return [{ date: startDate, amount }];
+  }
+  // Recurrence end: either user-set or projection horizon end
+  const recEnd = rec.endDate ? parseDate(rec.endDate) : null;
+  const stopMs = recEnd ? Math.min(recEnd.getTime(), endMs) : endMs;
+  let stepDays = 0, monthly = false;
+  if (kind === 'weekly') stepDays = 7;
+  else if (kind === 'biweekly') stepDays = 14;
+  else if (kind === 'monthly') monthly = true;
+  else if (kind === 'custom') stepDays = Math.max(1, Math.min(365, Number(rec.everyDays) || 7));
+  else return [{ date: startDate, amount }];
+
+  const instances = [];
+  let cur = new Date(startDate);
+  // Hard upper bound — even daily for 5 years is 1825 iterations
+  for (let n = 0; n < 2000; n++) {
+    const t = cur.getTime();
+    if (t > stopMs) break;
+    if (t >= startMs) instances.push({ date: new Date(cur), amount });
+    if (monthly) cur = new Date(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
+    else cur = new Date(cur.getTime() + stepDays * 86400000);
+  }
+  return instances;
+}
+
+// Convenience for "Upcoming Actions": just the next instance from now.
+function nextEventInstance(e, fromDate, horizonEndDate) {
+  const instances = expandEventInstances(e, fromDate, horizonEndDate);
+  return instances.length > 0 ? instances[0] : null;
+}
+
 function parseDate(s) {
   if (!s) return null;
   if (s instanceof Date) return startOfDay(s);
@@ -2971,12 +3027,21 @@ function generateProjection(state, options = {}) {
     applyCommitment(Number(o.requiredFundingAmount), start, end, kind);
   }
 
-  // 3. Capital events — accumulate net through each day
-  const validEvents = state.events
-    .filter(e => e.includeInProjection && e.date && parseDate(e.date) && typeof e.amount === 'number' && e.amount !== 0)
-    .map(e => ({ idx: indexFor(parseDate(e.date)), amount: Number(e.amount) }))
-    .filter(e => e.idx < horizon)
-    .sort((a, b) => a.idx - b.idx);
+  // 3. Capital events — accumulate net through each day. Recurring
+  // events expand into one instance per occurrence in the horizon
+  // window; one-time events produce a single instance. The downstream
+  // running-sum loop doesn't know or care which is which.
+  const horizonEndDate = new Date(startMs + (horizon - 1) * dayMs);
+  const validEvents = [];
+  for (const e of state.events) {
+    if (!e.includeInProjection) continue;
+    const instances = expandEventInstances(e, start, horizonEndDate);
+    for (const inst of instances) {
+      const idx = indexFor(inst.date);
+      if (idx >= 0 && idx < horizon) validEvents.push({ idx, amount: inst.amount });
+    }
+  }
+  validEvents.sort((a, b) => a.idx - b.idx);
 
   let cumul = 0;
   let evIdx = 0;
@@ -3587,10 +3652,22 @@ function computeUpcomingActions(state, limit = 12) {
   }
   for (const e of state.events) {
     if (!e.includeInProjection) continue;
-    const d = parseDate(e.date);
-    if (d && d >= TODAY && d <= horizonEnd) {
-      items.push({ date: d, kind: e.amount >= 0 ? 'Inflow' : 'Outflow', name: e.eventName, sub: formatCurrency(e.amount), tag: e.amount >= 0 ? 'success' : '', targetKind: 'event', targetId: e.id });
-    }
+    // For recurring events, surface only the NEXT instance from today
+    // forward so the list doesn't fill with the same paycheck row 12
+    // times. The event's edit modal still owns the full recurrence rule.
+    const next = nextEventInstance(e, TODAY, horizonEnd);
+    if (!next) continue;
+    const amt = Number(next.amount);
+    const isRecurring = e.recurrence && e.recurrence.kind && e.recurrence.kind !== 'none';
+    items.push({
+      date: next.date,
+      kind: amt >= 0 ? 'Inflow' : 'Outflow',
+      name: e.eventName + (isRecurring ? ` (${e.recurrence.kind === 'custom' ? `every ${e.recurrence.everyDays || 7}d` : e.recurrence.kind})` : ''),
+      sub: formatCurrency(amt),
+      tag: amt >= 0 ? 'success' : '',
+      targetKind: 'event',
+      targetId: e.id
+    });
   }
   items.sort((a, b) => a.date - b.date);
   return items.slice(0, limit);
@@ -4676,28 +4753,20 @@ function renderHeroChart(svg) {
       if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label: `Deposit deadline: ${name}`, name, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
     }
   }
+  // Events on the chart: recurring events produce one marker per
+  // instance in the horizon window; one-time events produce a single
+  // marker. The bonus-payout naming + linked-offer color resolution
+  // happens once per event (not per instance) since recurring bonus
+  // payouts share the same linked offer.
+  const chartHorizonEnd = proj[proj.length - 1].date;
   for (const e of App.state.events) {
     if (!e.includeInProjection || !e.date) continue;
-    const ed = parseDate(e.date);
-    if (!ed) continue;
-    const i = Math.round((ed - start) / 86400000);
-    if (i < 0 || i >= proj.length) continue;
     const isBonus = e.category === 'bonus payout';
     const color = Number(e.amount) >= 0 ? '#10b981' : '#f59e0b';
-    // Bonus-payout rows: the tooltip's left label already says "Bonus
-    // payout" — strip any redundant "bonus payout" suffix from the
-    // event name so "US Bank bonus payout" displays as "US Bank".
-    // Also pick up the linked offer's identity color if the event has
-    // a sourceBonusOfferId pointer.
     let label = e.eventName || '';
     let evOfferColor = '';
     if (isBonus) {
       label = label.replace(/\s*[—–-]?\s*bonus\s*payout\s*$/i, '').trim() || label;
-      // Resolution chain: explicit sourceBonusOfferId → bank-name match
-      // against active offers (normalized: drop periods/whitespace,
-      // case-insensitive) so legacy events that pre-date the link
-      // field — or that the user typed manually — still pick up the
-      // matching offer's color when the bank name is unambiguous.
       let linked = null;
       if (e.sourceBonusOfferId) {
         linked = App.state.offers.find(x => x.id === e.sourceBonusOfferId);
@@ -4708,19 +4777,24 @@ function renderHeroChart(svg) {
         if (target) {
           const matches = App.state.offers.filter(x =>
             x.status !== 'completed' && x.status !== 'skipped' && norm(x.bankName) === target);
-          if (matches.length === 1) linked = matches[0]; // unambiguous only
+          if (matches.length === 1) linked = matches[0];
         }
       }
       if (linked) evOfferColor = offerColorHex(linked);
     }
-    markers.push({
-      i,
-      type: isBonus ? 'bonus' : (Number(e.amount) >= 0 ? 'event-inflow' : 'event-outflow'),
-      label,
-      color,
-      offerColor: evOfferColor,
-      amount: Number(e.amount) || 0
-    });
+    const instances = expandEventInstances(e, start, chartHorizonEnd);
+    for (const inst of instances) {
+      const i = Math.round((inst.date - start) / 86400000);
+      if (i < 0 || i >= proj.length) continue;
+      markers.push({
+        i,
+        type: isBonus ? 'bonus' : (Number(inst.amount) >= 0 ? 'event-inflow' : 'event-outflow'),
+        label,
+        color,
+        offerColor: evOfferColor,
+        amount: Number(inst.amount) || 0
+      });
+    }
   }
 
   const todayIdx = Math.round((TODAY - start) / 86400000);
@@ -4839,13 +4913,17 @@ function renderHeroChart(svg) {
   }
   // Lighter mid-tone for tooltip text on dark background — readable on dark bg
   function lightenColor(hex) {
+    // Brighter event-type colors so the tooltip's left label (Withdrawal,
+    // Direct deposit, etc.) pops more on the dark BG. Each value below
+    // is the prior lightened tone bumped ~10–15% toward pure white in
+    // HSL, with saturation preserved so the hue stays recognizable.
     const map = {
-      '#5b5cf6': '#a5a6ff',  // fund purple -> light
-      '#2d9cdb': '#8ecae6',  // DD teal -> light teal
-      '#10b981': '#6ee7b7',  // green -> light mint
-      '#e87171': '#fca5a5',  // red -> light pink
-      '#ef4444': '#fca5a5',  // legacy red -> light pink
-      '#f59e0b': '#fcd34d',  // amber -> light yellow
+      '#5b5cf6': '#c4c5ff',  // fund purple -> light + brighter
+      '#2d9cdb': '#aeddf2',  // DD teal -> light + brighter
+      '#10b981': '#8af0c5',  // green -> light + brighter
+      '#e87171': '#ffc1c1',  // red -> light + brighter
+      '#ef4444': '#ffc1c1',  // legacy red -> light + brighter
+      '#f59e0b': '#ffe27a',  // amber -> light + brighter
     };
     return map[hex] || hex;
   }
@@ -4921,7 +4999,7 @@ function renderHeroChart(svg) {
 
     let html = `
       <div class="tt-date">${formatDateLong(d.date)}</div>
-      <div class="tt-row"><span class="label">Available</span><span><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
+      <div class="tt-row"><span class="label">Available</span><span style="color:#c4c5ff;"><strong>${formatCurrency(d.availableCapital)}</strong></span></div>
       <div class="tt-row"><span class="label">Tied up</span><span>${formatCurrency(d.totalTiedUp)}</span></div>
       ${d.netEventsToDate !== 0 ? `<div class="tt-row"><span class="label">Net events</span><span>${(d.netEventsToDate >= 0 ? '+' : '') + formatCurrency(d.netEventsToDate)}</span></div>` : ''}
     `;
@@ -5529,9 +5607,12 @@ function showEventModal(eventId = null) {
     amount: 0,
     category: 'inflow',
     sourceBonusOfferId: null,
+    recurrence: { kind: 'none', everyDays: 7, endDate: '' },
     includeInProjection: true,
     notes: ''
   };
+  // Back-compat default for events saved before the recurrence field existed
+  if (!e.recurrence) e.recurrence = { kind: 'none', everyDays: 7, endDate: '' };
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -5565,6 +5646,29 @@ function showEventModal(eventId = null) {
             </div>
           </div>
           <div class="field"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
+          <div class="field">
+            <label for="e-recur">Recurrence</label>
+            <select id="e-recur" class="select" name="recurrenceKind">
+              <option value="none" ${(e.recurrence?.kind || 'none') === 'none' ? 'selected' : ''}>One-time</option>
+              <option value="weekly" ${e.recurrence?.kind === 'weekly' ? 'selected' : ''}>Weekly</option>
+              <option value="biweekly" ${e.recurrence?.kind === 'biweekly' ? 'selected' : ''}>Bi-weekly</option>
+              <option value="monthly" ${e.recurrence?.kind === 'monthly' ? 'selected' : ''}>Monthly</option>
+              <option value="custom" ${e.recurrence?.kind === 'custom' ? 'selected' : ''}>Custom (every N days)</option>
+            </select>
+            <span class="field-hint">Used for paychecks, recurring bills, and other repeating cash flows. The "Date" above is the first occurrence.</span>
+          </div>
+          <div class="field" id="e-recur-every-field" style="${e.recurrence?.kind === 'custom' ? '' : 'display:none;'}">
+            <label for="e-recur-every">Every</label>
+            <div class="input-group with-suffix">
+              <input id="e-recur-every" class="input" type="number" min="1" max="365" step="1" name="recurrenceEveryDays" value="${e.recurrence?.everyDays || 7}" />
+              <span class="input-suffix">days</span>
+            </div>
+          </div>
+          <div class="field" id="e-recur-end-field" style="grid-column:1/-1;${(e.recurrence?.kind && e.recurrence.kind !== 'none') ? '' : 'display:none;'}">
+            <label for="e-recur-end">Ends (optional)</label>
+            <input id="e-recur-end" class="input" type="date" name="recurrenceEndDate" value="${escapeAttr(e.recurrence?.endDate || '')}" />
+            <span class="field-hint">Leave blank to repeat through the projection horizon.</span>
+          </div>
           <div class="field" style="grid-column:1/-1;"><label for="e-notes">Notes</label><textarea id="e-notes" class="textarea" name="notes">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
       </form>
@@ -5599,6 +5703,16 @@ function showEventModal(eventId = null) {
           nameInput.value = opt.textContent.trim();
         }
       }
+      // Recurrence kind drives visibility of the "every N days" and
+      // "ends" fields. Custom shows both; weekly/biweekly/monthly show
+      // only the end-date; one-time hides both.
+      if (ev.target.id === 'e-recur') {
+        const kind = ev.target.value;
+        const everyField = form.querySelector('#e-recur-every-field');
+        const endField = form.querySelector('#e-recur-end-field');
+        if (everyField) everyField.style.display = kind === 'custom' ? '' : 'none';
+        if (endField) endField.style.display = kind !== 'none' ? '' : 'none';
+      }
     });
   }, 50);
 }
@@ -5608,6 +5722,7 @@ function readEventForm(idArg) {
   if (!form) return null;
   const fd = new FormData(form);
   const data = Object.fromEntries(fd.entries());
+  const recKind = data.recurrenceKind || 'none';
   return {
     id: idArg,
     eventName: (data.eventName || '').trim(),
@@ -5615,6 +5730,11 @@ function readEventForm(idArg) {
     amount: Number(data.amount),
     category: data.category,
     sourceBonusOfferId: data.sourceBonusOfferId || null,
+    recurrence: {
+      kind: recKind,
+      everyDays: Math.max(1, Math.min(365, Number(data.recurrenceEveryDays) || 7)),
+      endDate: data.recurrenceEndDate || ''
+    },
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
     notes: data.notes || ''
   };
