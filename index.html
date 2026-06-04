@@ -4690,10 +4690,25 @@ function renderHeroChart(svg) {
     let evOfferColor = '';
     if (isBonus) {
       label = label.replace(/\s*[—–-]?\s*bonus\s*payout\s*$/i, '').trim() || label;
+      // Resolution chain: explicit sourceBonusOfferId → bank-name match
+      // against active offers (normalized: drop periods/whitespace,
+      // case-insensitive) so legacy events that pre-date the link
+      // field — or that the user typed manually — still pick up the
+      // matching offer's color when the bank name is unambiguous.
+      let linked = null;
       if (e.sourceBonusOfferId) {
-        const linked = App.state.offers.find(x => x.id === e.sourceBonusOfferId);
-        if (linked) evOfferColor = offerColorHex(linked);
+        linked = App.state.offers.find(x => x.id === e.sourceBonusOfferId);
       }
+      if (!linked) {
+        const norm = s => (s || '').replace(/[.\s]+/g, '').toLowerCase();
+        const target = norm(label);
+        if (target) {
+          const matches = App.state.offers.filter(x =>
+            x.status !== 'completed' && x.status !== 'skipped' && norm(x.bankName) === target);
+          if (matches.length === 1) linked = matches[0]; // unambiguous only
+        }
+      }
+      if (linked) evOfferColor = offerColorHex(linked);
     }
     markers.push({
       i,
