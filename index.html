@@ -2765,42 +2765,67 @@ const App = {
    OFFER DERIVED FIELDS
    ============================================================ */
 function effectiveFundingDate(offer) {
+  // User-entered date as-is (Saturday stays Saturday). This is what the
+  // form remembers; callers that need the actual bank-processing day go
+  // through bizDayISO() below.
   return offer.optionalPlannedFundingDate || offer.plannedSignupDate;
 }
 
+// Shift a YYYY-MM-DD to the next business day if it falls on a weekend
+// or US federal bank holiday. Used to model "bank doesn't process money
+// movement on weekends" for derived action dates (fund posts, withdrawal
+// eligible). Anchor dates the user entered (open date, signup date)
+// stay as-is — only dates DERIVED from them shift.
+function bizDayISO(d) {
+  if (!d) return '';
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return '';
+  return isoDate(nextBusinessDay(dt));
+}
+
 function depositDeadline(offer) {
+  // Bank's stated deadline — literal calendar date. If it falls on
+  // a weekend, the user needs to deposit BEFORE it (no shift here).
   if (!offer.plannedSignupDate || offer.daysAfterSignupAllowedBeforeDeposit == null) return null;
   return isoDate(addDays(parseDate(offer.plannedSignupDate), Number(offer.daysAfterSignupAllowedBeforeDeposit)));
 }
 
 function withdrawalEligibleDate(offer) {
   // Direct-deposit offers: lock period starts after the FINAL qualifying
-  // DD lands, measured in calendar days from that anchor. Business-day
-  // logic only matters for *planning* when each DD effectively clears —
-  // not for the calendar-day count of the hold itself, which the bank
-  // measures from when funds actually arrived.
-  if (offer.offerType === 'direct-deposit') {
+  // DD lands. The DD effective dates are already business-day-aware via
+  // directDepositEffectiveDate(). Final withdrawal date shifts to next
+  // business day if calendar-math lands on a weekend/holiday — the bank
+  // can't release funds for you to initiate a transfer on a Sunday.
+  if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
     const ls = lockStartDate(offer);
     if (!ls || offer.daysFundsMustRemain == null) return null;
-    return isoDate(addDays(parseDate(ls), Number(offer.daysFundsMustRemain)));
+    const calc = addDays(parseDate(ls), Number(offer.daysFundsMustRemain));
+    return bizDayISO(calc);
   }
-  // New funds held / other: day-count anchor depends on lockStartsFrom:
-  //   'open date'   → days from account open (US Bank: "60 days from open")
-  //   'funded date' → days from the actual funding (Citi: "60 days from deposit")
-  const anchor = offer.lockStartsFrom === 'open date'
+  // New funds held / other:
+  //   'open date'   → bank counts from the account open date (US Bank
+  //                   style). Open date itself stays as user-entered
+  //                   (even if Saturday) — that's when the account was
+  //                   opened, the bank's count starts then.
+  //   'funded date' → bank counts from when funds actually posted.
+  //                   Planned funding on Saturday won't post until
+  //                   Monday, so the anchor shifts to next business day.
+  const anchorRaw = offer.lockStartsFrom === 'open date'
     ? offer.plannedSignupDate
-    : effectiveFundingDate(offer);
-  if (!anchor || offer.daysFundsMustRemain == null) return null;
-  return isoDate(addDays(parseDate(anchor), Number(offer.daysFundsMustRemain)));
+    : bizDayISO(effectiveFundingDate(offer));
+  if (!anchorRaw || offer.daysFundsMustRemain == null) return null;
+  const calc = addDays(parseDate(anchorRaw), Number(offer.daysFundsMustRemain));
+  // Withdrawal can't be initiated on weekend/holiday → shift forward
+  return bizDayISO(calc);
 }
 
 function lockStartDate(offer) {
-  // Direct-deposit offers: lock starts on the effective date of the
-  // LAST DD to land (max of all DD effective dates). Each DD individually
-  // ties up its own amount from its own effective date — that's modeled
-  // in generateProjection() — but for "when is the bonus locked in?"
-  // the answer is when the final qualifying DD posts.
-  if (offer.offerType === 'direct-deposit' && Array.isArray(offer.directDeposits)) {
+  // Direct-deposit offers: lock starts when the LAST DD effectively
+  // lands. Each DD individually ties up its own amount from its own
+  // effective date — modeled in generateProjection(). For "when is
+  // the bonus locked in?" the answer is when the final qualifying DD
+  // posts (already business-day-adjusted via directDepositEffectiveDate).
+  if ((offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') && Array.isArray(offer.directDeposits)) {
     const dates = offer.directDeposits
       .map(dd => parseDate(directDepositEffectiveDate(dd)))
       .filter(Boolean);
@@ -2808,9 +2833,12 @@ function lockStartDate(offer) {
     const maxMs = Math.max(...dates.map(d => d.getTime()));
     return isoDate(new Date(maxMs));
   }
-  // New funds held / other: money is only actually unavailable from when
-  // it's deposited, regardless of what the bank uses to anchor day-count.
-  return effectiveFundingDate(offer);
+  // New funds held / other: money is only actually unavailable from
+  // when the bank PROCESSES the deposit. A Saturday-planned funding
+  // won't post until Monday, so the chart's "Fund date" shows Monday.
+  // The user's entered planned date is still kept on the form — this
+  // only affects the derived display + projection-engine input.
+  return bizDayISO(effectiveFundingDate(offer));
 }
 
 function safeToCloseDate(offer) {
