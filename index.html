@@ -1917,11 +1917,18 @@ const CONFIDENCE_LABELS = { confirmed: 'Confirmed', likely: 'Likely', uncertain:
    coding for the card border, timeline bar, and chart marker stroke.
 
    Curated constraints:
-   - TWO blues: navy (deep) + sky (light)
+   - THREE blues: navy (deep) + sky (cyan-light) + cobalt (royal/mid)
    - ONE red-like: rose (#e11d48) — distinctly more saturated/cool
      than the app's deadline red (#e87171, a washed coral). No
      confusion between identity-rose and meaning-red.
+   - TWO neutral-darks: slate (cool blue-gray) + graphite (neutral)
    - Hues spread evenly so adjacent picks are visually distinct.
+
+   NOTE: the `name` keys are the STORED value on offer.color and must
+   stay stable for back-compat. The `hex` and `label` are display-only
+   and can be re-tuned freely — changing them just re-skins existing
+   offers using that key. That's why e.g. `name:'pink'` now renders as
+   Cobalt blue and `name:'amber'` renders as Gold.
    ============================================================ */
 const OFFER_COLOR_PALETTE = [
   { name: 'navy',    hex: '#1e3a8a', label: 'Navy' },
@@ -1929,12 +1936,12 @@ const OFFER_COLOR_PALETTE = [
   { name: 'teal',    hex: '#0d9488', label: 'Teal' },
   { name: 'emerald', hex: '#059669', label: 'Emerald' },
   { name: 'lime',    hex: '#65a30d', label: 'Lime' },
-  { name: 'amber',   hex: '#d97706', label: 'Amber' },
+  { name: 'amber',   hex: '#eab308', label: 'Gold' },
   { name: 'orange',  hex: '#ea580c', label: 'Orange' },
   { name: 'rose',    hex: '#e11d48', label: 'Rose' },
-  { name: 'pink',    hex: '#d6336c', label: 'Pink' },
+  { name: 'pink',    hex: '#2563eb', label: 'Cobalt' },
   { name: 'violet',  hex: '#8b5cf6', label: 'Violet' },
-  { name: 'brown',   hex: '#92400e', label: 'Brown' },
+  { name: 'brown',   hex: '#3f3f46', label: 'Graphite' },
   { name: 'slate',   hex: '#475569', label: 'Slate' }
 ];
 const OFFER_COLOR_BY_NAME = Object.fromEntries(OFFER_COLOR_PALETTE.map(c => [c.name, c.hex]));
