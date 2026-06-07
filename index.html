@@ -5319,20 +5319,26 @@ function showOfferModal(offerId = null) {
               </button>
               ${(() => {
                 const used = usedOfferColors(o.id);
-                return OFFER_COLOR_PALETTE.map(c => {
-                  const inUse = used.has(c.name) && o.color !== c.name;
+                // Only render colors that are AVAILABLE (not used by another
+                // offer) plus this offer's own current color. Taken colors
+                // are removed from the pane entirely so what you see is
+                // exactly what you can pick.
+                const available = OFFER_COLOR_PALETTE.filter(c => !used.has(c.name) || o.color === c.name);
+                if (available.length === 0) {
+                  return `<span style="font-size:12px;color:var(--text-tertiary);align-self:center;">All colors in use — clear one from another offer to free it up.</span>`;
+                }
+                return available.map(c => {
                   const sel = o.color === c.name;
                   return `<button type="button"
-                    class="color-swatch ${sel ? 'selected' : ''} ${inUse ? 'used' : ''}"
+                    class="color-swatch ${sel ? 'selected' : ''}"
                     data-color="${c.name}"
                     style="background:${c.hex};"
-                    aria-label="${c.label}${inUse ? ' (in use)' : ''}"
-                    title="${c.label}${inUse ? ' — in use by another offer' : ''}"
-                    ${inUse ? 'disabled' : ''}></button>`;
+                    aria-label="${c.label}"
+                    title="${c.label}"></button>`;
                 }).join('');
               })()}
             </div>
-            <span class="field-hint">Identity color for the card border, timeline bar, and chart marker stroke. Greyed swatches are in use by other offers.</span>
+            <span class="field-hint">Identity color for the card border, timeline bar, and chart marker stroke. Colors already used by other offers are hidden until freed.</span>
           </div>
           <div class="field">
             <label for="f-bonus">Bonus amount *</label>
