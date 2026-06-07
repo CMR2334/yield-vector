@@ -2557,6 +2557,30 @@ function nextBusinessDay(d) {
   while (!isBusinessDay(x)) x.setDate(x.getDate() + 1);
   return x;
 }
+function previousBusinessDay(d) {
+  let x = d instanceof Date ? new Date(d) : parseDate(d);
+  if (!x) return null;
+  while (!isBusinessDay(x)) x.setDate(x.getDate() - 1);
+  return x;
+}
+
+// Suggested LATEST-safe funding date for an offer: the deposit deadline
+// (signup + daysAfterSignupAllowedBeforeDeposit) minus a 1-day buffer,
+// then walked BACKWARD to the nearest business day if that lands on a
+// weekend/holiday. Keeps you safely before the deadline while funding
+// on a day the bank actually processes money. Returns a Date or null
+// when there isn't enough info to compute it.
+function suggestedFundingDate(signupISO, daysAfterDeposit) {
+  const signup = parseDate(signupISO);
+  const n = Number(daysAfterDeposit);
+  if (!signup || !Number.isFinite(n) || n <= 0) return null;
+  const deadline = addDays(signup, n);          // last allowed deposit day
+  const buffered = addDays(deadline, -1);        // 1-day safety buffer
+  // If the buffered day already precedes signup (tiny windows), clamp
+  // to the next business day on/after signup instead.
+  if (buffered <= signup) return nextBusinessDay(signup);
+  return previousBusinessDay(buffered);
+}
 
 // Given a directDeposits[] entry { plannedDate, amount }, return the
 // effective (actual processing) date as a YYYY-MM-DD string — same as
@@ -5405,6 +5429,10 @@ function showOfferModal(offerId = null) {
             <label for="f-funded">Planned funding date (optional)</label>
             <input id="f-funded" class="input" type="date" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" />
             <span class="field-hint">If different from signup date.</span>
+            <span class="field-hint" id="f-funded-suggest">${(() => {
+              const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
+              return sug ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)` : '';
+            })()}</span>
           </div>
           <div class="field">
             <label>Days counted from</label>
@@ -5503,6 +5531,23 @@ function showOfferModal(offerId = null) {
       const hidden = form.querySelector('#f-color');
       if (hidden) hidden.value = val;
       form.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s === sw));
+    });
+    // Live "latest safe funding date" hint — recompute whenever the
+    // planned signup date or the days-after-signup window changes.
+    const refreshFundingSuggest = () => {
+      const sEl = form.querySelector('#f-signup');
+      const dEl = form.querySelector('#f-days-deposit');
+      const out = form.querySelector('#f-funded-suggest');
+      if (!out) return;
+      const sug = suggestedFundingDate(sEl && sEl.value, dEl && dEl.value);
+      out.innerHTML = sug
+        ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)`
+        : '';
+    };
+    form.addEventListener('input', (ev) => {
+      if (ev.target && (ev.target.id === 'f-signup' || ev.target.id === 'f-days-deposit')) {
+        refreshFundingSuggest();
+      }
     });
   }, 50);
 }
