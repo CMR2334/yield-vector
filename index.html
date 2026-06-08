@@ -5568,9 +5568,9 @@ function showOfferModal(offerId = null) {
                 <option value="month" ${(o.ddRequirement.freqEvery || 'month') === 'month' ? 'selected' : ''}>month</option>
               </select>
               <span style="font-size:13px;color:var(--text-secondary);">for</span>
-              <div class="input-group with-suffix" style="max-width:130px;">
-                <input id="ddreq-freq-periods" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.freqPeriods || 3}" />
-                <span class="input-suffix" id="ddreq-freq-unit">${o.ddRequirement.freqEvery === 'week' ? 'wks' : o.ddRequirement.freqEvery === '2weeks' ? 'cycles' : 'mos'}</span>
+              <div class="input-group with-suffix" style="max-width:160px;">
+                <input id="ddreq-freq-periods" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.freqPeriods || 3}" style="padding-right:72px;" />
+                <span class="input-suffix" id="ddreq-freq-unit">${o.ddRequirement.freqEvery === 'week' ? 'weeks' : o.ddRequirement.freqEvery === '2weeks' ? 'cycles' : 'months'}</span>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="ddreq-generate">Generate dates</button>
             </div>
@@ -5719,7 +5719,7 @@ function showOfferModal(offerId = null) {
     const syncFreqUnit = () => {
       const every = (form.querySelector('#ddreq-freq-every') || {}).value || 'month';
       const unit = form.querySelector('#ddreq-freq-unit');
-      if (unit) unit.textContent = every === 'week' ? 'wks' : every === '2weeks' ? 'cycles' : 'mos';
+      if (unit) unit.textContent = every === 'week' ? 'weeks' : every === '2weeks' ? 'cycles' : 'months';
     };
     form.addEventListener('change', (ev) => {
       if (!ev.target) return;
