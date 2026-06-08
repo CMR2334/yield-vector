@@ -39,6 +39,45 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-05-28 — Session C (claude-opus-4-7)
+**Round 37 — DD offer overhaul: round-trip ROI, requirement modes, drop "Other"**
+- **Removed the "Other" offer type.** Only `new-funds-held`,
+  `direct-deposit`, `held-and-dd` remain. Legacy `offerType:'other'`
+  coerces to `new-funds-held` on edit + in the card chip (no migration
+  needed; it already behaved like held).
+- **Standard direct-deposit ≠ held-and-dd now.** Standard DD has NO
+  bank hold — each DD just round-trips through the account. The "Funds
+  must remain through day X" field is hidden for standard DD and not
+  required by validation. Held+DD keeps the hold field.
+- **Global DD transfer model** (Settings → "Direct-deposit transfer
+  timing"): `settings.ddTransfer = { inDays, seasonDays, backDays }`,
+  default 1/1/1 = "season 1 business day" (user's pick). Round trip:
+  initiate → +inDays biz → posts as DD → +seasonDays biz → sent back →
+  +backDays biz → returns. New helpers `addBusinessDays`,
+  `ddTransferConfig`, `ddRoundTrip(dd)` → { initiate, post,
+  returnInitiate, returnDate, heldDays }. Verified: Fri-initiated = 5
+  held days, Mon = 3 (matches the spec example).
+- **ROI is dollar-days weighted** for DD offers:
+  `annualizedReturn = bonus × 365 / Σ(amount_i × heldDays_i)` via new
+  `ddCapitalTime(offer)` → { dollarDays, totalAmount, weightedDays }.
+  Standard DD: heldDays = round trip (weekend/holiday delays included).
+  Held+DD: heldDays = DD effective date → shared withdrawal date.
+  Reduces to the normal formula for one DD. Optimizer blended return
+  + card "Days tied up" (shows weighted-avg) + "Annualized" all use it.
+- **lockStartDate / withdrawalEligibleDate** branch by type now:
+  standard DD lockStart = earliest DD initiation, withdrawal = latest
+  round-trip return; held+DD = last DD effective + daysFundsMustRemain;
+  new-funds-held unchanged. Projection ties up each standard-DD amount
+  over ITS OWN round trip (not a shared window).
+- **DD requirement modes** in the modal: `ddRequirement = { mode:
+  'count'|'frequency', count, freqEvery: week|2weeks|month, freqPeriods }`.
+  Count (default 1) or "once per <period> for <N>". Changing it
+  auto-populates that many dated DD rows (first planned EARLY = next
+  biz day after signup, so there's runway to retry from another bank;
+  rest spaced by cadence). Each row shows "Posts X · back by Y · tied
+  up Nd". Explicit "Generate dates" button too.
+- **Side note done:** removed "If different from signup date." hint.
+
+### 2026-05-28 — Session C (claude-opus-4-7)
 **Round 36 — LOCKED tooltip color recipe (do not drift)**
 
 The user signed off on these values as the final tooltip color treatment.

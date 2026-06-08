@@ -2563,6 +2563,51 @@ function previousBusinessDay(d) {
   while (!isBusinessDay(x)) x.setDate(x.getDate() - 1);
   return x;
 }
+// Advance n BUSINESS days from d (each step skips weekends/holidays).
+// addBusinessDays(Fri, 1) === Mon. n=0 returns d unchanged.
+function addBusinessDays(d, n) {
+  let x = d instanceof Date ? new Date(d) : parseDate(d);
+  if (!x) return null;
+  let added = 0;
+  while (added < n) {
+    x.setDate(x.getDate() + 1);
+    if (isBusinessDay(x)) added++;
+  }
+  return x;
+}
+
+// Global DD transfer model (Settings → "DD transfer timing"). The
+// round-trip for one direct deposit is: initiate → posts as a DD after
+// `inDays` business days → seasons `seasonDays` business days in the
+// account → sent back → returns to origin after `backDays` business
+// days. Default 1/1/1 ("season 1 business day") so a Monday-initiated
+// DD round-trips in ~3 days and a Friday-initiated one in ~5 (the
+// weekend extends it). Weekends/holidays at any leg push the next leg
+// out, which is the whole point of business-day awareness.
+function ddTransferConfig() {
+  const s = (App.state && App.state.settings) || {};
+  const t = s.ddTransfer || {};
+  return {
+    inDays: Number.isFinite(t.inDays) ? t.inDays : 1,
+    seasonDays: Number.isFinite(t.seasonDays) ? t.seasonDays : 1,
+    backDays: Number.isFinite(t.backDays) ? t.backDays : 1
+  };
+}
+
+// For one DD (initiated on its planned date), compute the full round
+// trip. Returns { initiate, post, returnInitiate, returnDate, heldDays }
+// where heldDays = calendar days the money is OUT of the origin account
+// (from initiation through the day it lands back). null if no date.
+function ddRoundTrip(dd) {
+  const initiate = dd && dd.plannedDate ? parseDate(dd.plannedDate) : null;
+  if (!initiate) return null;
+  const { inDays, seasonDays, backDays } = ddTransferConfig();
+  const post = addBusinessDays(initiate, inDays);
+  const returnInitiate = addBusinessDays(post, seasonDays);
+  const returnDate = addBusinessDays(returnInitiate, backDays);
+  const heldDays = daysBetween(initiate, returnDate);
+  return { initiate, post, returnInitiate, returnDate, heldDays };
+}
 
 // Suggested LATEST-safe funding date for an offer: the deposit deadline
 // (signup + daysAfterSignupAllowedBeforeDeposit) minus a 1-day buffer,
@@ -2746,7 +2791,12 @@ const App = {
         projectionHorizonMode: 'auto',  // 'auto' | '3months' | '6months' | '1year' | '2years' | 'custom'
         projectionHorizonDays: 365,     // used only when mode === 'custom'
         maxOptimizerCandidates: 15,
-        defaultLockStartsFrom: 'funded date'
+        defaultLockStartsFrom: 'funded date',
+        // Global DD transfer-timing model (business days per leg). The
+        // round trip is initiate → +inDays → posts as DD → +seasonDays
+        // → sent back → +backDays → returns to origin. Default 1/1/1
+        // ("season 1 business day").
+        ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 }
       },
       offers: [],
       commitments: [],
@@ -2822,41 +2872,55 @@ function depositDeadline(offer) {
 }
 
 function withdrawalEligibleDate(offer) {
-  // Direct-deposit offers: lock period starts after the FINAL qualifying
-  // DD lands. The DD effective dates are already business-day-aware via
-  // directDepositEffectiveDate(). Final withdrawal date shifts to next
-  // business day if calendar-math lands on a weekend/holiday — the bank
-  // can't release funds for you to initiate a transfer on a Sunday.
-  if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
+  // STANDARD direct deposit: no bank-imposed hold. Each DD just needs to
+  // hit the account; the money is "tied up" only for its transfer round
+  // trip. The overall "funds are fully back" date = the LATEST round-trip
+  // return across all DDs.
+  if (offer.offerType === 'direct-deposit') {
+    const rets = (offer.directDeposits || [])
+      .map(dd => ddRoundTrip(dd))
+      .filter(Boolean)
+      .map(rt => rt.returnDate.getTime());
+    if (rets.length === 0) return '';
+    return isoDate(new Date(Math.max(...rets)));
+  }
+  // HELD + DD: a real hold applies. Lock starts after the FINAL qualifying
+  // DD lands, then runs daysFundsMustRemain calendar days. Business-day
+  // shifted so withdrawal can't be initiated on a weekend/holiday.
+  if (offer.offerType === 'held-and-dd') {
     const ls = lockStartDate(offer);
     if (!ls || offer.daysFundsMustRemain == null) return null;
     const calc = addDays(parseDate(ls), Number(offer.daysFundsMustRemain));
     return bizDayISO(calc);
   }
-  // New funds held / other:
+  // New funds held:
   //   'open date'   → bank counts from the account open date (US Bank
-  //                   style). Open date itself stays as user-entered
-  //                   (even if Saturday) — that's when the account was
-  //                   opened, the bank's count starts then.
+  //                   style). Open date itself stays as user-entered.
   //   'funded date' → bank counts from when funds actually posted.
-  //                   Planned funding on Saturday won't post until
-  //                   Monday, so the anchor shifts to next business day.
   const anchorRaw = offer.lockStartsFrom === 'open date'
     ? offer.plannedSignupDate
     : bizDayISO(effectiveFundingDate(offer));
   if (!anchorRaw || offer.daysFundsMustRemain == null) return null;
   const calc = addDays(parseDate(anchorRaw), Number(offer.daysFundsMustRemain));
-  // Withdrawal can't be initiated on weekend/holiday → shift forward
   return bizDayISO(calc);
 }
 
 function lockStartDate(offer) {
-  // Direct-deposit offers: lock starts when the LAST DD effectively
-  // lands. Each DD individually ties up its own amount from its own
-  // effective date — modeled in generateProjection(). For "when is
-  // the bonus locked in?" the answer is when the final qualifying DD
-  // posts (already business-day-adjusted via directDepositEffectiveDate).
-  if ((offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') && Array.isArray(offer.directDeposits)) {
+  // STANDARD direct deposit: money first leaves the origin account at the
+  // EARLIEST DD initiation. Each DD ties up its own amount over its own
+  // round trip (modeled in generateProjection); this is just the start
+  // of the overall tied-up window for display (card "Fund date",
+  // timeline bar start).
+  if (offer.offerType === 'direct-deposit') {
+    const starts = (offer.directDeposits || [])
+      .map(dd => parseDate(dd.plannedDate))
+      .filter(Boolean)
+      .map(d => d.getTime());
+    if (starts.length === 0) return '';
+    return isoDate(new Date(Math.min(...starts)));
+  }
+  // HELD + DD: lock starts when the LAST DD effectively lands.
+  if (offer.offerType === 'held-and-dd' && Array.isArray(offer.directDeposits)) {
     const dates = offer.directDeposits
       .map(dd => parseDate(directDepositEffectiveDate(dd)))
       .filter(Boolean);
@@ -2864,11 +2928,8 @@ function lockStartDate(offer) {
     const maxMs = Math.max(...dates.map(d => d.getTime()));
     return isoDate(new Date(maxMs));
   }
-  // New funds held / other: money is only actually unavailable from
-  // when the bank PROCESSES the deposit. A Saturday-planned funding
-  // won't post until Monday, so the chart's "Fund date" shows Monday.
-  // The user's entered planned date is still kept on the form — this
-  // only affects the derived display + projection-engine input.
+  // New funds held: money unavailable from when the bank PROCESSES the
+  // deposit. Saturday-planned funding won't post until Monday.
   return bizDayISO(effectiveFundingDate(offer));
 }
 
@@ -2885,14 +2946,61 @@ function simpleReturn(offer) {
   return offer.signupBonusAmount / offer.requiredFundingAmount;
 }
 
+// Total capital-time (dollar-days) a DD offer ties up: Σ(amount_i × heldDays_i).
+// STANDARD DD: heldDays_i = the transfer round-trip for that DD (which is
+// longer when initiated before a weekend/holiday). HELD+DD: each DD's
+// amount is held from when it lands until the shared withdrawal-eligible
+// date. Returns { dollarDays, weightedDays, totalAmount } or null.
+function ddCapitalTime(offer) {
+  const dds = (offer.directDeposits || []).filter(dd => dd && dd.plannedDate && Number(dd.amount) > 0);
+  if (dds.length === 0) return null;
+  let dollarDays = 0, totalAmount = 0;
+  if (offer.offerType === 'direct-deposit') {
+    for (const dd of dds) {
+      const rt = ddRoundTrip(dd);
+      if (!rt || rt.heldDays <= 0) continue;
+      const amt = Number(dd.amount);
+      dollarDays += amt * rt.heldDays;
+      totalAmount += amt;
+    }
+  } else { // held-and-dd
+    const we = parseDate(withdrawalEligibleDate(offer));
+    if (!we) return null;
+    for (const dd of dds) {
+      const eff = parseDate(directDepositEffectiveDate(dd));
+      if (!eff) continue;
+      const held = daysBetween(eff, we);
+      if (held <= 0) continue;
+      const amt = Number(dd.amount);
+      dollarDays += amt * held;
+      totalAmount += amt;
+    }
+  }
+  if (dollarDays <= 0 || totalAmount <= 0) return null;
+  return { dollarDays, totalAmount, weightedDays: dollarDays / totalAmount };
+}
+
 function annualizedReturn(offer) {
-  // Annualize on the user's ACTUAL days unavailable — from
-  // business-day-aware lockStartDate through business-day-aware
-  // withdrawalEligibleDate. This matches the projection's view of
-  // "days my money is tied up" and matches the "Days tied up" stat
-  // on the offer card. Falls back to the bank's stated hold count
-  // when the offer is too incomplete to compute the real interval
-  // (e.g. no funding date yet).
+  const bonus = Number(offer.signupBonusAmount);
+  if (!bonus || bonus < 0) {
+    // Allow $0 bonus to yield 0% rather than null below; but a missing
+    // bonus is a null.
+    if (offer.signupBonusAmount == null) return null;
+  }
+  // DIRECT-DEPOSIT family: weight each DD's ROI by dollar-days (amount ×
+  // days held) so a DD dragged longer by a weekend/holiday, or a bigger
+  // DD, pulls the blended rate appropriately. The single closed form
+  //   bonus × 365 / Σ(amount_i × heldDays_i)
+  // is exactly the amount-and-time-weighted average of the per-DD
+  // annualized ROIs, and reduces to the standard formula for one DD.
+  if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
+    const ct = ddCapitalTime(offer);
+    if (!ct || !offer.signupBonusAmount) return null;
+    return Number(offer.signupBonusAmount) * 365 / ct.dollarDays;
+  }
+  // NEW FUNDS HELD: annualize on actual days unavailable (business-day
+  // aware lockStart → withdrawalEligible), matching the "Days tied up"
+  // card stat. Fall back to the stated hold count when dates are absent.
   const r = simpleReturn(offer);
   if (r == null) return null;
   let days = null;
@@ -2905,14 +3013,16 @@ function annualizedReturn(offer) {
 }
 
 function isOfferComplete(offer) {
+  // Standard direct deposit has NO bank-imposed hold, so it does not
+  // require daysFundsMustRemain. Every other type does.
+  const isStandardDD = offer.offerType === 'direct-deposit';
   const baseOk = Boolean(
     offer.bankName &&
     offer.requiredFundingAmount > 0 &&
     offer.signupBonusAmount >= 0 &&
     offer.plannedSignupDate &&
-    offer.daysFundsMustRemain != null &&
-    offer.daysFundsMustRemain >= 0 &&
-    parseDate(offer.plannedSignupDate)
+    parseDate(offer.plannedSignupDate) &&
+    (isStandardDD || (offer.daysFundsMustRemain != null && offer.daysFundsMustRemain >= 0))
   );
   if (!baseOk) return false;
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
@@ -2926,11 +3036,12 @@ function isOfferComplete(offer) {
 
 function offerIssues(offer) {
   const issues = [];
+  const isStandardDD = offer.offerType === 'direct-deposit';
   if (!offer.bankName) issues.push('Bank name is required');
   if (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0) issues.push('Required funding amount must be > 0');
   if (offer.signupBonusAmount == null || offer.signupBonusAmount < 0) issues.push('Bonus amount required');
   if (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate)) issues.push('Planned signup date required');
-  if (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0) issues.push('Days funds must remain required');
+  if (!isStandardDD && (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0)) issues.push('Hold-through day is required');
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
     if (!Array.isArray(offer.directDeposits) || offer.directDeposits.length === 0) {
       issues.push('At least one direct deposit is required');
@@ -3091,23 +3202,34 @@ function generateProjection(state, options = {}) {
     if (!offerIsActiveForProjection(o, includedOverride)) continue;
     if (offerIdsWithCommitments.has(o.id)) continue; // suppressed by explicit commitment
     const kind = CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : 'hypothetical';
-    // Direct-deposit offers: tie up each DD's amount from its own
-    // effective date through the withdrawal-eligible date. The tied-
-    // up total grows step-wise as each DD lands, then drops to zero
-    // when the hold ends.
+    // STANDARD direct deposit: each DD ties up its own amount only for
+    // its transfer round trip (initiation → return to origin). No shared
+    // hold — money is out of the origin account exactly while in transit
+    // + seasoning. DDs initiated before weekends/holidays tie up longer.
     if (o.offerType === 'direct-deposit' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
+      for (const dd of o.directDeposits) {
+        const rt = ddRoundTrip(dd);
+        const amt = Number(dd.amount) || 0;
+        if (!rt || amt <= 0) continue;
+        if (rt.initiate >= rt.returnDate) continue;
+        applyCommitment(amt, rt.initiate, rt.returnDate, kind);
+      }
+      continue;
+    }
+    // HELD + DD: each DD's amount is held from when it lands through the
+    // shared withdrawal-eligible date (the bonus hold period).
+    if (o.offerType === 'held-and-dd' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
       const we = parseDate(withdrawalEligibleDate(o));
       if (!we) continue;
       for (const dd of o.directDeposits) {
-        const effISO = directDepositEffectiveDate(dd);
-        const eff = parseDate(effISO);
+        const eff = parseDate(directDepositEffectiveDate(dd));
         const amt = Number(dd.amount) || 0;
         if (!eff || amt <= 0 || eff >= we) continue;
         applyCommitment(amt, eff, we, kind);
       }
       continue;
     }
-    // New funds held / other: single block over the lock window.
+    // New funds held: single block over the lock window.
     const start = parseDate(lockStartDate(o));
     const end = parseDate(withdrawalEligibleDate(o));
     if (!start || !end || start >= end) continue;
@@ -3270,10 +3392,20 @@ function runOptimizer(state) {
         totalRequired += Number(o.requiredFundingAmount) || 0;
         const ar = annualizedReturn(o);
         if (ar != null) {
-          // Weight by required capital × duration to get a blended rate
-          const weight = Number(o.requiredFundingAmount) * Number(o.daysFundsMustRemain);
-          weightedAnnReturnNum += ar * weight;
-          weightedAnnReturnDen += weight;
+          // Weight by capital × duration (dollar-days) to get a blended
+          // rate. DD offers use their actual round-trip dollar-days;
+          // held offers use required funding × stated hold days.
+          let weight;
+          if (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') {
+            const ct = ddCapitalTime(o);
+            weight = ct ? ct.dollarDays : 0;
+          } else {
+            weight = Number(o.requiredFundingAmount) * Number(o.daysFundsMustRemain || 0);
+          }
+          if (weight > 0) {
+            weightedAnnReturnNum += ar * weight;
+            weightedAnnReturnDen += weight;
+          }
         }
       }
     }
@@ -3999,11 +4131,19 @@ function renderOfferCard(o) {
         </div>
         <div class="offer-stat">
           <span class="offer-stat-label">Days tied up</span>
-          <span class="offer-stat-value" title="Actual days your cash is unavailable: from funded date to withdrawal-eligible date.${o.lockStartsFrom === 'open date' ? ' Bank requires ' + o.daysFundsMustRemain + ' days from account open.' : ''}">${(start && end) ? daysBetween(parseDate(start), parseDate(end)) : (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && start && end ? ` <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">/ ${o.daysFundsMustRemain}</span>` : ''}</span>
+          ${(() => {
+            const isDD = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+            if (isDD) {
+              const ct = ddCapitalTime(o);
+              if (ct) return `<span class="offer-stat-value" title="Amount-weighted average days each direct deposit is tied up (Σ amount×days ÷ Σ amount). Each DD's round trip accounts for weekends/holidays.">${Math.round(ct.weightedDays)} <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">wtd avg</span></span>`;
+              return `<span class="offer-stat-value muted">—</span>`;
+            }
+            return `<span class="offer-stat-value" title="Actual days your cash is unavailable: from funded date to withdrawal-eligible date.${o.lockStartsFrom === 'open date' ? ' Bank requires ' + o.daysFundsMustRemain + ' days from account open.' : ''}">${(start && end) ? daysBetween(parseDate(start), parseDate(end)) : (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && start && end ? ` <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">/ ${o.daysFundsMustRemain}</span>` : ''}</span>`;
+          })()}
         </div>
         <div class="offer-stat">
           <span class="offer-stat-label">Annualized</span>
-          <span class="offer-stat-value ${ar != null ? 'success' : 'muted'}" title="Annualized return on tied-up capital. = (bonus / required funding) × 365 / actual days tied up. Uses business-day-adjusted lock window — weekend/holiday shifts are reflected.">${ar != null ? formatPercent(ar) : '—'}</span>
+          <span class="offer-stat-value ${ar != null ? 'success' : 'muted'}" title="${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? 'Dollar-days weighted annualized return = bonus × 365 ÷ Σ(deposit amount × days held). Each DD held-days figure reflects its transfer round trip including weekend/holiday delays.' : 'Annualized return on tied-up capital = (bonus / required funding) × 365 / actual days tied up. Business-day-adjusted lock window.'}">${ar != null ? formatPercent(ar) : '—'}</span>
         </div>
       </div>
       <div class="offer-dates">
@@ -4027,15 +4167,13 @@ function renderOfferCard(o) {
         </div>
       ` : ''}
       <div class="offer-chips">
-        <span class="chip chip-offer-type-${o.offerType || 'new-funds-held'}" title="${
-          o.offerType === 'direct-deposit' ? 'Direct deposit — lock starts after final DD lands' :
+        <span class="chip chip-offer-type-${(o.offerType && o.offerType !== 'other') ? o.offerType : 'new-funds-held'}" title="${
+          o.offerType === 'direct-deposit' ? 'Direct deposit — no hold; money round-trips through the account' :
           o.offerType === 'held-and-dd'    ? 'Held + direct deposit — lump sum held for N days plus qualifying DDs required' :
-          o.offerType === 'other'          ? 'Other / combination' :
           'New funds held — lump-sum deposit kept for N days'
         }">${
           o.offerType === 'direct-deposit' ? 'DD' :
           o.offerType === 'held-and-dd'    ? 'Held+DD' :
-          o.offerType === 'other'          ? 'Other' :
           'Held'
         }</span>
         <span class="chip ${STATUS_CHIP_CLASS[o.status] || 'chip-muted'}">${STATUS_LABELS[o.status] || o.status}</span>
@@ -4397,6 +4535,24 @@ function renderSettings() {
             <label for="lock-fund">Funded date</label>
             <input type="radio" id="lock-open" name="defaultLockStartsFrom" value="open date" ${s.defaultLockStartsFrom === 'open date' ? 'checked' : ''} data-setting="defaultLockStartsFrom" />
             <label for="lock-open">Open date</label>
+          </div>
+        </div>
+        <div class="field" style="grid-column:1 / -1;">
+          <label>Direct-deposit transfer timing (business days)</label>
+          <span class="field-hint">Round trip for a DD: initiate → <strong>in</strong> days → posts → <strong>season</strong> days → sent back → <strong>back</strong> days → returns. Weekends/holidays extend each leg. Drives DD held-days and ROI.</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+            <div class="input-group with-suffix" style="max-width:130px;">
+              <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.inDays) ?? 1}" data-setting="ddTransfer.inDays" aria-label="Transfer in days" />
+              <span class="input-suffix">in</span>
+            </div>
+            <div class="input-group with-suffix" style="max-width:150px;">
+              <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.seasonDays) ?? 1}" data-setting="ddTransfer.seasonDays" aria-label="Season days" />
+              <span class="input-suffix">season</span>
+            </div>
+            <div class="input-group with-suffix" style="max-width:140px;">
+              <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.backDays) ?? 1}" data-setting="ddTransfer.backDays" aria-label="Transfer back days" />
+              <span class="input-suffix">back</span>
+            </div>
           </div>
         </div>
       </div>
@@ -5321,9 +5477,10 @@ function showOfferModal(offerId = null) {
     entityUsed: '',
     emailUsed: ''
   };
-  // Back-compat default for older offers loaded from storage.
-  if (!o.offerType) o.offerType = 'new-funds-held';
+  // Back-compat defaults for older offers loaded from storage.
+  if (!o.offerType || o.offerType === 'other') o.offerType = 'new-funds-held';
   if (!Array.isArray(o.directDeposits)) o.directDeposits = [];
+  if (!o.ddRequirement) o.ddRequirement = { mode: 'count', count: o.directDeposits.length || 1, freqEvery: 'month', freqPeriods: 3 };
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -5386,16 +5543,41 @@ function showOfferModal(offerId = null) {
               <label for="ot-dd">Direct deposit</label>
               <input type="radio" id="ot-hdd" name="offerType" value="held-and-dd" ${o.offerType === 'held-and-dd' ? 'checked' : ''} data-toggles-dd-section />
               <label for="ot-hdd">Held + DD</label>
-              <input type="radio" id="ot-other" name="offerType" value="other" ${o.offerType === 'other' ? 'checked' : ''} data-toggles-dd-section />
-              <label for="ot-other">Other</label>
             </div>
-            <span class="field-hint"><strong>New funds held</strong>: lump-sum deposit kept for N days. <strong>Direct deposit</strong>: qualifying DDs only. <strong>Held + DD</strong>: minimum deposit held for N days <em>and</em> qualifying DDs required (e.g. Associated Bank). <strong>Other</strong>: anything else.</span>
+            <span class="field-hint"><strong>New funds held</strong>: lump-sum deposit kept for N days. <strong>Direct deposit</strong>: qualifying DDs only, no hold — money just round-trips through the account. <strong>Held + DD</strong>: minimum deposit held for N days <em>and</em> qualifying DDs required (e.g. Associated Bank).</span>
           </div>
           <div class="field dd-section" style="grid-column: 1 / -1;${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? '' : 'display:none;'}">
-            <label>Planned direct deposits *</label>
+            <label>Direct deposit requirement *</label>
+            <div class="radio-group" style="margin-bottom:8px;">
+              <input type="radio" id="ddreq-count" name="ddReqMode" value="count" ${o.ddRequirement.mode !== 'frequency' ? 'checked' : ''} />
+              <label for="ddreq-count">Minimum total #</label>
+              <input type="radio" id="ddreq-freq" name="ddReqMode" value="frequency" ${o.ddRequirement.mode === 'frequency' ? 'checked' : ''} />
+              <label for="ddreq-freq">Required frequency</label>
+            </div>
+            <div id="ddreq-count-fields" style="${o.ddRequirement.mode !== 'frequency' ? '' : 'display:none;'}margin-bottom:8px;">
+              <div class="input-group with-suffix" style="max-width:200px;">
+                <input id="ddreq-count-n" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.count || 1}" />
+                <span class="input-suffix">deposits</span>
+              </div>
+            </div>
+            <div id="ddreq-freq-fields" style="${o.ddRequirement.mode === 'frequency' ? '' : 'display:none;'}margin-bottom:8px;display:${o.ddRequirement.mode === 'frequency' ? 'flex' : 'none'};gap:8px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:13px;color:var(--text-secondary);">Once per</span>
+              <select id="ddreq-freq-every" class="select" style="max-width:130px;">
+                <option value="week" ${o.ddRequirement.freqEvery === 'week' ? 'selected' : ''}>week</option>
+                <option value="2weeks" ${o.ddRequirement.freqEvery === '2weeks' ? 'selected' : ''}>2 weeks</option>
+                <option value="month" ${(o.ddRequirement.freqEvery || 'month') === 'month' ? 'selected' : ''}>month</option>
+              </select>
+              <span style="font-size:13px;color:var(--text-secondary);">for</span>
+              <div class="input-group with-suffix" style="max-width:130px;">
+                <input id="ddreq-freq-periods" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.freqPeriods || 3}" />
+                <span class="input-suffix" id="ddreq-freq-unit">${o.ddRequirement.freqEvery === 'week' ? 'wks' : o.ddRequirement.freqEvery === '2weeks' ? 'cycles' : 'mos'}</span>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="ddreq-generate">Generate dates</button>
+            </div>
+            <label style="margin-top:4px;">Planned direct deposits *</label>
             <div id="dd-entries">${(o.directDeposits || []).map((dd, i) => renderDdRow(dd, i)).join('')}</div>
             <button type="button" class="btn btn-secondary btn-sm" data-action="add-dd-row" style="align-self:flex-start;margin-top:6px;">+ Add deposit</button>
-            <span class="field-hint">For <em>Direct deposit</em> offers the hold period starts after the final DD lands. For <em>Held + DD</em> offers the DDs are qualifying transactions only — the hold period still starts from your funded date. Planned dates auto-shift to the next business day if they fall on a weekend or federal holiday.</span>
+            <span class="field-hint" id="dd-section-hint">Plan each DD's <strong>initiation</strong> date. Standard DD ties up the money only for its transfer round trip; plan the first DD early so you have time to retry from another bank if it doesn't code as a direct deposit. Dates auto-shift to the next business day if they land on a weekend or federal holiday.</span>
           </div>
           <div class="field">
             <label for="f-funding">Required funding *</label>
@@ -5418,17 +5600,16 @@ function showOfferModal(offerId = null) {
               <span class="input-suffix">days</span>
             </div>
           </div>
-          <div class="field">
+          <div class="field" id="days-remain-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
             <label for="f-days-remain" id="days-remain-label">Funds must remain deposited through day * (from ${o.lockStartsFrom === 'open date' ? 'account opening' : 'funded date'})</label>
             <div class="input-group with-suffix">
-              <input id="f-days-remain" class="input" type="number" min="0" step="1" required value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
+              <input id="f-days-remain" class="input" type="number" min="0" step="1" value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
               <span class="input-suffix">days</span>
             </div>
           </div>
           <div class="field">
             <label for="f-funded">Planned funding date (optional)</label>
             <input id="f-funded" class="input" type="date" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" />
-            <span class="field-hint">If different from signup date.</span>
             <span class="field-hint" id="f-funded-suggest">${(() => {
               const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
               return sug ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)` : '';
@@ -5513,11 +5694,61 @@ function showOfferModal(offerId = null) {
     // the DOM target — the .dd-section div — is local to this modal.
     const form = document.getElementById('offer-form');
     if (!form) return;
-    form.addEventListener('change', (ev) => {
-      if (!ev.target || ev.target.name !== 'offerType') return;
+    // Reflect offer-type, DD-requirement, and frequency-unit changes.
+    const syncDdSectionUI = () => {
+      const type = (form.querySelector('[name="offerType"]:checked') || {}).value;
       const ddSection = form.querySelector('.dd-section');
-      if (!ddSection) return;
-      ddSection.style.display = (ev.target.value === 'direct-deposit' || ev.target.value === 'held-and-dd') ? '' : 'none';
+      const daysRemain = form.querySelector('#days-remain-field');
+      if (ddSection) ddSection.style.display = (type === 'direct-deposit' || type === 'held-and-dd') ? '' : 'none';
+      // Standard DD has no hold → hide the "funds must remain through day" field.
+      if (daysRemain) daysRemain.style.display = (type === 'direct-deposit') ? 'none' : '';
+      const hint = form.querySelector('#dd-section-hint');
+      if (hint) {
+        hint.innerHTML = (type === 'held-and-dd')
+          ? `Plan each DD's <strong>initiation</strong> date. For Held + DD the DDs are qualifying transactions; the hold period set below still governs when funds release. Dates auto-shift to the next business day on a weekend/holiday.`
+          : `Plan each DD's <strong>initiation</strong> date. Standard DD ties up the money only for its transfer round trip; plan the first DD early so you have time to retry from another bank if it doesn't code as a direct deposit. Dates auto-shift to the next business day on a weekend/holiday.`;
+      }
+    };
+    const syncReqMode = () => {
+      const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
+      const cf = form.querySelector('#ddreq-count-fields');
+      const ff = form.querySelector('#ddreq-freq-fields');
+      if (cf) cf.style.display = mode === 'count' ? '' : 'none';
+      if (ff) ff.style.display = mode === 'frequency' ? 'flex' : 'none';
+    };
+    const syncFreqUnit = () => {
+      const every = (form.querySelector('#ddreq-freq-every') || {}).value || 'month';
+      const unit = form.querySelector('#ddreq-freq-unit');
+      if (unit) unit.textContent = every === 'week' ? 'wks' : every === '2weeks' ? 'cycles' : 'mos';
+    };
+    form.addEventListener('change', (ev) => {
+      if (!ev.target) return;
+      if (ev.target.name === 'offerType') syncDdSectionUI();
+      if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
+      if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
+      // Auto-populate the DD rows when the requirement count/frequency
+      // changes, so the right number of dated rows appears without an
+      // extra click. (The explicit "Generate dates" button stays too.)
+      if (ev.target.id === 'ddreq-count-n' || ev.target.id === 'ddreq-freq-every' || ev.target.id === 'ddreq-freq-periods') {
+        generateDdDatesFromRequirement();
+      }
+      // Re-render DD rows when a date changes so the round-trip info
+      // (posts/back-by/tied-up days) updates. Re-render from the live
+      // snapshot so amounts entered are preserved.
+      if (ev.target.dataset && ev.target.dataset.ddField === 'plannedDate') {
+        const entries = form.querySelector('#dd-entries');
+        if (entries) {
+          const snap = readDdRowsFromForm();
+          entries.innerHTML = snap.map((dd, i) => renderDdRow(dd, i)).join('');
+        }
+      }
+    });
+    // Generate-dates button (delegated click).
+    form.addEventListener('click', (ev) => {
+      if (ev.target && ev.target.id === 'ddreq-generate') {
+        ev.preventDefault();
+        generateDdDatesFromRequirement();
+      }
     });
     // Color swatch picker — click swaps the selected swatch and writes
     // the new color name into the hidden #f-color input so FormData
@@ -5561,18 +5792,66 @@ function renderDdRow(dd, i) {
   const effISO = directDepositEffectiveDate(dd || {});
   const eff = effISO ? parseDate(effISO) : null;
   const adjusted = planned && eff && planned.getTime() !== eff.getTime();
+  const rt = (dd && dd.plannedDate) ? ddRoundTrip(dd) : null;
+  let info = '';
+  if (rt) {
+    info = `Posts ${formatDateMedium(rt.post)} · back by ${formatDateMedium(rt.returnDate)} · tied up ${rt.heldDays}d`
+      + (adjusted ? ` · initiation shifted from ${formatDateMedium(planned)} (${isUsBankHoliday(planned) ? 'holiday' : 'weekend'})` : '');
+  }
   return `
     <div class="dd-row" data-dd-index="${i}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:6px;">
-      <input type="date" class="input dd-field" data-dd-field="plannedDate" value="${escapeAttr(dd && dd.plannedDate || '')}" aria-label="Planned date for DD ${i + 1}" />
+      <input type="date" class="input dd-field" data-dd-field="plannedDate" value="${escapeAttr(dd && dd.plannedDate || '')}" aria-label="Initiation date for DD ${i + 1}" />
       <div class="input-group"><span class="input-prefix">$</span>
         <input type="number" class="input dd-field" data-dd-field="amount" min="0" step="50" value="${dd && dd.amount != null ? dd.amount : ''}" aria-label="Amount for DD ${i + 1}" />
       </div>
       <button type="button" class="btn-icon" data-action="remove-dd-row" aria-label="Remove DD ${i + 1}" title="Remove">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
       </button>
-      ${adjusted ? `<div style="grid-column:1 / -1;font-size:11px;color:var(--text-tertiary);margin-top:-2px;">Effective ${formatDateMedium(eff)} — planned ${formatDateMedium(planned)} is a ${isUsBankHoliday(planned) ? 'federal holiday' : 'weekend'}.</div>` : ''}
+      ${info ? `<div style="grid-column:1 / -1;font-size:11px;color:var(--text-tertiary);margin-top:-2px;">${info}</div>` : ''}
     </div>
   `;
+}
+
+// Build DD rows from the requirement controls + planned signup date.
+// First DD is planned EARLY (next business day on/after signup) so
+// there's runway to retry from another bank. Subsequent DDs are spaced
+// by the chosen cadence. Existing amounts are preserved positionally;
+// new rows inherit the prior row's amount (or required funding ÷ count).
+function generateDdDatesFromRequirement() {
+  const form = document.getElementById('offer-form');
+  if (!form) return;
+  const entries = form.querySelector('#dd-entries');
+  if (!entries) return;
+  const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
+  const signup = parseDate((form.querySelector('#f-signup') || {}).value);
+  const baseStart = signup ? addBusinessDays(signup, 1) : addBusinessDays(TODAY, 1);
+  const existing = readDdRowsFromForm();
+  const fundingEl = form.querySelector('#f-funding');
+  const funding = fundingEl && fundingEl.value ? Number(fundingEl.value) : null;
+
+  let count, stepDays = 0, monthly = false;
+  if (mode === 'frequency') {
+    const every = (form.querySelector('#ddreq-freq-every') || {}).value || 'month';
+    const periods = Math.max(1, Math.min(24, Number((form.querySelector('#ddreq-freq-periods') || {}).value) || 1));
+    count = periods;
+    if (every === 'week') stepDays = 7;
+    else if (every === '2weeks') stepDays = 14;
+    else monthly = true;
+  } else {
+    count = Math.max(1, Math.min(24, Number((form.querySelector('#ddreq-count-n') || {}).value) || 1));
+  }
+  const defaultAmt = (existing[0] && existing[0].amount) || (funding && count ? Math.round(funding / count) : null);
+  const rows = [];
+  let cursor = new Date(baseStart);
+  for (let k = 0; k < count; k++) {
+    const amt = (existing[k] && existing[k].amount != null) ? existing[k].amount : defaultAmt;
+    rows.push({ plannedDate: isoDate(cursor), amount: amt });
+    // Advance the cursor for the NEXT deposit.
+    if (monthly) cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
+    else if (stepDays > 0) cursor = addDays(cursor, stepDays);
+    else cursor = addBusinessDays(cursor, 3); // count mode: a few business days apart
+  }
+  entries.innerHTML = rows.map((dd, i) => renderDdRow(dd, i)).join('');
 }
 
 // Re-read every .dd-row in the form and return the canonical
@@ -5619,11 +5898,25 @@ function readOfferForm(idArg, isEdit) {
   const data = Object.fromEntries(fd.entries());
   const num = (v) => (v === '' || v == null) ? null : Number(v);
 
+  const offerType = data.offerType || 'new-funds-held';
+  // DD requirement controls aren't form-named (id-only), so read directly.
+  const qval = (sel) => { const el = form.querySelector(sel); return el ? el.value : ''; };
+  const ddRequirement = {
+    mode: (data.ddReqMode === 'frequency') ? 'frequency' : 'count',
+    count: Math.max(1, Math.min(24, Number(qval('#ddreq-count-n')) || 1)),
+    freqEvery: qval('#ddreq-freq-every') || 'month',
+    freqPeriods: Math.max(1, Math.min(24, Number(qval('#ddreq-freq-periods')) || 3))
+  };
+  // Standard DD has no bank hold — null out daysFundsMustRemain so the
+  // round-trip model governs and validation doesn't demand it.
+  const daysRemain = offerType === 'direct-deposit' ? null : num(data.daysFundsMustRemain);
+
   const offer = {
     id: idArg,
     bankName: (data.bankName || '').trim(),
     offerName: (data.offerName || '').trim(),
-    offerType: data.offerType || 'new-funds-held',
+    offerType,
+    ddRequirement,
     color: data.color || '',
     directDeposits: readDdRowsFromForm()
       .filter(dd => dd.plannedDate || (dd.amount != null && dd.amount > 0)),
@@ -5632,7 +5925,7 @@ function readOfferForm(idArg, isEdit) {
     offerExpirationDate: data.offerExpirationDate || '',
     plannedSignupDate: data.plannedSignupDate || '',
     daysAfterSignupAllowedBeforeDeposit: num(data.daysAfterSignupAllowedBeforeDeposit) ?? 30,
-    daysFundsMustRemain: num(data.daysFundsMustRemain),
+    daysFundsMustRemain: daysRemain,
     optionalPlannedFundingDate: data.optionalPlannedFundingDate || '',
     lockStartsFrom: data.lockStartsFrom || 'funded date',
     status: data.status || 'prospect',
@@ -6119,6 +6412,13 @@ function onChange(e) {
     if (key === 'currentLiquidCapital' || key === 'minimumCashBuffer') value = Math.max(0, value);
     if (key === 'projectionHorizonDays') value = Math.max(30, Math.min(1825, value));
     if (key === 'maxOptimizerCandidates') value = Math.max(1, Math.min(20, value));
+    // Nested settings (e.g. "ddTransfer.inDays") — clamp transfer legs 0–10.
+    if (key.includes('.')) {
+      const [parent, child] = key.split('.');
+      value = Math.max(0, Math.min(10, Number(value) || 0));
+      App.update(s => { s.settings[parent] = { ...(s.settings[parent] || {}), [child]: value }; });
+      return;
+    }
     App.update(s => { s.settings[key] = value; });
     return;
   }
