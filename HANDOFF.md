@@ -39,6 +39,32 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-08 — Session C (claude-opus-4-7)
+**Round 40 — debit requirement + Actions-required card, picker/settings fixes**
+- **Date picker overflow fixed.** Responsive width `min(280px,
+  calc(100vw-16px))` + `place()` now measures actual size and clamps
+  fully into the viewport (both axes, 8px margin) so it can't hang off
+  a phone screen.
+- **Settings top-row sizing fixed.** The offer-form label-height +
+  input bottom-pinning rules were global on `.field` and distorting
+  Settings; scoped them to `#offer-form`, added `.form-section
+  .form-grid { align-items: start }`, gave all 4 capital/projection
+  fields a uniform hint line, removed `max-width:fit-content` on the
+  date, shortened the horizon "Auto" option so it stops clipping.
+- **Debit-card transaction requirement.** New `offer.debitRequirement
+  = { required, count, byDate }`. Offer modal has a Yes/No toggle
+  (`name=debitRequired`) that expands to count + optional "complete by"
+  date (a yv-date picker). Shown as a `chip-warn` "N debit txns" on the
+  card. Back-compat defaulted.
+- **"Actions required" At-a-glance card** via `computeActionsRequired()`
+  — counts pending to-dos across offers with sub ∈ {prospect, applied,
+  approved, on-track} (skipping opened-then-Closed): upcoming DDs to
+  initiate, new-funds lump-sum deposits not yet made, and debit-txn
+  counts. Verified = 8 on the test fixture.
+- ORDER 3→1→2 from the user is now COMPLETE (calendar picker, DoC
+  ranking, debit+actions). Remaining roadmap: per-link DD success/
+  recency (deferred), reminders enable-checkbox (#4 from earlier).
+
+### 2026-06-08 — Session C (claude-opus-4-7)
 **Round 39 — custom date picker, account-default fix, DoC method ranking**
 - **Custom color-coded date picker** (`DatePicker` singleton) replaces
   native `<input type=date>` on offer-modal date fields (signup/expires/
