@@ -4993,9 +4993,15 @@ function renderHeroChart(svg) {
       const i = Math.round((withd - start) / 86400000);
       if (i >= 0 && i < proj.length) markers.push({ i, type: 'withdraw', label: `Withdraw ${name}`, name, color: '#10b981', offerColor, amount: Number(o.requiredFundingAmount) || 0, bonus: Number(o.signupBonusAmount) || 0 });
     }
-    if (ddl && o.offerType !== 'direct-deposit' && o.offerType !== 'held-and-dd') {
+    // Deposit/DD-completion deadline marker. For DD offers this is the
+    // "complete a qualifying DD within X days" deadline; for held offers
+    // it's the lump-sum deposit deadline. Shown for all types that have
+    // a deadline set, except held-and-dd where the held funding deadline
+    // is the same date and would double up.
+    if (ddl && o.offerType !== 'held-and-dd') {
       const i = Math.round((ddl - start) / 86400000);
-      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label: `Deposit deadline: ${name}`, name, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
+      const label = o.offerType === 'direct-deposit' ? `DD deadline: ${name}` : `Deposit deadline: ${name}`;
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label, name, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
     }
   }
   // Events on the chart: recurring events produce one marker per
@@ -5594,7 +5600,7 @@ function showOfferModal(offerId = null) {
             <input id="f-signup" class="input" type="date" required value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" />
           </div>
           <div class="field">
-            <label for="f-days-deposit">Days after signup to deposit</label>
+            <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of signup' : 'Days after signup to deposit'}</label>
             <div class="input-group with-suffix">
               <input id="f-days-deposit" class="input" type="number" min="0" step="1" value="${o.daysAfterSignupAllowedBeforeDeposit ?? ''}" name="daysAfterSignupAllowedBeforeDeposit" />
               <span class="input-suffix">days</span>
@@ -5607,7 +5613,7 @@ function showOfferModal(offerId = null) {
               <span class="input-suffix">days</span>
             </div>
           </div>
-          <div class="field">
+          <div class="field" id="funding-date-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
             <label for="f-funded">Planned funding date (optional)</label>
             <input id="f-funded" class="input" type="date" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" />
             <span class="field-hint" id="f-funded-suggest">${(() => {
@@ -5615,7 +5621,7 @@ function showOfferModal(offerId = null) {
               return sug ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)` : '';
             })()}</span>
           </div>
-          <div class="field">
+          <div class="field" id="lock-from-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
             <label>Days counted from</label>
             <div class="radio-group">
               <input type="radio" id="lsf-fund" name="lockStartsFrom" value="funded date" ${o.lockStartsFrom !== 'open date' ? 'checked' : ''}
@@ -5697,11 +5703,21 @@ function showOfferModal(offerId = null) {
     // Reflect offer-type, DD-requirement, and frequency-unit changes.
     const syncDdSectionUI = () => {
       const type = (form.querySelector('[name="offerType"]:checked') || {}).value;
+      const stdDD = type === 'direct-deposit';
       const ddSection = form.querySelector('.dd-section');
       const daysRemain = form.querySelector('#days-remain-field');
+      const fundingField = form.querySelector('#funding-date-field');
+      const lockFromField = form.querySelector('#lock-from-field');
+      const daysLabel = form.querySelector('#days-deposit-label');
       if (ddSection) ddSection.style.display = (type === 'direct-deposit' || type === 'held-and-dd') ? '' : 'none';
-      // Standard DD has no hold → hide the "funds must remain through day" field.
-      if (daysRemain) daysRemain.style.display = (type === 'direct-deposit') ? 'none' : '';
+      // Standard DD has no hold and no single funding date → hide the
+      // hold-day, funding-date, and lock-anchor fields (all held concepts).
+      if (daysRemain) daysRemain.style.display = stdDD ? 'none' : '';
+      if (fundingField) fundingField.style.display = stdDD ? 'none' : '';
+      if (lockFromField) lockFromField.style.display = stdDD ? 'none' : '';
+      // The deposit-deadline field is a DD-completion deadline for DD
+      // offers, a deposit deadline otherwise.
+      if (daysLabel) daysLabel.textContent = stdDD ? 'Complete DDs within X days of signup' : 'Days after signup to deposit';
       const hint = form.querySelector('#dd-section-hint');
       if (hint) {
         hint.innerHTML = (type === 'held-and-dd')

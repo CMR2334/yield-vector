@@ -30,11 +30,18 @@ laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
    ```bash
    cd /Users/collinrekowski/Automation/Churning && \
      git add index.html HANDOFF.md CLAUDE.md SHORTCUT_SETUP.md && \
-     git commit -m "auto update" --allow-empty && \
+     git commit -m "<short descriptive message>" && \
      git push origin main
    ```
    You're working in a worktree branch — `cd` to the main path first so
    the commit lands on `main` (which is what GitHub Pages serves).
+
+   **Use DESCRIPTIVE commit messages** (e.g. `DD form: hide funding-date
+   for standard DD`), NOT the legacy `"auto update"`. The user relies on
+   git history + tags to revert specific changes, so each commit must be
+   identifiable from `git log --oneline`. After the user confirms they're
+   happy with a state, tag it: `git tag -a stable-YYYY-MM-DD -m "..." &&
+   git push origin stable-YYYY-MM-DD`. Tags are the named restore points.
 
 2. **Push at least every 30 minutes of active work**, even mid-session,
    so the user can verify changes on their iPhone/laptop without waiting
