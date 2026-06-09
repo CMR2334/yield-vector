@@ -38,6 +38,38 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-06-08 — Session C (claude-opus-4-7)
+**Round 38 — two-field status model + source banks + fixes**
+- **Status redesign (shadow approach).** New per-offer `accountStatus`
+  ('open'|'closed') + `subStatus` (prospect/applied/approved/denied/
+  on-track/met-waiting/earned/didnt-track/archived). The legacy
+  `offer.status` is KEPT as a derived shadow via
+  `deriveLegacyStatus(account, sub)` so all 44 existing call sites
+  (projection/timeline/optimizer/chips) work untouched. `normalize-
+  OfferStatus(o)` runs idempotently at the top of `render()` (covers
+  load, sync pull, edits) + once in `App.init`. Migration map:
+  applied→Approved, funded→On-Track, completed→Earned+Closed,
+  skipped→Archived. Projection roles (verified): Prospect/Applied =
+  hypothetical; Approved/On-Track/Met/Earned = confirmed (capital
+  frees at withdrawal date); Denied/Didn't-Track/Archived = excluded;
+  **account Closed force-excludes regardless of sub status.** Auto-flip
+  account→Open when sub ∈ {approved,on-track,met-waiting,earned,
+  didnt-track}. Modal now has two selects; inline card dropdown + offers
+  filter + chips all use subStatus.
+- **At-a-glance:** "Active offers" card replaced by **"Working toward
+  SUB"** = account-open offers with sub ∈ {approved,on-track,met-waiting}.
+- **"My source banks" setting** (`settings.sourceBanks: []`) — add/
+  remove/dedupe list in Settings. Foundation for DoC DD-method ranking.
+- **Fixes:** DD rows now populate on first modal open (was: had to
+  toggle requirement mode); calendar-preview legend relabeled to
+  relative buckets (not misleading "+1 day"); color-picker X-ring
+  clip fixed (picker padding); Upcoming-actions offer click opens the
+  modal in place (no tab switch).
+- **Adopted descriptive commit messages** (CLAUDE.md updated). Tags:
+  `stable-2026-06-08`, `stable-2026-06-08b`.
+- **calendar-preview.html** = standalone prototype (not linked from the
+  app). Delete once the real picker is integrated.
+
 ### 2026-05-28 — Session C (claude-opus-4-7)
 **Round 37 — DD offer overhaul: round-trip ROI, requirement modes, drop "Other"**
 - **Removed the "Other" offer type.** Only `new-funds-held`,
