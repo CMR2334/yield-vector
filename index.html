@@ -1984,15 +1984,24 @@ const SUB_STATUS_CHIP_CLASS = {
 const SUBSTATUS_FLIPS_OPEN = new Set(['approved', 'on-track', 'met-waiting', 'earned', 'didnt-track']);
 // Card 1 "Working toward a SUB": account open + actively pursuing.
 const WORKING_SUB_STATUSES = new Set(['approved', 'on-track', 'met-waiting']);
+// "Pre-account" sub-statuses: you haven't opened the account yet, so the
+// account defaults to Closed but that does NOT force-exclude them (they
+// remain hypothetical, includable via the scenario checkbox). Only an
+// account that was OPENED and then Closed force-excludes.
+const PRE_ACCOUNT_SUB_STATUSES = new Set(['prospect', 'applied']);
+function defaultAccountForSub(subStatus) {
+  return SUBSTATUS_FLIPS_OPEN.has(subStatus) ? 'open' : 'closed';
+}
 
 // New (account, sub) → legacy status, encoding the projection rules:
-//  - Account explicitly Closed → force-exclude (treat as 'completed').
+//  - Account Closed force-excludes ONLY when the account was meaningfully
+//    open (not for pre-account prospect/applied, which stay hypothetical).
 //  - Approved/On-Track/Met/Earned → 'funded' (confirmed; capital frees
 //    naturally at the withdrawal date via the projection engine).
 //  - Prospect → 'prospect', Applied → 'selected' (both hypothetical).
 //  - Denied → 'skipped'; Didn't Track / Archived → 'completed' (excluded).
 function deriveLegacyStatus(accountStatus, subStatus) {
-  if (accountStatus === 'closed') return 'completed';
+  if (accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(subStatus)) return 'completed';
   switch (subStatus) {
     case 'prospect': return 'prospect';
     case 'applied': return 'selected';
@@ -2007,17 +2016,18 @@ function deriveLegacyStatus(accountStatus, subStatus) {
   }
 }
 // Legacy status → new fields (one-time migration for offers saved before
-// the redesign). old 'applied' was confirmed → map to Approved to
-// preserve behavior; 'funded' → On-Track; completed/skipped → closed.
+// the redesign). Pre-account statuses (prospect/selected) → account
+// Closed (not opened yet). old 'applied' was confirmed → Approved (open);
+// 'funded' → On-Track (open); completed/skipped → closed.
 function migrateLegacyStatus(legacy) {
   switch (legacy) {
-    case 'prospect': return { accountStatus: 'open', subStatus: 'prospect' };
-    case 'selected': return { accountStatus: 'open', subStatus: 'prospect' };
+    case 'prospect': return { accountStatus: 'closed', subStatus: 'prospect' };
+    case 'selected': return { accountStatus: 'closed', subStatus: 'prospect' };
     case 'applied': return { accountStatus: 'open', subStatus: 'approved' };
     case 'funded': return { accountStatus: 'open', subStatus: 'on-track' };
     case 'completed': return { accountStatus: 'closed', subStatus: 'earned' };
     case 'skipped': return { accountStatus: 'closed', subStatus: 'archived' };
-    default: return { accountStatus: 'open', subStatus: 'prospect' };
+    default: return { accountStatus: 'closed', subStatus: 'prospect' };
   }
 }
 // Ensure an offer has both new fields and a synced legacy status. Safe to
@@ -2029,7 +2039,7 @@ function normalizeOfferStatus(o) {
     o.subStatus = m.subStatus;
     if (!o.accountStatus) o.accountStatus = m.accountStatus;
   }
-  if (!o.accountStatus) o.accountStatus = 'open';
+  if (!o.accountStatus) o.accountStatus = defaultAccountForSub(o.subStatus);
   o.status = deriveLegacyStatus(o.accountStatus, o.subStatus);
   return o;
 }
@@ -5767,7 +5777,7 @@ function showOfferModal(offerId = null) {
     optionalPlannedFundingDate: '',
     lockStartsFrom: App.state.settings.defaultLockStartsFrom || 'funded date',
     status: 'prospect',
-    accountStatus: 'open',
+    accountStatus: 'closed',
     subStatus: 'prospect',
     includeInScenario: true,
     confidence: 'likely',
@@ -6262,7 +6272,7 @@ function readOfferForm(idArg, isEdit) {
     daysFundsMustRemain: daysRemain,
     optionalPlannedFundingDate: data.optionalPlannedFundingDate || '',
     lockStartsFrom: data.lockStartsFrom || 'funded date',
-    accountStatus: data.accountStatus || 'open',
+    accountStatus: data.accountStatus || 'closed',
     subStatus: data.subStatus || 'prospect',
     // status is the derived shadow — set below via normalizeOfferStatus.
     status: 'prospect',
