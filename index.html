@@ -5799,6 +5799,15 @@ function showOfferModal(offerId = null) {
         refreshFundingSuggest();
       }
     });
+    // Initial DD-row population: if this is a DD-type offer that has no
+    // saved deposits yet (e.g. a brand-new offer with count=1), generate
+    // the rows now so they appear on first open without the user having
+    // to toggle the requirement mode back and forth.
+    const initType = (form.querySelector('[name="offerType"]:checked') || {}).value;
+    const entriesEl = form.querySelector('#dd-entries');
+    if ((initType === 'direct-deposit' || initType === 'held-and-dd') && entriesEl && !entriesEl.querySelector('.dd-row')) {
+      generateDdDatesFromRequirement();
+    }
   }, 50);
 }
 

@@ -62,10 +62,10 @@
         <span style="font-size:13px;color:var(--text-2);">in <input id="inDays" type="number" min="0" max="5" value="1" style="width:48px;"> · season <input id="seasonDays" type="number" min="0" max="5" value="1" style="width:48px;"> · back <input id="backDays" type="number" min="0" max="5" value="1" style="width:48px;"></span>
       </div>
     </div>
-    <div class="legend">
-      <span><span class="sw" style="background:var(--good-bg);border:1px solid #34d399;"></span> Optimal (shortest hold)</span>
-      <span><span class="sw" style="background:var(--mid-bg);border:1px solid #f59e0b;"></span> +1 day</span>
-      <span><span class="sw" style="background:var(--bad-bg);border:1px solid var(--bad);"></span> Longest (avoid)</span>
+    <div class="legend" id="legend">
+      <span><span class="sw" style="background:var(--good-bg);border:1px solid #34d399;"></span> Shortest hold this month</span>
+      <span><span class="sw" style="background:var(--mid-bg);border:1px solid #f59e0b;"></span> In between</span>
+      <span><span class="sw" style="background:var(--bad-bg);border:1px solid var(--bad);"></span> Longest hold (avoid)</span>
       <span><span class="sw" style="background:var(--off);"></span> Weekend / non-business</span>
       <span><span class="sw" style="background:var(--card);border:1px solid var(--border);position:relative;"></span> Holiday = red dot</span>
     </div>
