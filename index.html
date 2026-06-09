@@ -260,6 +260,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent-mid);
 }
 .snap.snap-active::before  { background: #7c5fef; }
+.snap.snap-actions::before { background: #e87171; }
 .snap.snap-confirmed::before { background: #10b981; }
 .snap.snap-events::before    { background: #f59e0b; }
 .snap.snap-horizon::before   { background: #6b7280; }
@@ -4083,6 +4084,7 @@ function renderOverview() {
         <div class="snapshot-title">At a glance</div>
         <div class="snapshot-grid">
           <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.accountStatus !== 'closed' && WORKING_SUB_STATUSES.has(o.subStatus)).length}</span><span class="snap-l">Working toward SUB</span></div>
+          <div class="snap snap-actions"><span class="snap-v">${computeActionsRequired(App.state)}</span><span class="snap-l">Actions required</span></div>
           <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
           <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
           <div class="snap snap-horizon"><span class="snap-v">${effectiveHorizonDays(App.state)}d</span><span class="snap-l">Horizon</span></div>
@@ -4211,6 +4213,37 @@ function computeReminderFeed(state) {
     horizonDays: effectiveHorizonDays(state),
     items
   };
+}
+
+// "Actions required": discrete to-dos you still have to perform to secure
+// SUB requirements across offers that aren't done/closed. Counts upcoming
+// direct deposits to initiate, lump-sum deposits not yet made, and
+// qualifying debit-card transactions. Met (Waiting)/Earned/closed offers
+// have no pending actions.
+function computeActionsRequired(state) {
+  const ACTIONABLE_SUBS = new Set(['prospect', 'applied', 'approved', 'on-track']);
+  let n = 0;
+  for (const o of state.offers || []) {
+    if (!ACTIONABLE_SUBS.has(o.subStatus)) continue;
+    // Skip an account that was opened then Closed (done). Pre-account
+    // statuses (prospect/applied) default to Closed = "not opened yet" —
+    // their planned actions still count.
+    if (o.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(o.subStatus)) continue;
+    if (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') {
+      for (const dd of (o.directDeposits || [])) {
+        const d = parseDate(dd.plannedDate);
+        if (d && d >= TODAY) n++;          // a DD you still need to initiate
+      }
+    }
+    if (o.offerType === 'new-funds-held') {
+      const fund = parseDate(lockStartDate(o));
+      if (fund && fund >= TODAY) n++;       // the lump-sum deposit to make
+    }
+    if (o.debitRequirement && o.debitRequirement.required) {
+      n += Number(o.debitRequirement.count) || 0;  // qualifying debit purchases
+    }
+  }
+  return n;
 }
 
 function computeUpcomingActions(state, limit = 12) {
@@ -4587,6 +4620,7 @@ function renderOfferCard(o) {
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
+        ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${o.debitRequirement.byDate ? ' by ' + formatDateMedium(o.debitRequirement.byDate) : ''}">${o.debitRequirement.count} debit txns</span>` : ''}
       </div>
     </div>
   `;
@@ -5895,6 +5929,7 @@ function showOfferModal(offerId = null) {
     color: autoColor,
     offerType: 'new-funds-held',
     directDeposits: [],
+    debitRequirement: { required: false, count: null, byDate: '' },
     requiredFundingAmount: null,
     signupBonusAmount: null,
     offerExpirationDate: '',
@@ -5917,6 +5952,7 @@ function showOfferModal(offerId = null) {
   if (!o.offerType || o.offerType === 'other') o.offerType = 'new-funds-held';
   if (!Array.isArray(o.directDeposits)) o.directDeposits = [];
   if (!o.ddRequirement) o.ddRequirement = { mode: 'count', count: o.directDeposits.length || 1, freqEvery: 'month', freqPeriods: 3 };
+  if (!o.debitRequirement) o.debitRequirement = { required: false, count: null, byDate: '' };
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -6014,6 +6050,31 @@ function showOfferModal(offerId = null) {
             <div id="dd-entries">${(o.directDeposits || []).map((dd, i) => renderDdRow(dd, i)).join('')}</div>
             <button type="button" class="btn btn-secondary btn-sm" data-action="add-dd-row" style="align-self:flex-start;margin-top:6px;">+ Add deposit</button>
             <span class="field-hint" id="dd-section-hint">Plan each DD's <strong>initiation</strong> date. Standard DD ties up the money only for its transfer round trip; plan the first DD early so you have time to retry from another bank if it doesn't code as a direct deposit. Dates auto-shift to the next business day if they land on a weekend or federal holiday.</span>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Debit-card transaction requirement?</label>
+            <div class="radio-group" style="max-width:260px;">
+              <input type="radio" id="debit-no" name="debitRequired" value="no" ${o.debitRequirement.required ? '' : 'checked'} />
+              <label for="debit-no">No</label>
+              <input type="radio" id="debit-yes" name="debitRequired" value="yes" ${o.debitRequirement.required ? 'checked' : ''} />
+              <label for="debit-yes">Yes</label>
+            </div>
+          </div>
+          <div class="field" id="debit-fields-wrap" style="grid-column: 1 / -1;${o.debitRequirement.required ? '' : 'display:none;'}">
+            <div class="form-grid">
+              <div class="field">
+                <label for="f-debit-count">Qualifying debit purchases *</label>
+                <div class="input-group with-suffix">
+                  <input id="f-debit-count" class="input" type="number" min="1" max="99" step="1" value="${o.debitRequirement.count ?? ''}" name="debitCount" />
+                  <span class="input-suffix">txns</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="f-debit-by">Complete by (optional)</label>
+                <input id="f-debit-by" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.debitRequirement.byDate || '')}" name="debitByDate" data-picker-mode="plain" />
+              </div>
+            </div>
+            <span class="field-hint">Some SUBs require N qualifying debit-card purchases. Counts toward "Actions required" on the Overview.</span>
           </div>
           <div class="field">
             <label for="f-funding">Required funding *</label>
@@ -6192,6 +6253,11 @@ function showOfferModal(offerId = null) {
       if (ev.target.id === 'f-substatus' && SUBSTATUS_FLIPS_OPEN.has(ev.target.value)) {
         const acct = form.querySelector('#f-accountstatus');
         if (acct) acct.value = 'open';
+      }
+      // Debit-requirement Yes/No → show or hide the count/deadline fields.
+      if (ev.target.name === 'debitRequired') {
+        const wrap = form.querySelector('#debit-fields-wrap');
+        if (wrap) wrap.style.display = ev.target.value === 'yes' ? '' : 'none';
       }
       // Auto-populate the DD rows when the requirement count/frequency
       // changes, so the right number of dated rows appears without an
@@ -6381,6 +6447,11 @@ function readOfferForm(idArg, isEdit) {
   // Standard DD has no bank hold — null out daysFundsMustRemain so the
   // round-trip model governs and validation doesn't demand it.
   const daysRemain = offerType === 'direct-deposit' ? null : num(data.daysFundsMustRemain);
+  const debitRequirement = {
+    required: data.debitRequired === 'yes',
+    count: data.debitRequired === 'yes' ? (num(data.debitCount) || null) : null,
+    byDate: data.debitRequired === 'yes' ? (data.debitByDate || '') : ''
+  };
 
   const offer = {
     id: idArg,
@@ -6388,6 +6459,7 @@ function readOfferForm(idArg, isEdit) {
     offerName: (data.offerName || '').trim(),
     offerType,
     ddRequirement,
+    debitRequirement,
     color: data.color || '',
     directDeposits: readDdRowsFromForm()
       .filter(dd => dd.plannedDate || (dd.amount != null && dd.amount > 0)),
