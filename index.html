@@ -929,7 +929,9 @@ a { color: inherit; text-decoration: none; }
 /* Custom date picker popover */
 .yv-date { cursor: pointer; }
 .yv-dp {
-  width: 280px;
+  /* Responsive width so the popover never exceeds a narrow phone screen. */
+  width: min(280px, calc(100vw - 16px));
+  box-sizing: border-box;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -2838,17 +2840,25 @@ const DatePicker = {
   // instead of flipping the whole popover across the field.
   place() {
     const r = this.input.getBoundingClientRect();
-    const W = 280, EST = 360, el = this.el;
+    const el = this.el;
     el.style.position = 'fixed';
-    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) + 'px';
-    const roomBelow = window.innerHeight - r.bottom;
-    const placeBelow = roomBelow >= EST || r.top < EST; // prefer below; only go above with real room
-    if (placeBelow) {
-      el.style.top = (r.bottom + 6) + 'px';
-      el.style.bottom = 'auto';
+    // Measure the ACTUAL rendered size (responsive width on narrow screens).
+    const w = el.offsetWidth || 280;
+    const h = el.offsetHeight || 320;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // Horizontal: anchor to the field's left, but clamp fully into the
+    // viewport with an 8px margin so it can never hang off either edge.
+    const left = Math.max(8, Math.min(r.left, vw - w - 8));
+    el.style.left = left + 'px';
+    // Vertical: below if it fits, else above; clamp so it never spills past
+    // the top or bottom of the screen either.
+    const roomBelow = vh - r.bottom;
+    if (roomBelow >= h + 8 || r.top < h + 8) {
+      const top = Math.max(8, Math.min(r.bottom + 6, vh - h - 8));
+      el.style.top = top + 'px'; el.style.bottom = 'auto';
     } else {
-      el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-      el.style.top = 'auto';
+      const bottom = Math.max(8, Math.min(vh - r.top + 6, vh - h - 8));
+      el.style.bottom = bottom + 'px'; el.style.top = 'auto';
     }
   },
   // For the visible month, compute per-business-day hold (dd mode) to find
