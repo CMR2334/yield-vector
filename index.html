@@ -926,6 +926,49 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
 }
 
+/* Custom date picker popover */
+.yv-date { cursor: pointer; }
+.yv-dp {
+  width: 280px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-modal);
+  padding: 12px;
+  z-index: 300;
+  font-family: var(--font-sans);
+}
+.yv-dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.yv-dp-head span { font-size: 14px; font-weight: 600; }
+.yv-dp-head button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); font-size: 15px; cursor: pointer; color: var(--text-secondary); }
+.yv-dp-head button:hover { background: var(--bg); }
+.yv-dp-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 3px; }
+.yv-dp-dow span { text-align: center; font-size: 10px; font-weight: 600; color: var(--text-tertiary); }
+.yv-dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.yv-dp-day {
+  aspect-ratio: 1; border: 1.5px solid transparent; border-radius: 8px;
+  background: var(--card); cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; position: relative; padding: 0;
+  font-family: inherit;
+}
+.yv-dp-day b { font-size: 13px; font-weight: 600; }
+.yv-dp-day i { font-size: 8.5px; font-weight: 700; font-style: normal; margin-top: -1px; }
+.yv-dp-day:hover { box-shadow: 0 2px 8px rgba(15,23,42,.12); }
+.yv-dp-day.muted { color: var(--text-tertiary); background: var(--bg); }
+.yv-dp-day.good  { background: var(--success-soft); } .yv-dp-day.good b, .yv-dp-day.good i { color: #047857; }
+.yv-dp-day.mid   { background: #fff5e0; }            .yv-dp-day.mid b, .yv-dp-day.mid i { color: #b45309; }
+.yv-dp-day.amber { background: #fff5e0; }            .yv-dp-day.amber b { color: #b45309; }
+.yv-dp-day.bad   { background: #fde8e8; }            .yv-dp-day.bad b, .yv-dp-day.bad i { color: #c0392b; }
+.yv-dp-day.sel   { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,92,246,.2); }
+.yv-dp-day.holiday::after { content: ''; position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--danger); }
+.yv-dp-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 10.5px; color: var(--text-secondary); }
+.yv-dp-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.yv-dp-legend .s { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.yv-dp-legend .s.good { background: var(--success-soft); } .yv-dp-legend .s.mid, .yv-dp-legend .s.amber { background: #fff5e0; } .yv-dp-legend .s.bad { background: #fde8e8; }
+.yv-dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
+.yv-dp-foot button { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 6px; font-weight: 500; }
+.yv-dp-foot button:hover { text-decoration: underline; }
+
 .offer-card-header {
   display: flex;
   align-items: flex-start;
@@ -2718,6 +2761,145 @@ function directDepositEffectiveDate(dd) {
   if (!planned) return '';
   return isoDate(nextBusinessDay(planned));
 }
+
+/* ============================================================
+   CUSTOM DATE PICKER (color-coded popover)
+   ============================================================
+   Replaces the native <input type="date"> on offer-modal date fields
+   with a month grid whose business days are shaded by an optimality
+   metric. Two modes (set via data-picker-mode on the input):
+     'dd'    — shade business days by the DD round-trip hold (green =
+               shortest, red = longest); for picking DD initiation dates.
+     'plain' — business days green ("posts same business day"), weekend/
+               holiday amber ("will shift to next business day"); for
+               funding/signup dates.
+   The input stays a readonly text field whose .value is the YYYY-MM-DD
+   string (so FormData / readDdRowsFromForm keep working unchanged). The
+   popover is appended to <body> with position:fixed so the modal's
+   overflow can't clip it.
+   ============================================================ */
+const DatePicker = {
+  el: null, input: null, mode: 'plain', vY: 0, vM: 0,
+  ensure() {
+    if (this.el) return;
+    const d = document.createElement('div');
+    d.className = 'yv-dp';
+    d.style.display = 'none';
+    document.body.appendChild(d);
+    this.el = d;
+    d.addEventListener('mousedown', (e) => e.preventDefault()); // keep input focus
+    d.addEventListener('click', (e) => this.onClick(e));
+    document.addEventListener('mousedown', (e) => {
+      if (this.el.style.display === 'none') return;
+      if (!this.el.contains(e.target) && e.target !== this.input) this.close();
+    });
+    window.addEventListener('resize', () => this.close());
+  },
+  open(input) {
+    this.ensure();
+    this.input = input;
+    this.mode = input.dataset.pickerMode || 'plain';
+    const cur = parseDate(input.value) || TODAY;
+    this.vY = cur.getFullYear(); this.vM = cur.getMonth();
+    this.render(); this.position();
+    this.el.style.display = 'block';
+  },
+  close() { if (this.el) this.el.style.display = 'none'; this.input = null; },
+  position() {
+    const r = this.input.getBoundingClientRect();
+    const W = 280, el = this.el;
+    el.style.position = 'fixed';
+    let left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8));
+    el.style.left = left + 'px';
+    // Below the input, or above if it would overflow the viewport bottom.
+    const h = el.offsetHeight || 320;
+    if (r.bottom + 6 + h > window.innerHeight && r.top - 6 - h > 0) el.style.top = (r.top - 6 - h) + 'px';
+    else el.style.top = (r.bottom + 6) + 'px';
+  },
+  // For the visible month, compute per-business-day hold (dd mode) to find
+  // the min/max so coloring is relative to what's achievable that month.
+  monthStats() {
+    if (this.mode !== 'dd') return { min: 0, max: 0, held: {} };
+    const y = this.vY, m = this.vM, held = {};
+    let min = Infinity, max = -Infinity;
+    const dim = new Date(y, m + 1, 0).getDate();
+    for (let d = 1; d <= dim; d++) {
+      const date = new Date(y, m, d);
+      if (!isBusinessDay(date)) continue;
+      const rt = ddRoundTrip({ plannedDate: isoDate(date) });
+      if (!rt) continue;
+      held[d] = rt.heldDays;
+      if (rt.heldDays < min) min = rt.heldDays;
+      if (rt.heldDays > max) max = rt.heldDays;
+    }
+    return { min, max, held };
+  },
+  render() {
+    const y = this.vY, m = this.vM;
+    const stats = this.monthStats();
+    const monthName = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const selected = parseDate(this.input && this.input.value);
+    const firstPad = new Date(y, m, 1).getDay();
+    const dim = new Date(y, m + 1, 0).getDate();
+    let cells = '';
+    for (let i = 0; i < firstPad; i++) cells += '<span></span>';
+    for (let d = 1; d <= dim; d++) {
+      const date = new Date(y, m, d);
+      const biz = isBusinessDay(date), holi = isUsBankHoliday(date);
+      let cls = 'yv-dp-day';
+      let badge = '';
+      if (!biz) {
+        cls += this.mode === 'plain' ? ' amber' : ' muted';
+      } else if (this.mode === 'dd') {
+        const h = stats.held[d];
+        if (h != null) {
+          if (h <= stats.min) cls += ' good';
+          else if (h >= stats.max && stats.max > stats.min) cls += ' bad';
+          else cls += ' mid';
+          badge = `<i>${h}d</i>`;
+        }
+      } else {
+        cls += ' good';
+      }
+      if (holi) cls += ' holiday';
+      if (selected && selected.getFullYear() === y && selected.getMonth() === m && selected.getDate() === d) cls += ' sel';
+      cells += `<button type="button" class="${cls}" data-day="${isoDate(date)}"><b>${d}</b>${badge}</button>`;
+    }
+    const legend = this.mode === 'dd'
+      ? `<div class="yv-dp-legend"><span><i class="s good"></i>shortest</span><span><i class="s mid"></i>mid</span><span><i class="s bad"></i>longest</span></div>`
+      : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span></div>`;
+    this.el.innerHTML =
+      `<div class="yv-dp-head"><button type="button" data-nav="-1">‹</button><span>${monthName}</span><button type="button" data-nav="1">›</button></div>`
+      + `<div class="yv-dp-dow">${['S','M','T','W','T','F','S'].map(x => `<span>${x}</span>`).join('')}</div>`
+      + `<div class="yv-dp-grid">${cells}</div>`
+      + legend
+      + `<div class="yv-dp-foot"><button type="button" data-today="1">Today</button><button type="button" data-clear="1">Clear</button></div>`;
+  },
+  onClick(e) {
+    const nav = e.target.closest('[data-nav]');
+    if (nav) {
+      this.vM += parseInt(nav.dataset.nav, 10);
+      if (this.vM < 0) { this.vM = 11; this.vY--; }
+      if (this.vM > 11) { this.vM = 0; this.vY++; }
+      this.render(); this.position();
+      return;
+    }
+    if (e.target.closest('[data-today]')) {
+      this.vY = TODAY.getFullYear(); this.vM = TODAY.getMonth();
+      this.setValue(isoDate(TODAY)); return;
+    }
+    if (e.target.closest('[data-clear]')) { this.setValue(''); return; }
+    const day = e.target.closest('[data-day]');
+    if (day) this.setValue(day.dataset.day);
+  },
+  setValue(iso) {
+    if (!this.input) return;
+    this.input.value = iso;
+    this.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.input.dispatchEvent(new Event('change', { bubbles: true }));
+    this.close();
+  }
+};
 
 function isoDate(d) {
   if (!d) return '';
@@ -5704,11 +5886,11 @@ function showOfferModal(offerId = null) {
           </div>
           <div class="field">
             <label for="f-expires">Offer expires</label>
-            <input id="f-expires" class="input" type="date" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" />
+            <input id="f-expires" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" data-picker-mode="plain" />
           </div>
           <div class="field">
             <label for="f-signup">Planned signup date *</label>
-            <input id="f-signup" class="input" type="date" required value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" />
+            <input id="f-signup" class="input yv-date" type="text" readonly inputmode="none" required placeholder="YYYY-MM-DD" value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" data-picker-mode="plain" />
           </div>
           <div class="field">
             <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of signup' : 'Days after signup to deposit'}</label>
@@ -5726,7 +5908,7 @@ function showOfferModal(offerId = null) {
           </div>
           <div class="field" id="funding-date-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
             <label for="f-funded">Planned funding date (optional)</label>
-            <input id="f-funded" class="input" type="date" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" />
+            <input id="f-funded" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
             <span class="field-hint" id="f-funded-suggest">${(() => {
               const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
               return sug ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)` : '';
@@ -5952,7 +6134,7 @@ function renderDdRow(dd, i) {
   }
   return `
     <div class="dd-row" data-dd-index="${i}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:6px;">
-      <input type="date" class="input dd-field" data-dd-field="plannedDate" value="${escapeAttr(dd && dd.plannedDate || '')}" aria-label="Initiation date for DD ${i + 1}" />
+      <input type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" class="input dd-field yv-date" data-dd-field="plannedDate" data-picker-mode="dd" value="${escapeAttr(dd && dd.plannedDate || '')}" aria-label="Initiation date for DD ${i + 1}" />
       <div class="input-group"><span class="input-prefix">$</span>
         <input type="number" class="input dd-field" data-dd-field="amount" min="0" step="50" value="${dd && dd.amount != null ? dd.amount : ''}" aria-label="Amount for DD ${i + 1}" />
       </div>
@@ -6429,6 +6611,11 @@ function bindGlobalEvents() {
   document.addEventListener('click', onClick);
   document.addEventListener('change', onChange);
   document.addEventListener('input', onInput);
+  // Open the custom date picker when a .yv-date field is clicked.
+  document.addEventListener('click', (e) => {
+    const inp = e.target.closest && e.target.closest('.yv-date');
+    if (inp) { e.preventDefault(); DatePicker.open(inp); }
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const modal = document.getElementById('modal-root');
