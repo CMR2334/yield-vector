@@ -1084,6 +1084,19 @@ a { color: inherit; text-decoration: none; }
 .offer-dd-date { color: var(--text-secondary); font-feature-settings: 'tnum' 1; }
 .offer-dd-adj { color: var(--text-tertiary); }
 
+/* DD-method datapoint panel (Doctor of Credit) on the offer card */
+.ddm-panel { margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); background: var(--card-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-md); }
+.ddm-panel.ddm-loading, .ddm-panel.ddm-empty { font-size: 11px; color: var(--text-tertiary); }
+.ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.ddm-src { font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; font-size: 10px; }
+.ddm-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.ddm-pill { font-size: 11.5px; padding: 3px 8px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
+.ddm-pill b { font-weight: 700; color: var(--text-tertiary); margin-left: 2px; font-feature-settings: 'tnum' 1; }
+.ddm-pill.mine { background: var(--success-soft); color: #047857; border-color: rgba(16,185,129,0.3); }
+.ddm-pill.mine b { color: #047857; }
+.ddm-foot { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; }
+.ddm-foot strong { color: #047857; }
+
 /* DD entry rows inside the Add-Offer modal — same compact grid as the
    card display but inputs instead of text. Defined here so the row
    layout survives the modal's blast-radius `.modal .form-grid > *
@@ -2926,6 +2939,64 @@ const DatePicker = {
   }
 };
 
+/* ============================================================
+   DD-METHOD DATAPOINTS (Doctor of Credit)
+   ============================================================
+   Lazy-loads dd-methods.json (1,150+ destination banks, each with the
+   source methods that code as a direct deposit + their DP counts). For a
+   given offer bank, ranks methods by DP count and flags which are the
+   user's own source banks (settings.sourceBanks). Same-origin fetch —
+   the file is committed alongside index.html and served by GitHub Pages,
+   so it works offline-after-first-load (browser cache) and survives
+   across sessions (it's in the repo, not anyone's context).
+   ============================================================ */
+const DDMethods = {
+  data: null, loading: false, loaded: false, failed: false,
+  load() {
+    if (this.loading || this.loaded) return;
+    this.loading = true;
+    fetch('dd-methods.json')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(j => { this.data = j; this.loaded = true; this.loading = false; render(); })
+      .catch(() => { this.loading = false; this.failed = true; });
+  },
+  slug(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); },
+  // Find the DoC entry for an offer bank name (exact slug, else fuzzy
+  // prefix/contains match — "Chase Bank" ↔ "chase").
+  lookup(bankName) {
+    if (!this.data || !this.data.banks) return null;
+    const sl = this.slug(bankName);
+    if (!sl) return null;
+    const banks = this.data.banks;
+    if (banks[sl]) return banks[sl];
+    let best = null, bestLen = 0;
+    for (const k in banks) {
+      if (sl.length >= 4 && (sl.startsWith(k) || k.startsWith(sl)) && k.length > bestLen) { best = banks[k]; bestLen = k.length; }
+    }
+    return best;
+  },
+  // Ranked methods for an offer bank + which are the user's source banks,
+  // plus the fallback signals (best-of-mine, none-of-mine).
+  forOffer(bankName, sourceBanks) {
+    const entry = this.lookup(bankName);
+    if (!entry) return null;
+    const mine = (sourceBanks || []).map(b => this.slug(b)).filter(Boolean);
+    const isMine = (method) => {
+      const ms = this.slug(method);
+      return mine.some(x => ms === x || (x.length >= 3 && (ms.startsWith(x) || x.startsWith(ms))));
+    };
+    const works = (entry.works || []).map(w => ({ ...w, mine: isMine(w.method) }));
+    return {
+      name: entry.name,
+      top3: works.slice(0, 3),
+      myBest: works.filter(w => w.mine).sort((a, b) => b.dps - a.dps)[0] || null,
+      topHasMine: works.slice(0, 3).some(w => w.mine),
+      anyMine: works.some(w => w.mine),
+      hasSourceBanks: (sourceBanks || []).length > 0
+    };
+  }
+};
+
 function isoDate(d) {
   if (!d) return '';
   const dt = d instanceof Date ? d : parseDate(d);
@@ -3051,6 +3122,8 @@ const App = {
     if (Sync.isConfigured()) {
       setTimeout(() => Sync.startupSync(), 50);
     }
+    // Lazy-load the DD-method datapoints (re-renders cards when ready).
+    setTimeout(() => DDMethods.load(), 80);
   },
 
   // Auto-roll the projection start date forward to today whenever it
@@ -4387,6 +4460,32 @@ function renderComboCard(r, rank, candidates, currentMask) {
   `;
 }
 
+// DD-method datapoint panel for an offer card: top 3 source methods (by
+// DoC datapoint count) that code as a DD at this offer's bank, with the
+// user's own source banks flagged + fallback guidance.
+function renderDdMethodPanel(o) {
+  if (DDMethods.failed) return '';
+  if (!DDMethods.loaded) return `<div class="ddm-panel ddm-loading">Loading DD-method datapoints…</div>`;
+  const info = DDMethods.forOffer(o.bankName, App.state.settings.sourceBanks);
+  if (!info) return `<div class="ddm-panel ddm-empty">No DD-method datapoints for ${escapeHtml(o.bankName || 'this bank')} in the DoC list.</div>`;
+  const rows = info.top3.map(w =>
+    `<span class="ddm-pill ${w.mine ? 'mine' : ''}" title="${w.dps} Doctor of Credit datapoint${w.dps === 1 ? '' : 's'}${w.note ? ' · ' + escapeAttr(w.note) : ''}${w.mine ? ' · one of your source banks' : ''}">${w.mine ? '★ ' : ''}${escapeHtml(w.method)} <b>${w.dps}</b></span>`
+  ).join('');
+  let foot = '';
+  if (!info.anyMine) {
+    foot = info.hasSourceBanks
+      ? `<div class="ddm-foot">None of your source banks have datapoints here.</div>`
+      : `<div class="ddm-foot">Add your source banks in Settings to flag which of yours work.</div>`;
+  } else if (!info.topHasMine && info.myBest) {
+    foot = `<div class="ddm-foot">Your best option: <strong>★ ${escapeHtml(info.myBest.method)}</strong> (${info.myBest.dps} DP${info.myBest.dps === 1 ? '' : 's'})</div>`;
+  }
+  return `<div class="ddm-panel">
+    <div class="ddm-title">Top DD methods → ${escapeHtml(info.name)} <span class="ddm-src">DoC datapoints</span></div>
+    <div class="ddm-list">${rows}</div>
+    ${foot}
+  </div>`;
+}
+
 function renderOfferCard(o) {
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
@@ -4463,6 +4562,7 @@ function renderOfferCard(o) {
           }).join('')}
         </div>
       ` : ''}
+      ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? renderDdMethodPanel(o) : ''}
       <div class="offer-chips">
         <span class="chip chip-offer-type-${(o.offerType && o.offerType !== 'other') ? o.offerType : 'new-funds-held'}" title="${
           o.offerType === 'direct-deposit' ? 'Direct deposit — no hold; money round-trips through the account' :
