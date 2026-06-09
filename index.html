@@ -1329,24 +1329,24 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  /* Reserve consistent vertical space so a 2-line label ("Days after signup
-     to deposit") and a 1-line label ("Status") don't push their inputs onto
-     different baselines when paired in a row. */
-  min-height: 30px;
-  display: flex;
-  align-items: flex-end;
   line-height: 1.25;
 }
-/* Inputs pin to the bottom of the cell. Combined with the label's reserved
-   min-height, every input in a form-grid row lines up horizontally even when
-   labels above wrap to different numbers of lines. */
-.field > .input,
-.field > .select,
-.field > .textarea,
-.field > .input-group,
-.field > .radio-group {
+/* OFFER-FORM ONLY: the dense 2-column offer modal needs reserved label
+   height + bottom-pinned inputs so a 2-line label and a 1-line label in
+   the same row keep their inputs on one baseline. Scoped to #offer-form
+   so it doesn't distort the single-column Settings forms (which have
+   hints in varying positions and were rendering at uneven heights). */
+#offer-form .field label { min-height: 30px; display: flex; align-items: flex-end; }
+#offer-form .field > .input,
+#offer-form .field > .select,
+#offer-form .field > .textarea,
+#offer-form .field > .input-group,
+#offer-form .field > .radio-group {
   margin-top: auto;
 }
+/* Settings / non-modal forms: top-align each field so mixed hint presence
+   doesn't leave big gaps or uneven heights. */
+.form-section .form-grid { align-items: start; }
 .field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
 .field-error { font-size: 12px; color: var(--danger); margin-top: 2px; }
 
@@ -4887,6 +4887,7 @@ function renderSettings() {
       <div class="form-grid">
         <div class="field">
           <label for="s-liquid">Current liquid capital</label>
+          <span class="field-hint">Cash available to deploy right now.</span>
           <div class="input-group">
             <span class="input-prefix">$</span>
             <input id="s-liquid" type="number" step="100" class="input" value="${s.currentLiquidCapital}" data-setting="currentLiquidCapital" />
@@ -4902,13 +4903,14 @@ function renderSettings() {
         </div>
         <div class="field">
           <label for="s-start">Projection start date</label>
-          <input id="s-start" type="date" class="input" style="max-width:fit-content;" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
+          <span class="field-hint">Auto-advances to today each day.</span>
+          <input id="s-start" type="date" class="input" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
         </div>
         <div class="field">
           <label for="s-horizon-mode">Projection horizon</label>
           <span class="field-hint">Currently showing <strong>${effectiveHorizonDays(App.state)} days</strong>.</span>
           <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
-            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 month past last bonus, max 6 months)</option>
+            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 mo past last bonus)</option>
             <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
             <option value="6months" ${s.projectionHorizonMode === '6months' ? 'selected' : ''}>6 months</option>
             <option value="1year" ${s.projectionHorizonMode === '1year' ? 'selected' : ''}>1 year</option>
