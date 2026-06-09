@@ -1912,6 +1912,85 @@ const STATUS_CHIP_CLASS = {
   skipped: 'chip-muted'
 };
 
+/* ============================================================
+   TWO-FIELD STATUS MODEL (account status + sub status)
+   ============================================================
+   The UI exposes two fields per offer:
+     accountStatus: 'open' | 'closed'
+     subStatus:     prospect | applied | approved | denied | on-track |
+                    met-waiting | earned | didnt-track | archived
+   The legacy single `offer.status` (prospect/selected/applied/funded/
+   completed/skipped) is KEPT as a derived shadow value so all existing
+   projection/timeline/chip/optimizer logic (44 call sites) keeps working
+   untouched. deriveLegacyStatus() maps the two new fields onto it.
+   ============================================================ */
+const ACCOUNT_STATUSES = ['open', 'closed'];
+const ACCOUNT_STATUS_LABELS = { open: 'Open', closed: 'Closed' };
+const SUB_STATUSES = ['prospect', 'applied', 'approved', 'denied', 'on-track', 'met-waiting', 'earned', 'didnt-track', 'archived'];
+const SUB_STATUS_LABELS = {
+  prospect: 'Prospect', applied: 'Applied', approved: 'Approved', denied: 'Denied',
+  'on-track': 'On-Track', 'met-waiting': 'Met (Waiting)', earned: 'Earned',
+  'didnt-track': "Didn't Track", archived: 'Archived'
+};
+const SUB_STATUS_CHIP_CLASS = {
+  prospect: 'chip-muted', applied: 'chip-accent', approved: 'chip-accent',
+  denied: 'chip-danger', 'on-track': 'chip-accent', 'met-waiting': 'chip-warn',
+  earned: 'chip-success', 'didnt-track': 'chip-muted', archived: 'chip-muted'
+};
+// Sub-statuses that auto-flip the account to Open when selected.
+const SUBSTATUS_FLIPS_OPEN = new Set(['approved', 'on-track', 'met-waiting', 'earned', 'didnt-track']);
+// Card 1 "Working toward a SUB": account open + actively pursuing.
+const WORKING_SUB_STATUSES = new Set(['approved', 'on-track', 'met-waiting']);
+
+// New (account, sub) → legacy status, encoding the projection rules:
+//  - Account explicitly Closed → force-exclude (treat as 'completed').
+//  - Approved/On-Track/Met/Earned → 'funded' (confirmed; capital frees
+//    naturally at the withdrawal date via the projection engine).
+//  - Prospect → 'prospect', Applied → 'selected' (both hypothetical).
+//  - Denied → 'skipped'; Didn't Track / Archived → 'completed' (excluded).
+function deriveLegacyStatus(accountStatus, subStatus) {
+  if (accountStatus === 'closed') return 'completed';
+  switch (subStatus) {
+    case 'prospect': return 'prospect';
+    case 'applied': return 'selected';
+    case 'approved':
+    case 'on-track':
+    case 'met-waiting':
+    case 'earned': return 'funded';
+    case 'denied': return 'skipped';
+    case 'didnt-track': return 'completed';
+    case 'archived': return 'completed';
+    default: return 'prospect';
+  }
+}
+// Legacy status → new fields (one-time migration for offers saved before
+// the redesign). old 'applied' was confirmed → map to Approved to
+// preserve behavior; 'funded' → On-Track; completed/skipped → closed.
+function migrateLegacyStatus(legacy) {
+  switch (legacy) {
+    case 'prospect': return { accountStatus: 'open', subStatus: 'prospect' };
+    case 'selected': return { accountStatus: 'open', subStatus: 'prospect' };
+    case 'applied': return { accountStatus: 'open', subStatus: 'approved' };
+    case 'funded': return { accountStatus: 'open', subStatus: 'on-track' };
+    case 'completed': return { accountStatus: 'closed', subStatus: 'earned' };
+    case 'skipped': return { accountStatus: 'closed', subStatus: 'archived' };
+    default: return { accountStatus: 'open', subStatus: 'prospect' };
+  }
+}
+// Ensure an offer has both new fields and a synced legacy status. Safe to
+// call repeatedly. Run on load (migration) and after any status edit.
+function normalizeOfferStatus(o) {
+  if (!o) return o;
+  if (!o.subStatus) {
+    const m = migrateLegacyStatus(o.status || 'prospect');
+    o.subStatus = m.subStatus;
+    if (!o.accountStatus) o.accountStatus = m.accountStatus;
+  }
+  if (!o.accountStatus) o.accountStatus = 'open';
+  o.status = deriveLegacyStatus(o.accountStatus, o.subStatus);
+  return o;
+}
+
 const CONFIDENCE_LABELS = { confirmed: 'Confirmed', likely: 'Likely', uncertain: 'Uncertain' };
 
 /* ============================================================
@@ -2753,6 +2832,8 @@ const App = {
       this.state = seedSampleData(this.state);
       this.save();
     }
+    // Migrate offers to the two-field status model + sync legacy status.
+    (this.state.offers || []).forEach(normalizeOfferStatus);
     this.rollProjectionStartIfStale();
     setupPwa();
     if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
@@ -3466,6 +3547,10 @@ function runOptimizer(state) {
    ============================================================ */
 function render() {
   const root = document.getElementById('app');
+  // Idempotent status normalization covers every state path (load, sync
+  // pull, inline edits) in one place — guarantees subStatus/accountStatus
+  // exist and the legacy shadow status is in sync before anything renders.
+  if (App.state && App.state.offers) App.state.offers.forEach(normalizeOfferStatus);
   // Preserve focus + caret on inputs across full re-renders. Without this,
   // typing/backspacing in the search box loses focus on every keystroke
   // because innerHTML destroys the input element.
@@ -3705,7 +3790,7 @@ function renderOverview() {
       <aside class="card snapshot-card">
         <div class="snapshot-title">At a glance</div>
         <div class="snapshot-grid">
-          <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.status !== 'completed' && o.status !== 'skipped').length}</span><span class="snap-l">Active offers</span></div>
+          <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.accountStatus !== 'closed' && WORKING_SUB_STATUSES.has(o.subStatus)).length}</span><span class="snap-l">Working toward SUB</span></div>
           <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
           <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
           <div class="snap snap-horizon"><span class="snap-v">${effectiveHorizonDays(App.state)}d</span><span class="snap-l">Horizon</span></div>
@@ -4179,7 +4264,8 @@ function renderOfferCard(o) {
           o.offerType === 'held-and-dd'    ? 'Held+DD' :
           'Held'
         }</span>
-        <span class="chip ${STATUS_CHIP_CLASS[o.status] || 'chip-muted'}">${STATUS_LABELS[o.status] || o.status}</span>
+        <span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || o.subStatus || '—'}</span>
+        ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
       </div>
@@ -4225,7 +4311,7 @@ function renderTimeline() {
     rows.push({
       id: o.id,
       label: o.bankName,
-      sub: `${formatCurrency(o.requiredFundingAmount)} · ${STATUS_LABELS[o.status] || o.status}`,
+      sub: `${formatCurrency(o.requiredFundingAmount)} · ${SUB_STATUS_LABELS[o.subStatus] || STATUS_LABELS[o.status] || o.status}`,
       start: sStart,
       end: sEnd,
       status: CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : (o.status === 'completed' ? 'completed' : 'hypothetical'),
@@ -4363,7 +4449,7 @@ function renderOffers() {
     // raw status values. Anything else is a literal status match.
     if (App.filters.offersStatus === 'included') {
       if (!offerIsActiveForProjection(o)) return false;
-    } else if (App.filters.offersStatus !== 'all' && o.status !== App.filters.offersStatus) {
+    } else if (App.filters.offersStatus !== 'all' && o.subStatus !== App.filters.offersStatus) {
       return false;
     }
     if (App.filters.offersSearch) {
@@ -4392,7 +4478,7 @@ function renderOffers() {
       <select class="select" style="max-width:200px;" data-action="offers-status">
         <option value="all" ${App.filters.offersStatus === 'all' ? 'selected' : ''}>All statuses</option>
         <option value="included" ${App.filters.offersStatus === 'included' ? 'selected' : ''}>Included in projection</option>
-        ${STATUSES.map(s => `<option value="${s}" ${App.filters.offersStatus === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+        ${SUB_STATUSES.map(s => `<option value="${s}" ${App.filters.offersStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
       </select>
     </div>
 
@@ -4409,8 +4495,8 @@ function renderOfferCardWithActions(o) {
     <div class="offer-actions" style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);">
       <button class="btn btn-ghost btn-sm" data-action="duplicate-offer" data-id="${o.id}">Duplicate</button>
       <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}" title="Lock this offer in as a commitment on your timeline">Commit</button>
-      <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}">
-        ${STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+      <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}" title="Sub status">
+        ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
       </select>
       <button class="btn btn-ghost btn-sm btn-danger" data-action="delete-offer" data-id="${o.id}" aria-label="Delete">Delete</button>
     </div>
@@ -4456,7 +4542,7 @@ function renderOffersTable(offers) {
                 <td>${formatDateShort(ls) || '—'}</td>
                 <td>${formatDateShort(we) || '—'}</td>
                 <td class="num">${ar != null ? formatPercent(ar) : '—'}</td>
-                <td><span class="chip ${STATUS_CHIP_CLASS[o.status] || 'chip-muted'}">${STATUS_LABELS[o.status]}</span></td>
+                <td><span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || STATUS_LABELS[o.status]}</span>${o.accountStatus === 'closed' ? ' <span class="chip chip-muted">Closed</span>' : ''}</td>
                 <td style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(o.entityUsed || '—')}</td>
                 <td>
                   <div class="row-action-buttons">
@@ -5479,6 +5565,8 @@ function showOfferModal(offerId = null) {
     optionalPlannedFundingDate: '',
     lockStartsFrom: App.state.settings.defaultLockStartsFrom || 'funded date',
     status: 'prospect',
+    accountStatus: 'open',
+    subStatus: 'prospect',
     includeInScenario: true,
     confidence: 'likely',
     notes: '',
@@ -5637,10 +5725,18 @@ function showOfferModal(offerId = null) {
             <span class="field-hint">Where the bank measures the hold from. <strong>Open date</strong> = e.g. US Bank "60 days from open" — funding later means a shorter actual lock. <strong>Funded date</strong> = e.g. Citi "keep $50k for 60 days from deposit". Money is always treated as tied up only from when you actually deposit.</span>
           </div>
           <div class="field">
-            <label for="f-status">Status</label>
-            <select id="f-status" class="select" name="status">
-              ${STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+            <label for="f-substatus">Sub status</label>
+            <select id="f-substatus" class="select" name="subStatus">
+              ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
             </select>
+            <span class="field-hint">Where this offer is in its lifecycle. Selecting Approved, On-Track, Met (Waiting), Earned, or Didn't Track auto-sets the account to Open.</span>
+          </div>
+          <div class="field">
+            <label for="f-accountstatus">Account status</label>
+            <select id="f-accountstatus" class="select" name="accountStatus">
+              ${ACCOUNT_STATUSES.map(s => `<option value="${s}" ${o.accountStatus === s ? 'selected' : ''}>${ACCOUNT_STATUS_LABELS[s]}</option>`).join('')}
+            </select>
+            <span class="field-hint">Closed force-excludes the offer from the cash projection (money is back).</span>
           </div>
           <div class="field">
             <label for="f-confidence">Confidence</label>
@@ -5745,6 +5841,11 @@ function showOfferModal(offerId = null) {
       if (ev.target.name === 'offerType') syncDdSectionUI();
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
+      // Auto-flip account → Open when sub status implies the account exists.
+      if (ev.target.id === 'f-substatus' && SUBSTATUS_FLIPS_OPEN.has(ev.target.value)) {
+        const acct = form.querySelector('#f-accountstatus');
+        if (acct) acct.value = 'open';
+      }
       // Auto-populate the DD rows when the requirement count/frequency
       // changes, so the right number of dated rows appears without an
       // extra click. (The explicit "Generate dates" button stays too.)
@@ -5956,7 +6057,10 @@ function readOfferForm(idArg, isEdit) {
     daysFundsMustRemain: daysRemain,
     optionalPlannedFundingDate: data.optionalPlannedFundingDate || '',
     lockStartsFrom: data.lockStartsFrom || 'funded date',
-    status: data.status || 'prospect',
+    accountStatus: data.accountStatus || 'open',
+    subStatus: data.subStatus || 'prospect',
+    // status is the derived shadow — set below via normalizeOfferStatus.
+    status: 'prospect',
     includeInScenario: form.querySelector('[name="includeInScenario"]').checked,
     confidence: data.confidence || 'likely',
     notes: data.notes || '',
@@ -5964,6 +6068,7 @@ function readOfferForm(idArg, isEdit) {
     entityUsed: data.entityUsed || '',
     emailUsed: data.emailUsed || ''
   };
+  normalizeOfferStatus(offer); // sync the legacy shadow status
   return offer;
 }
 
@@ -6465,10 +6570,15 @@ function onChange(e) {
   // Status change inline
   if (el.dataset.action === 'change-status') {
     const id = el.dataset.id;
-    const newStatus = el.value;
+    const newSub = el.value;
     App.update(s => {
       const o = s.offers.find(x => x.id === id);
-      if (o) o.status = newStatus;
+      if (o) {
+        o.subStatus = newSub;
+        // Auto-flip account → Open when the sub status implies it exists.
+        if (SUBSTATUS_FLIPS_OPEN.has(newSub)) o.accountStatus = 'open';
+        normalizeOfferStatus(o);
+      }
     });
     return;
   }
