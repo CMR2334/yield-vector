@@ -39,6 +39,36 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-08 — Session C (claude-opus-4-7)
+**Round 39 — custom date picker, account-default fix, DoC method ranking**
+- **Custom color-coded date picker** (`DatePicker` singleton) replaces
+  native `<input type=date>` on offer-modal date fields (signup/expires/
+  funded = 'plain' mode business-day shading; DD initiation = 'dd' mode
+  round-trip shading). Fields are now `readonly text` with `.yv-date` +
+  `data-picker-mode`; `.value` stays YYYY-MM-DD so FormData/readDdRows
+  unchanged. Popover appended to body (position:fixed), **anchored once
+  on open by a fixed edge + 6-row min-height grid** so month nav doesn't
+  flip it above/below. Prototype `calendar-preview.html` deleted.
+- **Account status now defaults to Closed** (not Open) until an agreed
+  sub-status flips it Open. Key subtlety: `PRE_ACCOUNT_SUB_STATUSES`
+  (prospect/applied) with Closed account do NOT force-exclude (stay
+  hypothetical/includable) — only an opened-then-Closed account excludes.
+  `defaultAccountForSub()` + migration updated (prospect/selected →
+  Closed).
+- **DoC DD-method ranking.** `dd-methods.json` (1,158 banks, baked from
+  the DoC list via committed `tools/build-dd-methods.js`; refresh =
+  `curl … | node tools/build-dd-methods.js`). `DDMethods` module lazy-
+  loads it (same-origin fetch, re-renders when ready). DD / Held+DD
+  offer cards show **top-3 source methods by DP count** for the offer's
+  bank, **★-flag the user's `settings.sourceBanks` (green)**, with
+  fallbacks: best-of-mine when not in top-3, "none of yours" / "add
+  source banks" messaging. Fuzzy bank-name match (slug prefix/contains).
+  KNOWN LIMITATION: DP count includes both positive + "didn't work"
+  datapoints (notes surface the caveat); per-link success/recency would
+  need following thousands of comment links (deferred).
+- **DD-populate bug** fixed for real (auto-populate moved into
+  `syncDdSectionUI`, runs at open AND on type switch).
+
+### 2026-06-08 — Session C (claude-opus-4-7)
 **Round 38 — two-field status model + source banks + fixes**
 - **Status redesign (shadow approach).** New per-offer `accountStatus`
   ('open'|'closed') + `subStatus` (prospect/applied/approved/denied/
