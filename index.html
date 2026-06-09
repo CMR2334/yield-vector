@@ -2880,7 +2880,9 @@ const App = {
         // round trip is initiate → +inDays → posts as DD → +seasonDays
         // → sent back → +backDays → returns to origin. Default 1/1/1
         // ("season 1 business day").
-        ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 }
+        ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 },
+        // Banks the user can transfer money FROM (for DD-method ranking).
+        sourceBanks: []
       },
       offers: [],
       commitments: [],
@@ -4654,6 +4656,24 @@ function renderSettings() {
     </section>
 
     <section class="form-section">
+      <h2>My source banks</h2>
+      <p class="section-desc">The accounts you can push money <em>from</em> to fund offers / make direct deposits. Used to cross-reference which of your banks have a track record of coding as a direct deposit at a given offer's bank (Doctor of Credit datapoints).</p>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);">
+        <input id="source-bank-input" class="input" type="text" placeholder="e.g. Chase, Ally, Fidelity…" style="max-width:280px;" data-action="source-bank-keydown" autocomplete="off" />
+        <button class="btn btn-secondary" data-action="add-source-bank">+ Add bank</button>
+      </div>
+      ${(s.sourceBanks && s.sourceBanks.length)
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;">${s.sourceBanks.map(b => `
+            <span class="chip chip-accent" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 12px;font-size:13px;text-transform:none;letter-spacing:0;">
+              ${escapeHtml(b)}
+              <button class="btn-icon" data-action="remove-source-bank" data-bank="${escapeAttr(b)}" aria-label="Remove ${escapeAttr(b)}" style="width:18px;height:18px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              </button>
+            </span>`).join('')}</div>`
+        : `<p style="font-size:13px;color:var(--text-tertiary);">No source banks added yet.</p>`}
+    </section>
+
+    <section class="form-section">
       <div class="card-header" style="margin-bottom:var(--space-4);">
         <h2>Capital commitments</h2>
         <button class="btn btn-secondary btn-sm" data-action="add-commitment">+ Add commitment</button>
@@ -6344,6 +6364,29 @@ function closeModal() {
 // other offers as context); commitments and events open their edit modal
 // in place over the current view, since there's no dedicated tab for
 // either and the user just wants to fix the date or amount.
+function addSourceBank() {
+  const input = document.getElementById('source-bank-input');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) return;
+  App.update(s => {
+    if (!Array.isArray(s.settings.sourceBanks)) s.settings.sourceBanks = [];
+    // Case-insensitive dedupe.
+    if (!s.settings.sourceBanks.some(b => b.toLowerCase() === name.toLowerCase())) {
+      s.settings.sourceBanks.push(name);
+      s.settings.sourceBanks.sort((a, b) => a.localeCompare(b));
+    }
+  });
+  render();
+}
+function removeSourceBank(name) {
+  if (!name) return;
+  App.update(s => {
+    s.settings.sourceBanks = (s.settings.sourceBanks || []).filter(b => b !== name);
+  });
+  render();
+}
+
 function openActionTarget(kind, id) {
   if (!kind || !id) return;
   // Open the edit modal in place over the CURRENT view (don't switch
@@ -6387,6 +6430,12 @@ function bindGlobalEvents() {
     if (e.key === 'Escape') {
       const modal = document.getElementById('modal-root');
       if (!modal?.dataset.strictClose) closeModal();
+    }
+    // Enter in the source-bank input adds the bank.
+    if (e.key === 'Enter' && e.target && e.target.id === 'source-bank-input') {
+      e.preventDefault();
+      addSourceBank();
+      return;
     }
     // Activate keyboard-focused upcoming-action rows with Enter or Space
     if (e.key === 'Enter' || e.key === ' ') {
@@ -6485,6 +6534,9 @@ function onClick(e) {
 
     case 'upcoming-prev': updateUpcomingPage(Math.max(0, (App._upcomingPage || 0) - 1)); break;
     case 'upcoming-next': updateUpcomingPage((App._upcomingPage || 0) + 1); break;
+
+    case 'add-source-bank': addSourceBank(); break;
+    case 'remove-source-bank': removeSourceBank(target.dataset.bank); break;
 
     // Stat-card click-throughs from the overview hero
     case 'goto-offers-included':
