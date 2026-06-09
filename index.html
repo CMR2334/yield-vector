@@ -5843,6 +5843,14 @@ function showOfferModal(offerId = null) {
           ? `Plan each DD's <strong>initiation</strong> date. For Held + DD the DDs are qualifying transactions; the hold period set below still governs when funds release. Dates auto-shift to the next business day on a weekend/holiday.`
           : `Plan each DD's <strong>initiation</strong> date. Standard DD ties up the money only for its transfer round trip; plan the first DD early so you have time to retry from another bank if it doesn't code as a direct deposit. Dates auto-shift to the next business day on a weekend/holiday.`;
       }
+      // When a DD-type section is shown with no rows yet, auto-populate
+      // from the requirement controls. This fires both at open (for an
+      // already-DD offer) AND when the user switches the type TO a DD
+      // variant — which is the case the open-time check missed.
+      const entries = form.querySelector('#dd-entries');
+      if ((type === 'direct-deposit' || type === 'held-and-dd') && entries && !entries.querySelector('.dd-row')) {
+        generateDdDatesFromRequirement();
+      }
     };
     const syncReqMode = () => {
       const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
@@ -5920,15 +5928,10 @@ function showOfferModal(offerId = null) {
         refreshFundingSuggest();
       }
     });
-    // Initial DD-row population: if this is a DD-type offer that has no
-    // saved deposits yet (e.g. a brand-new offer with count=1), generate
-    // the rows now so they appear on first open without the user having
-    // to toggle the requirement mode back and forth.
-    const initType = (form.querySelector('[name="offerType"]:checked') || {}).value;
-    const entriesEl = form.querySelector('#dd-entries');
-    if ((initType === 'direct-deposit' || initType === 'held-and-dd') && entriesEl && !entriesEl.querySelector('.dd-row')) {
-      generateDdDatesFromRequirement();
-    }
+    // Run the section sync once at open. This shows/hides the DD section
+    // for the current type AND auto-populates DD rows if the section is
+    // visible but empty (covers an already-DD offer opened fresh).
+    syncDdSectionUI();
   }, 50);
 }
 
