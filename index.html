@@ -944,7 +944,9 @@ a { color: inherit; text-decoration: none; }
 .yv-dp-head button:hover { background: var(--bg); }
 .yv-dp-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 3px; }
 .yv-dp-dow span { text-align: center; font-size: 10px; font-weight: 600; color: var(--text-tertiary); }
-.yv-dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+/* Reserve 6 rows of height so 5-row months don't shrink the popover
+   (keeps total size constant across month navigation). */
+.yv-dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; gap: 3px; min-height: 222px; }
 .yv-dp-day {
   aspect-ratio: 1; border: 1.5px solid transparent; border-radius: 8px;
   background: var(--card); cursor: pointer; display: flex; flex-direction: column;
@@ -2811,20 +2813,30 @@ const DatePicker = {
     this.mode = input.dataset.pickerMode || 'plain';
     const cur = parseDate(input.value) || TODAY;
     this.vY = cur.getFullYear(); this.vM = cur.getMonth();
-    this.render(); this.position();
     this.el.style.display = 'block';
+    this.render();
+    this.place();   // decide + anchor ONCE per open
   },
   close() { if (this.el) this.el.style.display = 'none'; this.input = null; },
-  position() {
+  // Anchor the popover once on open. The above/below decision uses a FIXED
+  // height estimate (not the live offsetHeight) so it doesn't change between
+  // a 5-row and 6-row month. We anchor by a fixed EDGE (top when below,
+  // bottom when above) so adding a 6th row grows the grid in one direction
+  // instead of flipping the whole popover across the field.
+  place() {
     const r = this.input.getBoundingClientRect();
-    const W = 280, el = this.el;
+    const W = 280, EST = 360, el = this.el;
     el.style.position = 'fixed';
-    let left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8));
-    el.style.left = left + 'px';
-    // Below the input, or above if it would overflow the viewport bottom.
-    const h = el.offsetHeight || 320;
-    if (r.bottom + 6 + h > window.innerHeight && r.top - 6 - h > 0) el.style.top = (r.top - 6 - h) + 'px';
-    else el.style.top = (r.bottom + 6) + 'px';
+    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8)) + 'px';
+    const roomBelow = window.innerHeight - r.bottom;
+    const placeBelow = roomBelow >= EST || r.top < EST; // prefer below; only go above with real room
+    if (placeBelow) {
+      el.style.top = (r.bottom + 6) + 'px';
+      el.style.bottom = 'auto';
+    } else {
+      el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+      el.style.top = 'auto';
+    }
   },
   // For the visible month, compute per-business-day hold (dd mode) to find
   // the min/max so coloring is relative to what's achievable that month.
@@ -2891,7 +2903,10 @@ const DatePicker = {
       this.vM += parseInt(nav.dataset.nav, 10);
       if (this.vM < 0) { this.vM = 11; this.vY--; }
       if (this.vM > 11) { this.vM = 0; this.vY++; }
-      this.render(); this.position();
+      // Re-render only — do NOT re-anchor. The popover keeps its fixed
+      // edge so a 5↔6 row month change grows the grid in place instead
+      // of flipping the whole popover above/below the field.
+      this.render();
       return;
     }
     if (e.target.closest('[data-today]')) {
