@@ -887,7 +887,10 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 4px 0;
+  /* Horizontal padding ≥ the 4px selection ring so the first swatch's
+     ring (and the X "no color" swatch when selected) isn't clipped by
+     the field/modal edge. */
+  padding: 5px 6px;
 }
 .color-swatch {
   width: 28px;
@@ -6229,18 +6232,12 @@ function closeModal() {
 // either and the user just wants to fix the date or amount.
 function openActionTarget(kind, id) {
   if (!kind || !id) return;
-  if (kind === 'offer') {
-    if (App.view !== 'offers') {
-      App.setView('offers');
-      setTimeout(() => showOfferModal(id), 80);
-    } else {
-      showOfferModal(id);
-    }
-  } else if (kind === 'commitment') {
-    showCommitmentModal(id);
-  } else if (kind === 'event') {
-    showEventModal(id);
-  }
+  // Open the edit modal in place over the CURRENT view (don't switch
+  // tabs). The modal floats above whatever view you're on, so an
+  // Upcoming-actions click on the Overview stays on the Overview.
+  if (kind === 'offer') showOfferModal(id);
+  else if (kind === 'commitment') showCommitmentModal(id);
+  else if (kind === 'event') showEventModal(id);
 }
 
 /* ============================================================
