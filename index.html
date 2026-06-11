@@ -4292,6 +4292,9 @@ function computeUpcomingActions(state, limit = 12) {
   }
   for (const e of state.events) {
     if (!e.includeInProjection) continue;
+    // Independent of the projection: an event can stay in the running
+    // balance but be hidden from this list (e.g. recurring paychecks).
+    if (e.showInUpcoming === false) continue;
     // For recurring events, surface only the NEXT instance from today
     // forward so the list doesn't fill with the same paycheck row 12
     // times. The event's edit modal still owns the full recurrence rule.
@@ -5140,6 +5143,7 @@ function renderEventsTable() {
             <th>Category</th>
             <th style="text-align:center;">Include</th>
             <th style="text-align:center;">Display</th>
+            <th style="text-align:center;">Upcoming</th>
             <th></th>
           </tr>
         </thead>
@@ -5152,6 +5156,7 @@ function renderEventsTable() {
               <td><span class="chip chip-muted">${escapeHtml(e.category)}</span></td>
               <td style="text-align:center;">${e.includeInProjection ? '✓' : '—'}</td>
               <td style="text-align:center;">${e.showOnChart !== false ? '✓' : '—'}</td>
+              <td style="text-align:center;">${e.showInUpcoming !== false ? '✓' : '—'}</td>
               <td>
                 <div class="row-action-buttons">
                   <button class="btn-icon" data-action="edit-event" data-id="${e.id}" aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
@@ -6600,11 +6605,13 @@ function showEventModal(eventId = null) {
     recurrence: { kind: 'none', everyDays: 7, endDate: '' },
     includeInProjection: true,
     showOnChart: true,
+    showInUpcoming: true,
     notes: ''
   };
   // Back-compat defaults for events saved before these fields existed
   if (!e.recurrence) e.recurrence = { kind: 'none', everyDays: 7, endDate: '' };
   if (e.showOnChart === undefined) e.showOnChart = true;
+  if (e.showInUpcoming === undefined) e.showInUpcoming = true;
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -6641,7 +6648,8 @@ function showEventModal(eventId = null) {
           <div class="field" style="grid-column:1/-1;">
             <label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${e.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label>
             <label class="checkbox-row" style="margin-top:6px;"><input type="checkbox" name="showOnChart" ${e.showOnChart !== false ? 'checked' : ''} /><span>Display on Overview chart</span></label>
-            <span class="field-hint">Uncheck "Display on chart" to keep the event in your running balance without cluttering the chart with markers — useful for paychecks and recurring bills.</span>
+            <label class="checkbox-row" style="margin-top:6px;"><input type="checkbox" name="showInUpcoming" ${e.showInUpcoming !== false ? 'checked' : ''} /><span>Show in Upcoming actions</span></label>
+            <span class="field-hint">All three are independent. Uncheck "Display on chart" and/or "Show in Upcoming actions" to keep an event in your running balance without cluttering those views — useful for paychecks and recurring bills.</span>
           </div>
           <div class="field">
             <label for="e-recur">Recurrence</label>
@@ -6750,6 +6758,7 @@ function readEventForm(idArg) {
     },
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
     showOnChart: form.querySelector('[name="showOnChart"]').checked,
+    showInUpcoming: form.querySelector('[name="showInUpcoming"]').checked,
     notes: data.notes || ''
   };
 }
