@@ -38,6 +38,14 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-06-13 — Session E (claude-sonnet-4-6)
+**Round 43 — Overview card alignment, Timeline layout, Top DD Methods bubble**
+- **Overview unified grid.** Replaced two-row layout (grid-cols-3 + overview-side 2fr/1fr) with a single `.overview-grid` (3-col) so stat cards and Upcoming/At-a-glance share the same column tracks. Right edge of Upcoming actions now aligns exactly with Selected Bonuses. Responsive: main/aside span full-width at ≤720px; all cols collapse to 1fr at ≤480px.
+- **Timeline label column.** Desktop: `flex: 0 0 240px` → `120px` (+ `width`, `min-width:0`, `overflow:hidden` to prevent min-content expansion). Mobile: was 80px → 65px with same enforcement. Axis label row: `min-height:32px` added so it matches track axis height and the vertical divider stays continuous. `.timeline-row-label.axis` gets `white-space:nowrap; overflow:hidden; text-overflow:ellipsis` to truncate rather than wrap.
+- **Timeline bar labels.** DD and held-and-dd offers now show `'DD'` on the bar (not `'DD $10K'`). Non-DD offers still show the amount. Commitment row labels strip everything after the first dash (e.g. `"Chase — Sapphire Preferred Bonus"` → `"Chase"`).
+- **Top DD Methods bubble.** New `.ddm-inner`/`.ddm-left` two-column layout: title "TOP DD METHODS" + "DoC datapoints" on the left, three method pills stacked vertically on the right. Removed the `→ bank name` from the title. Pills slightly smaller (11px, 2px 7px padding).
+- **Symlink created:** `/Users/collinrekowski/Automation/Churning` → `Yield Vector` (session working-dir shim; can be removed safely).
+
 ### 2026-06-12 — Session D (claude-opus-4-8)
 **Round 42 — project folder renamed Churning → "Yield Vector"**
 - **The local folder is now `/Users/collinrekowski/Automation/Yield
