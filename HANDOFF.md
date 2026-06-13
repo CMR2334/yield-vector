@@ -39,6 +39,29 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 47 — Cloud sync: revision-history restore + push overwrite guard**
+- **Incident:** user had ~6 offers + extra events on mobile. Logged into a
+  STALE desktop (3 offers), pasted the token, and pushed → last-writer-wins
+  overwrote the Gist's 6-offer state with 3. `Sync.push()` always stamps
+  `_lastModified = Date.now()`, so a stale device's push silently wins.
+- **Recovery — "Restore from history"** (`showSyncHistoryModal()` ~near
+  `closeModal`; `Sync.listHistory/fetchRevision/restoreState` in the Sync
+  object). GitHub keeps every Gist revision; the modal lists the last 20
+  newest-first with each revision's offer/commitment/event counts +
+  timestamp, and a Restore button. Restore sets `App.state` to that revision
+  and pushes it up (fresh timestamp) so it becomes current on all devices.
+  Reversible — the pre-restore state stays in history. New button in the
+  sync section + `sync-history`/`sync-restore` actions. CSS `.sync-hist-*`.
+  Caches fetched revisions in `App._syncHistoryCache` keyed by version.
+- **Prevention — `guardedManualPush()`** now backs the "Push now" button
+  (was `Sync.push()`). It peeks at the cloud first; if `remote._lastModified
+  > local._lastModified` it confirms with the offer counts ("Cloud: 6, this
+  device: 3 — push anyway?") so a stale device can't silently clobber newer
+  data. Auto-push (debounced, post-edit) is unchanged.
+- Verified the modal UI in preview with stubbed history (renders rows with
+  counts; "current" chip on newest). Live Gist calls need real creds.
+
+### 2026-06-13 — Session F (claude-sonnet-4-6)
 **Round 46 — Overview "Available capital" chart: frozen $ Y-axis; timeline tweaks**
 - **Hero chart Y-axis now frozen on mobile.** The $ axis labels ($0–$200K)
   were `<text>` drawn INSIDE the scrolling SVG, so they scrolled off. New

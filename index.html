@@ -1565,6 +1565,17 @@ a { color: inherit; text-decoration: none; }
 }
 .modal.open { display: flex; }
 
+/* Cloud-history restore list */
+.sync-hist-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.sync-hist-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  background: var(--card-soft);
+}
+.sync-hist-meta { min-width: 0; }
+.sync-hist-when { font-size: 13px; font-weight: 600; color: var(--text); }
+.sync-hist-counts { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
 .modal-card {
   background: var(--card);
   border-radius: var(--radius-xl);
@@ -2393,6 +2404,38 @@ const Sync = {
     });
     const data = await ghFetch('https://api.github.com/gists', token, 'POST', body);
     return data.id;
+  },
+
+  // ---- Revision history / recovery -------------------------------------
+  // GitHub keeps every Gist revision, so an accidental overwrite (e.g. a
+  // stale device pushing over newer data) is recoverable. listHistory()
+  // returns the revisions newest-first; fetchRevision() pulls one version's
+  // parsed state; restoreState() makes a chosen revision current everywhere.
+  async listHistory() {
+    if (!this.isConfigured()) throw new Error('Sync not configured');
+    const cfg = this.getConfig();
+    const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
+    return Array.isArray(data.history) ? data.history : [];
+  },
+  async fetchRevision(version) {
+    const cfg = this.getConfig();
+    const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}/${version}`, cfg.token);
+    const file = (data.files && (data.files[SYNC_FILENAME] || Object.values(data.files)[0])) || null;
+    if (!file) return null;
+    const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+    if (!content || !content.trim()) return null;
+    try { return JSON.parse(content); } catch { return null; }
+  },
+  // Replace local state with a recovered revision and push it up so it
+  // becomes the current version on every device (push stamps a fresh
+  // _lastModified, so other devices pull it on their next sync).
+  async restoreState(state) {
+    App.state = state;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+    await this.push({ silent: true });
+    this.lastSyncAt = Date.now();
+    this.setStatus('synced');
+    render();
   },
 
   disconnect() {
@@ -5251,6 +5294,7 @@ function renderSyncSection() {
              user doesn't have to click "Save & test" before pulling. -->
         <button class="btn btn-secondary" data-action="sync-pull" ${configured ? '' : 'disabled'}>Pull now</button>
         <button class="btn btn-secondary" data-action="sync-push" ${configured ? '' : 'disabled'}>Push now</button>
+        <button class="btn btn-secondary" data-action="sync-history" ${configured ? '' : 'disabled'} title="Recover an earlier version from the Gist's revision history">Restore from history</button>
         <button class="btn btn-ghost btn-danger" data-action="sync-disconnect" ${configured ? '' : 'disabled'}>Disconnect</button>
       </div>
 
@@ -6807,6 +6851,67 @@ function readEventForm(idArg) {
   };
 }
 
+// Recovery UI: list the Gist's saved revisions (newest first) with a
+// summary of each (offers / commitments / events counts + timestamp) and a
+// Restore button. Fetches each recent revision's content so the user can
+// recognize the version they want by its contents, not just a date.
+async function showSyncHistoryModal() {
+  const modal = document.getElementById('modal-root');
+  modal.dataset.strictClose = '1'; // don't dismiss on backdrop click mid-load
+  modal.classList.add('open');
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">Restore from cloud history</div>
+        <button class="btn-icon" data-action="close-modal" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+      </div>
+      <div class="modal-body" id="sync-history-body">
+        <p style="color:var(--text-secondary);font-size:13px;">Loading revision history…</p>
+      </div>
+    </div>`;
+  try {
+    const hist = await Sync.listHistory();
+    const recent = hist.slice(0, 20); // cap API calls; 20 revisions is plenty
+    App._syncHistoryCache = {};
+    const rows = [];
+    for (const h of recent) {
+      let snap = null;
+      try { snap = await Sync.fetchRevision(h.version); } catch {}
+      if (snap) App._syncHistoryCache[h.version] = snap;
+      rows.push({
+        version: h.version,
+        when: h.committed_at,
+        offers: snap && Array.isArray(snap.offers) ? snap.offers.length : 0,
+        commits: snap && Array.isArray(snap.commitments) ? snap.commitments.length : 0,
+        events: snap && Array.isArray(snap.events) ? snap.events.length : 0,
+        ok: !!snap
+      });
+    }
+    const body = document.getElementById('sync-history-body');
+    if (!body) return; // modal was closed while loading
+    if (rows.length === 0) {
+      body.innerHTML = `<p style="color:var(--text-secondary);font-size:13px;">No revision history found for this Gist.</p>`;
+      return;
+    }
+    body.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:var(--space-3);">Each row is a saved cloud version (newest first). Find the one whose counts match what you expect, then <strong>Restore</strong> — it becomes the current version on every device. Restoring is reversible: your present version stays in this history too.</p>
+      <div class="sync-hist-list">
+        ${rows.map((r, idx) => `
+          <div class="sync-hist-row">
+            <div class="sync-hist-meta">
+              <div class="sync-hist-when">${r.when ? new Date(r.when).toLocaleString() : '—'}${idx === 0 ? ' <span class="chip chip-muted" style="margin-left:6px;">current</span>' : ''}</div>
+              <div class="sync-hist-counts">${r.ok ? `${r.offers} offer${r.offers === 1 ? '' : 's'} · ${r.commits} commitment${r.commits === 1 ? '' : 's'} · ${r.events} event${r.events === 1 ? '' : 's'}` : 'could not read this revision'}</div>
+            </div>
+            ${r.ok ? `<button class="btn btn-secondary btn-sm" data-action="sync-restore" data-version="${r.version}">Restore</button>` : ''}
+          </div>
+        `).join('')}
+      </div>`;
+  } catch (e) {
+    const body = document.getElementById('sync-history-body');
+    if (body) body.innerHTML = `<p style="color:var(--danger);font-size:13px;">Could not load history: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
 function closeModal() {
   const modal = document.getElementById('modal-root');
   modal.classList.remove('open');
@@ -7031,8 +7136,19 @@ function onClick(e) {
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
     case 'sync-save': saveSyncConfigFromForm(); break;
     case 'sync-pull': ensureSyncConfigSaved().then(ok => { if (ok) Sync.pull(); }); break;
-    case 'sync-push': ensureSyncConfigSaved().then(ok => { if (ok) Sync.push(); }); break;
+    case 'sync-push': guardedManualPush(); break;
     case 'sync-create-gist': createGistFromForm(); break;
+    case 'sync-history': ensureSyncConfigSaved().then(ok => { if (ok) showSyncHistoryModal(); }); break;
+    case 'sync-restore': {
+      const v = target.dataset.version;
+      const snap = App._syncHistoryCache && App._syncHistoryCache[v];
+      if (!snap) { toast('That revision is not loaded', 'danger'); break; }
+      const n = Array.isArray(snap.offers) ? snap.offers.length : 0;
+      if (confirm(`Restore this version (${n} offer${n === 1 ? '' : 's'})? It becomes the current version on all your devices. Your present data is also kept in history, so this is reversible.`)) {
+        Sync.restoreState(snap).then(() => { closeModal(); toast('Restored from cloud history'); });
+      }
+      break;
+    }
     case 'sync-disconnect': if (confirm('Disconnect cloud sync? Your local data is kept; nothing is deleted from the Gist.')) { Sync.disconnect(); render(); toast('Disconnected'); } break;
   }
 
@@ -7251,6 +7367,39 @@ function applyOptimizerCombo(maskStr) {
 // through. Returns true if Sync is configured (or just got configured),
 // false if the user hasn't typed enough to save (in which case the
 // caller should bail and let the toast guide them).
+// Manual "Push now" with an overwrite guard. A plain push always stamps a
+// fresh _lastModified and wins last-writer-wins — so a STALE device pushing
+// silently destroys newer cloud data (this is exactly how the desktop wiped
+// the mobile's offers). Before pushing, peek at the cloud: if it's newer
+// than this device, warn with the offer counts so the user can choose Pull
+// instead. Recovery is still possible via "Restore from history" either way.
+async function guardedManualPush() {
+  const ok = await ensureSyncConfigSaved();
+  if (!ok) return;
+  Sync.setStatus('syncing');
+  try {
+    const cfg = Sync.getConfig();
+    const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
+    const file = (data.files && (data.files[SYNC_FILENAME] || Object.values(data.files)[0])) || null;
+    let remote = null;
+    if (file) {
+      const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+      if (content && content.trim()) { try { remote = JSON.parse(content); } catch {} }
+    }
+    const remoteMod = (remote && remote._lastModified) || 0;
+    const localMod = (App.state && App.state._lastModified) || 0;
+    if (remote && remoteMod > localMod) {
+      const rO = Array.isArray(remote.offers) ? remote.offers.length : 0;
+      const lO = Array.isArray(App.state.offers) ? App.state.offers.length : 0;
+      if (!confirm(`The cloud copy is NEWER than this device.\n\n• Cloud: ${rO} offer${rO === 1 ? '' : 's'}\n• This device: ${lO} offer${lO === 1 ? '' : 's'}\n\nPushing OVERWRITES the newer cloud data with this device's. If this device is the stale one, click Cancel and use "Pull now" instead.\n\nPush anyway?`)) {
+        Sync.setStatus('synced');
+        return;
+      }
+    }
+  } catch (e) { /* if the pre-check fails, fall through to a normal push */ }
+  Sync.push();
+}
+
 async function ensureSyncConfigSaved() {
   if (Sync.isConfigured()) return true;
   const gistInput = document.getElementById('sync-gist');
