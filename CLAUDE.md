@@ -13,7 +13,7 @@ See ../USER_PROFILE.md for full working preferences.
 ## Read first
 **At the start of every session, read [HANDOFF.md](HANDOFF.md).** It is the
 cross-session changelog — recent rounds describe what the previous session
-(possibly run on a different Claude model: Opus 4.7, Opus 4.6, or Sonnet
+(possibly run on a different Claude model: Opus 4.8, Opus 4.7, Opus 4.6, or Sonnet
 4.6) just shipped. Skim the top 3–5 entries before doing any work.
 
 After completing a meaningful round of changes, prepend a new entry to
@@ -97,6 +97,6 @@ node auto-push.js   # watches index.html, auto-commits + pushes on save
 Requires: `gh auth login` done once, remote set to GitHub, GitHub Pages enabled on main/root.
 
 ## Shared Documentation
-- User profile and preferences: /Users/collinrekowski/Automation/USER_PROFILE.md
-- Workflow preferences: /Users/collinrekowski/Automation/PREFERENCES.md
-- Automation workspace overview: /Users/collinrekowski/Automation/CONTEXT.md
+- User profile and preferences: /Users/collinrekowski/Automation/docs/USER_PROFILE.md
+- Workflow preferences: /Users/collinrekowski/Automation/docs/PREFERENCES.md
+- Automation workspace overview: /Users/collinrekowski/Automation/docs/CONTEXT.md

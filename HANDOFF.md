@@ -25,10 +25,10 @@ agent (which may be you, may not) starts cold and still has the picture.
 **Model note.** The agent that wrote each entry is recorded in the header.
 This matters because:
 - Older models (Sonnet 4.6, Opus 4.6) may not have the same context-window
-  size or recent tool capabilities that 4.7 has. If a 4.6 session is going
+  size or recent tool capabilities that 4.8 or even 4.7 have. If a 4.6 session is going
   to pick up, write entries assuming less inferred context — be more
   explicit about file paths, gotchas, and what *not* to redo.
-- 4.6 sessions: when you read an entry written by 4.7, treat its summary as
+- 4.6 sessions: when you read an entry written by 4.7 or 4.8, treat its summary as
   authoritative; don't second-guess unless something in the live code
   contradicts it.
 - Either way: when you're about to make a change, check this log for "do
@@ -37,6 +37,34 @@ This matters because:
 ---
 
 ## Log (newest first)
+
+### 2026-06-12 — Session D (claude-opus-4-8)
+**Round 41 — date-picker overflow fix, event-visibility toggles, overview/ddm layout**
+- **Date picker mobile overflow (root cause) fixed.** The day cells used
+  `aspect-ratio:1` + a reserved `min-height`; in a 5-week month the rows
+  stretched taller → aspect-ratio made cells *wider* → grid overflowed
+  the card (the July-overflows-but-August-fits bug). Now: fixed **34px
+  row height** (no aspect-ratio), grid **always padded to 6 rows (42
+  cells)**, columns `minmax(0,1fr)`. Constant size, never overflows.
+- **Capital-event visibility — three independent toggles:**
+  `includeInProjection` (running balance), `showOnChart` (chart markers),
+  `showInUpcoming` (Upcoming-actions list). Upcoming-actions now skips
+  `showInUpcoming === false`. Events table gained an "Upcoming" column.
+  **NEW-event default changed: include in projection = true, but
+  showOnChart = false AND showInUpcoming = false** (paychecks/bills no
+  longer clutter the chart or Upcoming list unless opted in). Back-compat
+  shim still defaults *existing* events (undefined → true) so they keep
+  showing.
+- **Bundled UI layout changes** (were uncommitted in the working tree at
+  session start — likely a prior session / design-sync; committed in
+  `4e3cd1e`, CSS+JS verified in sync): Overview switched from
+  `.overview-side` (2-col) to a unified **`.overview-grid`** (3-col track;
+  `.overview-main` spans 2, `.overview-aside` col 3) so stat-cards /
+  Upcoming / At-a-glance right-edges align. DD-method panel restyled to
+  a two-column **`.ddm-inner`/`.ddm-left`** layout (pills stacked right).
+  Mobile timeline labels-col 80px → 65px.
+- **Docs:** CLAUDE.md + HANDOFF.md now reference Opus 4.8 and the shared
+  docs moved to `/Users/collinrekowski/Automation/docs/`.
 
 ### 2026-06-08 — Session C (claude-opus-4-7)
 **Round 40 — debit requirement + Actions-required card, picker/settings fixes**
