@@ -13,7 +13,7 @@ Yield Vector is a credit card bonus planner PWA. It helps the owner track bank a
 
 - **Live URL:** https://CMR2334.github.io/yield-vector/
 - **Repo:** https://github.com/CMR2334/yield-vector
-- **Local path:** `/Users/collinrekowski/Automation/Churning/`
+- **Local path:** `/Users/collinrekowski/Automation/Yield Vector/`
 
 ---
 
@@ -60,7 +60,7 @@ The app models three offer types, each with distinct logic:
 Always commit and push after making changes. The live URL rebuilds automatically.
 
 ```bash
-cd /Users/collinrekowski/Automation/Churning && \
+cd "/Users/collinrekowski/Automation/Yield Vector" && \
   git add index.html HANDOFF.md && \
   git commit -m "auto update" && \
   git push origin main

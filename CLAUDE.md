@@ -28,7 +28,7 @@ laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
 1. **Push at the end of every meaningful change.** If you've edited
    `index.html` and verified the JS parses, immediately run:
    ```bash
-   cd /Users/collinrekowski/Automation/Churning && \
+   cd "/Users/collinrekowski/Automation/Yield Vector" && \
      git add index.html HANDOFF.md CLAUDE.md SHORTCUT_SETUP.md && \
      git commit -m "<short descriptive message>" && \
      git push origin main

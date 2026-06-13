@@ -90,7 +90,7 @@ Every push to `main` triggers a GitHub Pages rebuild. The live URL updates withi
 **Manual push (recommended — auto-push.js is unreliable):**
 
 ```bash
-cd /Users/collinrekowski/Automation/Churning && \
+cd "/Users/collinrekowski/Automation/Yield Vector" && \
   git add index.html HANDOFF.md && \
   git commit -m "auto update" && \
   git push origin main
