@@ -4097,7 +4097,7 @@ function renderOverview() {
           : `<div class="action-list upcoming-fade" key="${App._upcomingPage}">${upcomingActions.map(renderActionRow).join('')}</div>`}
       </section>
 
-      <aside class="card snapshot-card">
+      <aside class="card snapshot-card overview-aside">
         <div class="snapshot-title">At a glance</div>
         <div class="snapshot-grid">
           <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.accountStatus !== 'closed' && WORKING_SUB_STATUSES.has(o.subStatus)).length}</span><span class="snap-l">Working toward SUB</span></div>
@@ -4543,8 +4543,13 @@ function renderDdMethodPanel(o) {
     foot = `<div class="ddm-foot">Your best option: <strong>★ ${escapeHtml(info.myBest.method)}</strong> (${info.myBest.dps} DP${info.myBest.dps === 1 ? '' : 's'})</div>`;
   }
   return `<div class="ddm-panel">
-    <div class="ddm-title">Top DD methods → ${escapeHtml(info.name)} <span class="ddm-src">DoC datapoints</span></div>
-    <div class="ddm-list">${rows}</div>
+    <div class="ddm-inner">
+      <div class="ddm-left">
+        <div class="ddm-title">Top DD Methods</div>
+        <div class="ddm-src">DoC datapoints</div>
+      </div>
+      <div class="ddm-list">${rows}</div>
+    </div>
     ${foot}
   </div>`;
 }
@@ -4689,7 +4694,8 @@ function renderTimeline() {
       end: sEnd,
       status: CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : (o.status === 'completed' ? 'completed' : 'hypothetical'),
       isVirtual: true,
-      color: offerColorHex(o)
+      color: offerColorHex(o),
+      offerType: o.offerType
     });
   }
   rows.sort((a, b) => (a.start || 0) - (b.start || 0));
@@ -4773,7 +4779,7 @@ function renderTimeline() {
                   return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
                 }).join('')}
                 <div class="tl-bar ${r.status} ${r.color ? 'has-color' : ''}" style="left:${sPct}%;width:${w}%;${r.color ? `--offer-color:${r.color};` : ''}" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
-                  ${w > 8 ? formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })()) : ''}
+                  ${w > 8 ? (r.offerType === 'direct-deposit' || r.offerType === 'held-and-dd' ? 'DD ' : '') + formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })()) : ''}
                 </div>
                 ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
               </div>
