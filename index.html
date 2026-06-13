@@ -1517,6 +1517,27 @@ a { color: inherit; text-decoration: none; }
   padding-bottom: 10px !important;
 }
 
+/* DD-requirement controls are meant to read as a compact inline rule
+   ("Once per [month] for [3] months"). The blast-radius width:100% above
+   would stretch each to full width and stack them awkwardly, so re-assert
+   compact widths here (higher specificity + !important beats the wall).
+   With these, the row fits "Once per [sel] for [n][unit]" on one line and
+   gracefully wraps "Generate dates" beneath instead of stacking giants. */
+.modal #ddreq-freq-fields .select {
+  width: 112px !important;
+  max-width: 112px !important;
+  flex: 0 0 auto !important;
+}
+.modal #ddreq-freq-fields .input-group {
+  width: 122px !important;
+  max-width: 122px !important;
+  flex: 0 0 auto !important;
+}
+.modal #ddreq-count-fields .input-group {
+  width: 100% !important;
+  max-width: 200px !important;
+}
+
 .checkbox-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: 4px 0; }
 .checkbox-row input[type="checkbox"] {
   appearance: none;

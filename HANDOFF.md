@@ -39,6 +39,28 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 49 — DD requirement "rule boxes" mobile sizing fix**
+- The offer modal's DD requirement controls (Once-per [select] / for [N]
+  [unit], and the count "[N] deposits" box) were stretching to full width
+  and stacking awkwardly on mobile. Root cause: the MODAL BLAST-RADIUS CSS
+  (~line 1480) sets `.modal .select/.input-group { max-width:100% !important }`,
+  which overrode the inline `max-width:130px/160px/200px` on those controls.
+- Fix (~line 1520): re-assert compact widths with higher specificity +
+  `!important` — `#ddreq-freq-fields .select` 112px, `.input-group` 122px
+  (both `flex:0 0 auto`), `#ddreq-count-fields .input-group` max 200px. Now
+  "Once per [month] for [3] months" reads inline on one line and "Generate
+  dates" wraps beneath; the count box is a sensible 200px.
+- Checked the DD date picker popover (`.yv-dp`) and the DD-row date fields
+  in preview — both already fit within the mobile viewport (280px popover,
+  no overflow); no change needed there. If the user means a different
+  "date bubble", get a pointer.
+- Context: user had accidentally hit Settings → Data → "Reset to sample
+  data" (mistook it for the new Restore-from-history button). Recovery path
+  given: Settings → Cloud sync → Restore from history → pick the revision
+  just before the sample-data one. (No code change for that — the R47 tool
+  handles it.)
+
+### 2026-06-13 — Session F (claude-sonnet-4-6)
 **Round 48 — Settings "Capital & projection" desktop grid fix**
 - The section's `.form-grid` used `repeat(auto-fit, minmax(220px, 1fr))`,
   which on desktop produced 5 cramped columns and ragged wrapping; 2-line
