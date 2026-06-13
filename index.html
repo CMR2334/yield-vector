@@ -1139,41 +1139,34 @@ a { color: inherit; text-decoration: none; }
    scrolls horizontally on its own. They share no scroll parent, so
    bars can never bleed visually behind the labels.
    ============================================================ */
+/* Timeline: single scroll container; labels use position:sticky left:0
+   so the Y-axis stays frozen while the X-axis (tracks) scrolls. */
 .timeline-wrap {
-  display: flex;
   background: var(--card);
   border-radius: var(--radius-xl);
-  padding: var(--space-6);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
-.timeline-labels-col {
+.timeline-row {
+  display: flex;
+  border-bottom: 1px solid var(--border-soft);
+  min-height: 44px;
+}
+.timeline-row:last-child { border-bottom: none; }
+.timeline-row.axis-row { min-height: 32px; }
+
+.timeline-row-label {
   flex: 0 0 150px;
   width: 150px;
   min-width: 0;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border-soft);
-}
-
-.timeline-tracks-scroll {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-.timeline-tracks-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 100%;
-}
-
-.timeline-row-label {
-  min-height: 44px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -1182,10 +1175,9 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500;
   color: var(--text);
   background: var(--card);
-  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
   box-sizing: border-box;
 }
-.timeline-labels-col > .timeline-row-label:last-child { border-bottom: none; }
 .timeline-row-label.axis {
   height: 32px;
   min-height: 32px;
@@ -1209,13 +1201,12 @@ a { color: inherit; text-decoration: none; }
 .timeline-row-label .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .timeline-row-track {
+  flex: 1 1 0;
+  min-width: 600px;
   position: relative;
-  min-height: 44px;
-  border-bottom: 1px solid var(--border-soft);
   box-sizing: border-box;
 }
-.timeline-tracks-col > .timeline-row-track:last-child { border-bottom: none; }
-.timeline-row-track.axis { height: 32px; }
+.timeline-row-track.axis { min-height: 32px; }
 
 .tl-bar {
   position: absolute;
@@ -1790,32 +1781,11 @@ table.data-table {
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
-  /* Mobile portrait timeline: narrower (sticky) labels column on the
-     left so bank names are always visible, plus a wide horizontally-
-     scrollable tracks area on the right. Two separate containers
-     means the labels never participate in the scroll — they stay
-     pinned regardless of where the user scrolls the bars. */
-  .timeline-wrap { padding: var(--space-3); }
-  .timeline-labels-col {
+  /* Mobile portrait timeline: narrower sticky label column; single
+     scroll container handles both axes, Y-axis stays frozen. */
+  .timeline-row-label {
     flex: 0 0 81px;
     width: 81px;
-    min-width: 0;
-    overflow: hidden;
-    position: sticky;
-    left: 0;
-    z-index: 2;
-    background: var(--card);
-  }
-  .timeline-tracks-col {
-    width: 600px;
-    min-width: 600px;
-  }
-  .timeline-tracks-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-  .timeline-row-label {
     font-size: 12px;
     padding: 5px 8px 6px;
   }
@@ -1895,7 +1865,6 @@ table.data-table {
   /* Timeline rows: no longer compress in landscape — 38 px was too short
      for the sub line to fit without clipping. Use the same min-height as
      portrait so content is never clipped regardless of orientation. */
-  .timeline-wrap { padding: var(--space-4); }
   .timeline-row-label, .timeline-row-track { min-height: 44px; }
   .timeline-row-label { padding-top: 5px; padding-bottom: 6px; }
   .timeline-row-label.axis, .timeline-row-track.axis { min-height: 32px; }
@@ -4772,48 +4741,43 @@ function renderTimeline() {
             const ePct = pctFor(r.end);
             return sPct != null && ePct != null && ePct > sPct;
           });
-          const labelHtml = validRows.map(r => `
-            <div class="timeline-row-label">
-              <span class="tl-row-name">${escapeHtml(r.label)}</span>
-              <span class="sub">${escapeHtml(r.sub)}</span>
-            </div>
-          `).join('');
-          const trackHtml = validRows.map(r => {
+          const rowsHtml = validRows.map(r => {
             const sPct = pctFor(r.start);
             const ePct = pctFor(r.end);
             const w = ePct - sPct;
             return `
-              <div class="timeline-row-track">
-                ${ticks.map(t => `<div class="tl-grid-line" style="left:${t.pct}%;"></div>`).join('')}
-                ${shortfallBands.map(b => {
-                  const left = (b.from / totalDays) * 100;
-                  const right = (b.to / totalDays) * 100;
-                  return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
-                }).join('')}
-                <div class="tl-bar ${r.status} ${r.color ? 'has-color' : ''}" style="left:${sPct}%;width:${w}%;${r.color ? `--offer-color:${r.color};` : ''}" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
-                  ${w > 1 ? (r.offerType === 'direct-deposit' ? 'DD' : formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })())) : ''}
+              <div class="timeline-row">
+                <div class="timeline-row-label">
+                  <span class="tl-row-name">${escapeHtml(r.label)}</span>
+                  <span class="sub">${escapeHtml(r.sub)}</span>
                 </div>
-                ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
+                <div class="timeline-row-track">
+                  ${ticks.map(t => `<div class="tl-grid-line" style="left:${t.pct}%;"></div>`).join('')}
+                  ${shortfallBands.map(b => {
+                    const left = (b.from / totalDays) * 100;
+                    const right = (b.to / totalDays) * 100;
+                    return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
+                  }).join('')}
+                  <div class="tl-bar ${r.status} ${r.color ? 'has-color' : ''}" style="left:${sPct}%;width:${w}%;${r.color ? `--offer-color:${r.color};` : ''}" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
+                    ${w > 1 ? (r.offerType === 'direct-deposit' ? 'DD' : formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })())) : ''}
+                  </div>
+                  ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
+                </div>
               </div>
             `;
           }).join('');
           return `
             <div class="timeline-wrap">
-              <div class="timeline-labels-col">
+              <div class="timeline-row axis-row">
                 <div class="timeline-row-label axis">${formatDateShort(start)} → ${formatDateShort(end)}</div>
-                ${labelHtml}
-              </div>
-              <div class="timeline-tracks-scroll">
-                <div class="timeline-tracks-col">
-                  <div class="timeline-row-track axis">
-                    <div class="tl-axis">
-                      ${ticks.map(t => `<span class="tl-axis-tick" style="left:${t.pct}%;">${t.label}</span>`).join('')}
-                      ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
-                    </div>
+                <div class="timeline-row-track axis">
+                  <div class="tl-axis">
+                    ${ticks.map(t => `<span class="tl-axis-tick" style="left:${t.pct}%;">${t.label}</span>`).join('')}
+                    ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
                   </div>
-                  ${trackHtml}
                 </div>
               </div>
+              ${rowsHtml}
             </div>
 
             <div class="chart-legend" style="margin-top:var(--space-4);">
