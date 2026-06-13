@@ -195,16 +195,26 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
 }
 
-/* Overview "side panel" layout: actions wide on left, snapshot narrow on
-   right. Items align to top so they don't stretch awkwardly. */
-.overview-side {
+/* Overview unified grid: all 5 cells share the same 3-column track so
+   the right edge of Upcoming actions and Selected bonuses align exactly.
+   Stat cards occupy cols 1-3 naturally; Upcoming spans cols 1-2;
+   At-a-glance sits in col 3. */
+.overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
   align-items: start;
 }
+.overview-main { grid-column: span 2; }
 @media (max-width: 720px) {
-  .overview-side { grid-template-columns: 1fr; }
+  /* Stat cards stay 3-per-row; Upcoming and At-a-glance span full width */
+  .overview-main  { grid-column: 1 / -1; }
+  .overview-aside { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .overview-grid  { grid-template-columns: 1fr; }
+  .overview-main  { grid-column: auto; }
+  .overview-aside { grid-column: auto; }
 }
 
 .snapshot-card {
@@ -1090,17 +1100,21 @@ a { color: inherit; text-decoration: none; }
 .offer-dd-date { color: var(--text-secondary); font-feature-settings: 'tnum' 1; }
 .offer-dd-adj { color: var(--text-tertiary); }
 
-/* DD-method datapoint panel (Doctor of Credit) on the offer card */
+/* DD-method datapoint panel (Doctor of Credit) on the offer card.
+   Two-column layout: title + source on the left, method pills stacked
+   vertically on the right — matches the visual weight of other chips. */
 .ddm-panel { margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); background: var(--card-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-md); }
 .ddm-panel.ddm-loading, .ddm-panel.ddm-empty { font-size: 11px; color: var(--text-tertiary); }
-.ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-.ddm-src { font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; font-size: 10px; }
-.ddm-list { display: flex; flex-wrap: wrap; gap: 5px; }
-.ddm-pill { font-size: 11.5px; padding: 3px 8px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
+.ddm-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ddm-left  { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.ddm-src   { font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; font-size: 10px; }
+.ddm-list  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+.ddm-pill  { font-size: 11px; padding: 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
 .ddm-pill b { font-weight: 700; color: var(--text-tertiary); margin-left: 2px; font-feature-settings: 'tnum' 1; }
 .ddm-pill.mine { background: var(--success-soft); color: #047857; border-color: rgba(16,185,129,0.3); }
 .ddm-pill.mine b { color: #047857; }
-.ddm-foot { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; }
+.ddm-foot { font-size: 11px; color: var(--text-tertiary); margin-top: 5px; }
 .ddm-foot strong { color: #047857; }
 
 /* DD entry rows inside the Add-Offer modal — same compact grid as the
@@ -1774,10 +1788,7 @@ table.data-table {
      pinned regardless of where the user scrolls the bars. */
   .timeline-wrap { padding: var(--space-3); }
   .timeline-labels-col {
-    flex: 0 0 80px;
-    /* Sticky-belt-and-suspenders: even though labels-col is outside
-       the scroll container, position:sticky here keeps it pinned if
-       the layout is ever flattened into a single scroll context. */
+    flex: 0 0 65px;
     position: sticky;
     left: 0;
     z-index: 2;
@@ -4065,14 +4076,12 @@ function renderOverview() {
       </div>
     </section>
 
-    <div class="grid grid-cols-3" style="margin-bottom: var(--space-6);">
+    <div class="overview-grid">
       ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`, 'accent', 'goto-timeline')}
       ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success', 'goto-offers-included')}
       ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'), lowest ? 'goto-lowest' : null)}
-    </div>
 
-    <div class="overview-side">
-      <section class="card">
+      <section class="card overview-main">
         <div class="card-header">
           <h2>Upcoming actions</h2>
           ${upcomingPageCount > 1 ? `
@@ -6604,8 +6613,11 @@ function showEventModal(eventId = null) {
     sourceBonusOfferId: null,
     recurrence: { kind: 'none', everyDays: 7, endDate: '' },
     includeInProjection: true,
-    showOnChart: true,
-    showInUpcoming: true,
+    // New events affect the running balance by default but stay OUT of
+    // the chart + Upcoming actions until explicitly opted in (most events
+    // are paychecks/bills the user doesn't want cluttering those views).
+    showOnChart: false,
+    showInUpcoming: false,
     notes: ''
   };
   // Back-compat defaults for events saved before these fields existed
