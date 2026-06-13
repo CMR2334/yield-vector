@@ -39,6 +39,20 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 48 — Settings "Capital & projection" desktop grid fix**
+- The section's `.form-grid` used `repeat(auto-fit, minmax(220px, 1fr))`,
+  which on desktop produced 5 cramped columns and ragged wrapping; 2-line
+  hints ("Days below this threshold…", "Brute force evaluates…") with
+  `align-items:start` also left inputs on uneven baselines.
+- Scoped fix: gave the grid `id="capital-grid"` (~line 5014) and added CSS
+  (~line 1397) — `repeat(3, minmax(0,1fr))` desktop, `repeat(2,…)` ≤1024px,
+  `align-items:stretch` + `margin-top:auto` on the field controls so every
+  input in a row shares one baseline even when a hint wraps. Mobile (≤720
+  flex-column rules) is unchanged. Other form-sections (Cloud sync, etc.)
+  keep the auto-fit base, so only Capital & projection changed.
+- Verified 3/2/1 columns at 1280 / 900 / 375 in preview.
+
+### 2026-06-13 — Session F (claude-sonnet-4-6)
 **Round 47 — Cloud sync: revision-history restore + push overwrite guard**
 - **Incident:** user had ~6 offers + extra events on mobile. Logged into a
   STALE desktop (3 offers), pasted the token, and pushed → last-writer-wins
