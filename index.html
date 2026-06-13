@@ -578,8 +578,40 @@ a { color: inherit; text-decoration: none; }
   width: 100%;
   margin-top: var(--space-4);
 }
-
-.chart-svg { width: 100%; display: block; overflow: visible; }
+/* The plot scrolls horizontally inside .chart-scroll; the Y-axis
+   (.chart-yaxis) is a sticky sibling pinned to the left so the dollar
+   labels stay frozen while the X-axis scrolls. The tooltip lives in
+   .chart-wrap (overflow visible) so it is never clipped by the scroll.
+   Do NOT add `-webkit-overflow-scrolling: touch` to .chart-scroll — it
+   breaks horizontal `position: sticky` on iOS Safari. */
+.chart-scroll {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+.chart-yaxis {
+  position: -webkit-sticky;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 48px;
+  width: 48px;
+  background: var(--card);
+  pointer-events: none;
+}
+.chart-yaxis .ylab {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 500;
+  color: #9099a8;
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+}
+.chart-svg { flex: 1 1 auto; min-width: 0; display: block; overflow: visible; }
 .chart-svg text {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   font-feature-settings: 'tnum' 1;
@@ -591,17 +623,9 @@ a { color: inherit; text-decoration: none; }
    Tooltip is appended to <body> in JS (Round 18) so it renders above
    the wrap regardless of overflow — no need for `overflow: visible`. */
 @media (max-width: 720px) and (orientation: portrait) {
-  .chart-wrap {
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    margin: var(--space-4) 0 0 0;
-    padding: 0;
-    scrollbar-width: thin;
-  }
   .chart-svg {
-    width: 100%;
-    min-width: 600px;       /* user scrolls horizontally for the rest */
+    flex: 0 0 auto;
+    width: 540px;           /* wider than viewport → scroll X; Y stays pinned */
     height: auto;
     display: block;
   }
@@ -610,20 +634,10 @@ a { color: inherit; text-decoration: none; }
 /* Mobile landscape: viewport is wide & short — chart fits without scroll
    and capped at a moderate height so the rest of the page is reachable. */
 @media (max-width: 1024px) and (orientation: landscape) {
-  .chart-wrap {
-    overflow-x: auto;
-    overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
-    margin: var(--space-3) 0 0 0;
-    padding: 0;
-    max-height: 280px;
-  }
-  .chart-svg {
-    width: 100%;
-    min-width: 600px;
-    height: auto;
-    display: block;
-  }
+  .chart-wrap { margin-top: var(--space-3); }
+  .chart-scroll { max-height: 280px; }
+  /* Landscape is wide: let the plot fill (flex:1 from base) so it fits
+     without scroll; the Y-axis is visible regardless. */
 }
 
 .chart-tooltip {
@@ -1173,8 +1187,8 @@ a { color: inherit; text-decoration: none; }
 .timeline-row.axis-row { min-height: 32px; }
 
 .timeline-row-label {
-  flex: 0 0 165px;
-  width: 165px;
+  flex: 0 0 157px;
+  width: 157px;
   min-width: 0;
   overflow: hidden;
   position: -webkit-sticky; /* iOS Safari fallback — see .timeline-wrap note */
@@ -1798,8 +1812,8 @@ table.data-table {
   /* Mobile portrait timeline: narrower sticky label column; single
      scroll container handles both axes, Y-axis stays frozen. */
   .timeline-row-label {
-    flex: 0 0 89px;
-    width: 89px;
+    flex: 0 0 85px;
+    width: 85px;
     font-size: 12px;
     padding: 5px 8px 6px;
   }
@@ -4060,7 +4074,10 @@ function renderOverview() {
         </div>
       </div>
       <div class="chart-wrap" id="hero-chart-wrap">
-        <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="chart-scroll" id="hero-chart-scroll">
+          <div class="chart-yaxis" id="hero-chart-yaxis" aria-hidden="true"></div>
+          <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
         <div class="chart-tooltip" id="chart-tooltip"></div>
       </div>
       <div class="chart-legend">
@@ -4691,7 +4708,7 @@ function renderTimeline() {
     rows.push({
       id: o.id,
       label: o.bankName,
-      sub: `${formatCurrency(o.requiredFundingAmount)} · ${SUB_STATUS_LABELS[o.subStatus] || STATUS_LABELS[o.status] || o.status}`,
+      sub: formatCurrency(o.requiredFundingAmount),
       start: sStart,
       end: sEnd,
       status: CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : (o.status === 'completed' ? 'completed' : 'hypothetical'),
@@ -5357,7 +5374,9 @@ function renderHeroChart(svg) {
   const wrap = document.getElementById('hero-chart-wrap');
   const tooltip = document.getElementById('chart-tooltip');
   const W = 800, H = 280;
-  const padL = 56, padR = 28, padT = 16, padB = 36;
+  // padL is small because the $ axis labels now render in the sticky HTML
+  // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
+  const padL = 32, padR = 28, padT = 16, padB = 36;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
@@ -5558,10 +5577,8 @@ function renderHeroChart(svg) {
     <!-- Y grid + labels -->
     ${yTicks.map(t => {
       const y = yFor(t);
-      return `
-        <line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1"/>
-        <text x="${padL - 10}" y="${(y + 4).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatCompactCurrency(t)}</text>
-      `;
+      // Gridline only — the $ label is rendered in the sticky .chart-yaxis.
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1"/>`;
     }).join('')}
     <!-- Buffer line -->
     <line x1="${padL}" y1="${yFor(buffer).toFixed(1)}" x2="${W - padR}" y2="${yFor(buffer).toFixed(1)}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.7"/>
@@ -5642,6 +5659,18 @@ function renderHeroChart(svg) {
   svg.innerHTML = svgContent;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  // Frozen Y-axis: render the dollar labels as HTML in the sticky sibling so
+  // they stay pinned while the plot scrolls horizontally. Vertical % is
+  // scale-independent — yFor(t)/H maps the viewBox y to the rendered height
+  // (the SVG fills its box with no vertical letterboxing at height:auto), so
+  // each label lines up with its gridline at any chart width.
+  const yaxisEl = document.getElementById('hero-chart-yaxis');
+  if (yaxisEl) {
+    yaxisEl.innerHTML = yTicks.map(t =>
+      `<span class="ylab" style="top:${(yFor(t) / H * 100).toFixed(2)}%;">${formatCompactCurrency(t)}</span>`
+    ).join('');
+  }
 
   // Hover interactions
   const hoverArea = svg.querySelector('#chart-hover-area');

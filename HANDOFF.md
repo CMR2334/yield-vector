@@ -39,6 +39,31 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 46 — Overview "Available capital" chart: frozen $ Y-axis; timeline tweaks**
+- **Hero chart Y-axis now frozen on mobile.** The $ axis labels ($0–$200K)
+  were `<text>` drawn INSIDE the scrolling SVG, so they scrolled off. New
+  structure in `renderOverview()` (~line 4062): `.chart-wrap` (overflow
+  visible, tooltip anchor) > `.chart-scroll` (overflow-x auto, flex) >
+  `.chart-yaxis` (sticky left:0, 48px, HTML labels) + `svg.chart-svg`
+  (plot). `renderHeroChart()` now: padL 56→32 (labels are external), the
+  yTicks loop emits ONLY the gridline, and after `svg.innerHTML` it
+  populates `#hero-chart-yaxis` with `.ylab` spans at `top:(yFor(t)/H*100)%`
+  — vertical % is scale-independent so labels line up with gridlines at any
+  width (SVG has no vertical letterbox at height:auto). Verified: Y-axis
+  `yaxisFrozen:true` scrolled to end on mobile; desktop fills, no scroll;
+  tooltip still works (parented to body, Round 18). Removed the old
+  `-webkit-overflow-scrolling:touch` + `min-width:600` on `.chart-svg`
+  (broke iOS sticky); SVG is now flex (mobile width:540 forces scroll,
+  desktop flex:1 fills).
+- **Timeline label col 5% narrower:** desktop 165→157px, mobile 89→85px.
+- **Timeline rows no longer show offer sub-status.** Offer row `sub` is now
+  just `formatCurrency(o.requiredFundingAmount)` (was `$25,000 · On-Track`).
+  Commitment rows still show amount · type (that's a type, not a status).
+- NOTE: the original "Y-axis/value labels scroll off" report was about THIS
+  chart (Overview "Available capital"), not the Timeline. R44/R45 fixed the
+  Timeline; R46 fixes the Overview chart with the same sticky pattern.
+
+### 2026-06-13 — Session F (claude-sonnet-4-6)
 **Round 45 — Timeline Y-axis freeze (real fix), label widen, DoC method clarity**
 - **Root-cause fix for sticky Y-axis on mobile.** Round 44 made labels
   `position:sticky` but they still scrolled off near the scroll END on
