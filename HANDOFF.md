@@ -39,6 +39,25 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-12 — Session D (claude-opus-4-8)
+**Round 42 — project folder renamed Churning → "Yield Vector"**
+- **The local folder is now `/Users/collinrekowski/Automation/Yield
+  Vector/`** (was `…/Churning/`). Git history + remote (CMR2334/
+  yield-vector) fully preserved — only the directory was renamed.
+  Note the SPACE in the path: quote it in shell (`cd "/Users/.../Yield
+  Vector"`). The GitHub repo name stays `yield-vector` (unchanged).
+- Updated every path reference: `watcher/task-watcher.js` (the
+  `path.join(AUTOMATION_DIR, 'Yield Vector')` strings — restart the
+  task-watcher to pick this up), shared `../docs/*.md`, workspace
+  `.claude/settings.local.json`, and this repo's CLAUDE.md / README.md /
+  AGENTS.md (shell commands quoted).
+- **Repo hygiene:** removed duplicate `c1_icon_final.png` (identical
+  copy lives in `capone-shopping/`); renamed `tmp_reminder.swift` →
+  `tools/create-reminders.swift` (real EventKit code for the pending
+  iOS Reminders feature); committed `package-lock.json`; gitignored
+  `nohup.out` + `.claude/launch.json`; fixed stale `../docs/` links in
+  AGENTS.md.
+
+### 2026-06-12 — Session D (claude-opus-4-8)
 **Round 41 — date-picker overflow fix, event-visibility toggles, overview/ddm layout**
 - **Date picker mobile overflow (root cause) fixed.** The day cells used
   `aspect-ratio:1` + a reserved `min-height`; in a 5-week month the rows
