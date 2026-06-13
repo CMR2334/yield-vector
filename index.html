@@ -1185,11 +1185,15 @@ a { color: inherit; text-decoration: none; }
 .timeline-labels-col > .timeline-row-label:last-child { border-bottom: none; }
 .timeline-row-label.axis {
   height: 32px;
+  min-height: 32px;
   font-size: 11px;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Name span: truncate with ellipsis; line-height 1.35 ensures descenders (g,y,p) aren't clipped */
 .tl-row-name {
@@ -1789,6 +1793,9 @@ table.data-table {
   .timeline-wrap { padding: var(--space-3); }
   .timeline-labels-col {
     flex: 0 0 65px;
+    width: 65px;
+    min-width: 0;
+    overflow: hidden;
     position: sticky;
     left: 0;
     z-index: 2;
