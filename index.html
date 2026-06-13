@@ -1110,10 +1110,13 @@ a { color: inherit; text-decoration: none; }
 .ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
 .ddm-src   { font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; font-size: 10px; }
 .ddm-list  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
-.ddm-pill  { font-size: 11px; padding: 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
-.ddm-pill b { font-weight: 700; color: var(--text-tertiary); margin-left: 2px; font-feature-settings: 'tnum' 1; }
+.ddm-pill  { display: inline-flex; align-items: center; font-size: 11px; padding: 2px 4px 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
+.ddm-method { overflow: hidden; text-overflow: ellipsis; }
+/* Datapoint count as a separated badge so "Business checking" + "2 DP"
+   never read as one phrase ("Business checking 2"). */
+.ddm-dp { flex-shrink: 0; margin-left: 6px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--border-soft); color: var(--text-tertiary); font-weight: 700; font-size: 10px; font-feature-settings: 'tnum' 1; }
 .ddm-pill.mine { background: var(--success-soft); color: #047857; border-color: rgba(16,185,129,0.3); }
-.ddm-pill.mine b { color: #047857; }
+.ddm-pill.mine .ddm-dp { background: rgba(16,185,129,0.18); color: #047857; }
 .ddm-foot { font-size: 11px; color: var(--text-tertiary); margin-top: 5px; }
 .ddm-foot strong { color: #047857; }
 
@@ -1147,23 +1150,34 @@ a { color: inherit; text-decoration: none; }
   box-shadow: var(--shadow-card);
   overflow-x: auto;
   overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
+/* NOTE: do NOT add `-webkit-overflow-scrolling: touch` here. On iOS Safari
+   it forces a UIScrollView compositing layer that breaks horizontal
+   `position: sticky` on the label column — the Y-axis would scroll off.
+   iOS 13+ has momentum scrolling by default, so it isn't needed. */
 
 .timeline-row {
   display: flex;
   border-bottom: 1px solid var(--border-soft);
   min-height: 44px;
+  /* width:100% fills the wrap on desktop (track stretches); min-width:
+     max-content forces the row to span label+track (≥ track min-width) when
+     narrower than the content, so the sticky label can stay pinned across
+     the FULL horizontal scroll range. Without this the row is clamped to the
+     viewport width and the sticky label gets dragged off near the scroll end. */
+  width: 100%;
+  min-width: max-content;
 }
 .timeline-row:last-child { border-bottom: none; }
 .timeline-row.axis-row { min-height: 32px; }
 
 .timeline-row-label {
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 0 165px;
+  width: 165px;
   min-width: 0;
   overflow: hidden;
+  position: -webkit-sticky; /* iOS Safari fallback — see .timeline-wrap note */
   position: sticky;
   left: 0;
   z-index: 2;
@@ -1784,8 +1798,8 @@ table.data-table {
   /* Mobile portrait timeline: narrower sticky label column; single
      scroll container handles both axes, Y-axis stays frozen. */
   .timeline-row-label {
-    flex: 0 0 81px;
-    width: 81px;
+    flex: 0 0 89px;
+    width: 89px;
     font-size: 12px;
     padding: 5px 8px 6px;
   }
@@ -2996,7 +3010,9 @@ const DDMethods = {
       const ms = this.slug(method);
       return mine.some(x => ms === x || (x.length >= 3 && (ms.startsWith(x) || x.startsWith(ms))));
     };
-    const works = (entry.works || []).map(w => ({ ...w, mine: isMine(w.method) }));
+    // Only methods with at least one DoC datapoint are useful evidence —
+    // a method listed with dps:0 (e.g. "American Express 0") is noise.
+    const works = (entry.works || []).filter(w => w.dps > 0).map(w => ({ ...w, mine: isMine(w.method) }));
     return {
       name: entry.name,
       top3: works.slice(0, 3),
@@ -4511,9 +4527,14 @@ function renderDdMethodPanel(o) {
   if (DDMethods.failed) return '';
   if (!DDMethods.loaded) return `<div class="ddm-panel ddm-loading">Loading DD-method datapoints…</div>`;
   const info = DDMethods.forOffer(o.bankName, App.state.settings.sourceBanks);
-  if (!info) return `<div class="ddm-panel ddm-empty">No DD-method datapoints for ${escapeHtml(o.bankName || 'this bank')} in the DoC list.</div>`;
+  if (!info || info.top3.length === 0) return `<div class="ddm-panel ddm-empty">No DD-method datapoints for ${escapeHtml(o.bankName || 'this bank')} in the DoC list.</div>`;
+  // Each "method" is a deposit source (an account type like "Business
+  // checking", or a named bank/service like "American Express") that DoC
+  // users report posts as a direct deposit at THIS bank. The number is the
+  // datapoint count backing it — rendered as a separate "N DP" badge so it
+  // never reads as part of the method name ("Business checking 2").
   const rows = info.top3.map(w =>
-    `<span class="ddm-pill ${w.mine ? 'mine' : ''}" title="${w.dps} Doctor of Credit datapoint${w.dps === 1 ? '' : 's'}${w.note ? ' · ' + escapeAttr(w.note) : ''}${w.mine ? ' · one of your source banks' : ''}">${w.mine ? '★ ' : ''}${escapeHtml(w.method)} <b>${w.dps}</b></span>`
+    `<span class="ddm-pill ${w.mine ? 'mine' : ''}" title="${escapeAttr(w.method)} — ${w.dps} Doctor of Credit datapoint${w.dps === 1 ? '' : 's'} that it posts as a direct deposit here${w.note ? ' · ' + escapeAttr(w.note) : ''}${w.mine ? ' · one of your source banks' : ''}">${w.mine ? '★ ' : ''}<span class="ddm-method">${escapeHtml(w.method)}</span><span class="ddm-dp">${w.dps} DP</span></span>`
   ).join('');
   let foot = '';
   if (!info.anyMine) {
@@ -4526,8 +4547,8 @@ function renderDdMethodPanel(o) {
   return `<div class="ddm-panel">
     <div class="ddm-inner">
       <div class="ddm-left">
-        <div class="ddm-title">Top DD Methods</div>
-        <div class="ddm-src">DoC datapoints</div>
+        <div class="ddm-title" title="Deposit sources — account types (e.g. 'Business checking') or named banks/services — that Doctor of Credit users report will post as a direct deposit at this bank. 'N DP' is how many datapoints back each; more is stronger evidence.">Top DD methods</div>
+        <div class="ddm-src">sources that post as DD</div>
       </div>
       <div class="ddm-list">${rows}</div>
     </div>

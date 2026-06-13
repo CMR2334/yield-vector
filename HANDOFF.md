@@ -38,6 +38,39 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 45 — Timeline Y-axis freeze (real fix), label widen, DoC method clarity**
+- **Root-cause fix for sticky Y-axis on mobile.** Round 44 made labels
+  `position:sticky` but they still scrolled off near the scroll END on
+  mobile. Cause: `.timeline-row` (flex) was clamped to the viewport width
+  (~343px), so the sticky label was trapped inside the row's box — once the
+  row scrolled past, it dragged the label with it (verified: label hit
+  -50px at scrollLeft 320). Fix: `.timeline-row { width:100%;
+  min-width:max-content }` — `width:100%` fills the wrap on desktop (track
+  stretches, no scroll), `min-width:max-content` forces the row to span
+  label+track (≥600px track min-width) on mobile so the label stays pinned
+  across the FULL scroll range. Verified `allStuck:true` at scroll 0→max.
+- **Removed `-webkit-overflow-scrolling:touch`** from `.timeline-wrap`
+  (breaks horizontal sticky on iOS Safari; iOS 13+ has momentum scroll by
+  default). Added `position:-webkit-sticky` fallback on the label. Left a
+  CSS comment so it isn't re-added.
+- **Label column +~10%:** desktop 150→165px, mobile 81→89px.
+- **DoC method panel clarity** (`renderDdMethodPanel` ~line 4510,
+  `DDMethods.forOffer` ~line 2991). User saw "Business checking 2" for
+  Royal Credit Union and couldn't tell it wasn't a bank name. Three fixes:
+  (1) filter `works` to `dps > 0` so 0-datapoint noise ("American Express
+  0") is dropped; (2) render the datapoint count as a separate `.ddm-dp`
+  "N DP" badge so it never glues to the method name; (3) title tooltip +
+  subtitle "sources that post as DD" explaining a "method" is a deposit
+  source (account type OR named bank), not necessarily a bank.
+
+### 2026-06-13 — Session F (claude-sonnet-4-6)
+**Round 44 — Timeline single-scroll sticky labels (superseded by R45 fix)**
+- Replaced two-sibling-column layout (labels-col + tracks-scroll) with a
+  row-based layout: each `.timeline-row` holds its own label+track pair,
+  labels `position:sticky left:0` inside one `overflow-x:auto` `.timeline-
+  wrap`. Worked on desktop; mobile sticky was incomplete until R45.
+
 ### 2026-06-13 — Session E (claude-sonnet-4-6)
 **Round 43 — Overview card alignment, Timeline layout, Top DD Methods bubble**
 - **Overview unified grid.** Replaced two-row layout (grid-cols-3 + overview-side 2fr/1fr) with a single `.overview-grid` (3-col) so stat cards and Upcoming/At-a-glance share the same column tracks. Right edge of Upcoming actions now aligns exactly with Selected Bonuses. Responsive: main/aside span full-width at ≤720px; all cols collapse to 1fr at ≤480px.
