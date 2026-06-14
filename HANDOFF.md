@@ -38,6 +38,22 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-06-14 — Session F (claude-sonnet-4-6)
+**Round 50 — Settings native date overflow + DD count-box balance**
+- **Projection start date overflow (mobile).** `#s-start` is a native
+  `<input type="date">` in the (non-modal) Settings form, so it never got
+  the modal blast-radius `appearance:none` treatment — on iOS Safari its
+  intrinsic UA min-width overflowed the right edge. Added a GLOBAL rule
+  (~line 1455) for `.input[type="date"|"datetime-local"|"time"]`:
+  `appearance:none` + width:100%/max-width:100%/min-width:0/border-box.
+  Calendar icon still shows on desktop; native picker still opens on tap.
+  (Custom offer-modal date fields are `type="text"` yv-date pickers —
+  unaffected.)
+- **DD count "deposits" box still gappy.** R49 left it at 200px, so a
+  single "1" sat far from the right-aligned "deposits" suffix. Narrowed to
+  138px (matches the freq box's visual balance) so number + suffix read
+  together. Freq controls (112px/122px) unchanged.
+
 ### 2026-06-13 — Session F (claude-sonnet-4-6)
 **Round 49 — DD requirement "rule boxes" mobile sizing fix**
 - The offer modal's DD requirement controls (Once-per [select] / for [N]
