@@ -282,6 +282,9 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .snap-v {
   font-size: 19px;
@@ -596,8 +599,8 @@ a { color: inherit; text-decoration: none; }
   position: sticky;
   left: 0;
   z-index: 2;
-  flex: 0 0 48px;
-  width: 48px;
+  flex: 0 0 36px;
+  width: 36px;
   background: var(--card);
   pointer-events: none;
 }
@@ -5472,7 +5475,7 @@ function renderHeroChart(svg) {
   const W = 800, H = 210;
   // padL is small because the $ axis labels now render in the sticky HTML
   // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
-  const padL = 32, padR = 28, padT = 16, padB = 36;
+  const padL = 8, padR = 28, padT = 16, padB = 36;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
