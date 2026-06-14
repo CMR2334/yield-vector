@@ -635,7 +635,7 @@ a { color: inherit; text-decoration: none; }
    and capped at a moderate height so the rest of the page is reachable. */
 @media (max-width: 1024px) and (orientation: landscape) {
   .chart-wrap { margin-top: var(--space-3); }
-  .chart-scroll { max-height: 280px; }
+  .chart-scroll { max-height: 210px; }
   /* Landscape is wide: let the plot fill (flex:1 from base) so it fits
      without scroll; the Y-axis is visible regardless. */
 }
@@ -729,7 +729,7 @@ a { color: inherit; text-decoration: none; }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.stat-label { font-size: 12px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
 /* Mid amber — sits between the Offer-expires tag's pale background
    (#fff5e0) and its deep brown text (#b45309). Used when Lowest projected
@@ -4173,7 +4173,7 @@ function renderOverview() {
       <div class="chart-wrap" id="hero-chart-wrap">
         <div class="chart-scroll" id="hero-chart-scroll">
           <div class="chart-yaxis" id="hero-chart-yaxis" aria-hidden="true"></div>
-          <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet"></svg>
+          <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 210" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
         <div class="chart-tooltip" id="chart-tooltip"></div>
       </div>
@@ -4215,8 +4215,6 @@ function renderOverview() {
           <div class="snap snap-actions"><span class="snap-v">${computeActionsRequired(App.state)}</span><span class="snap-l">Actions required</span></div>
           <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
           <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
-          <div class="snap snap-horizon"><span class="snap-v">${effectiveHorizonDays(App.state)}d</span><span class="snap-l">Horizon</span></div>
-          <div class="snap snap-buffer"><span class="snap-v">${formatCompactCurrency(App.state.settings.minimumCashBuffer)}</span><span class="snap-l">Buffer</span></div>
           <div class="snap snap-bonus"><span class="snap-v">${formatCompactCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
         </div>
       </aside>
@@ -5471,7 +5469,7 @@ function renderHeroChart(svg) {
 
   const wrap = document.getElementById('hero-chart-wrap');
   const tooltip = document.getElementById('chart-tooltip');
-  const W = 800, H = 280;
+  const W = 800, H = 210;
   // padL is small because the $ axis labels now render in the sticky HTML
   // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
   const padL = 32, padR = 28, padT = 16, padB = 36;
