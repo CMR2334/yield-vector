@@ -1836,6 +1836,29 @@ table.data-table {
 .banner.danger { background: var(--danger-soft); color: #c95555; border-color: rgba(232, 113, 113, 0.3); }
 .banner svg { flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px; }
 
+/* About & diagnostics (Settings) */
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: var(--space-2); margin-bottom: var(--space-3); }
+.about-item { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3); background: var(--bg-subtle, rgba(0,0,0,0.03)); border-radius: var(--radius-md); }
+.about-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
+.about-value { font-size: 14px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.diag-empty { font-size: 13px; color: var(--text-secondary); margin: 0; }
+.diag-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.diag-log { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
+.diag-entry { padding: var(--space-2) var(--space-3); border: 1px solid var(--border, rgba(0,0,0,0.08)); border-radius: var(--radius-md); background: var(--danger-soft); }
+.diag-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.diag-code { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: var(--danger); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.diag-time { font-size: 11px; color: var(--text-tertiary); }
+.diag-msg { font-size: 13px; color: var(--text-primary); margin-top: 2px; word-break: break-word; }
+.diag-ctx { font-size: 11px; color: var(--text-secondary); margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Full-screen render-failure recovery panel */
+.error-state { max-width: 520px; margin: 12vh auto 0; padding: var(--space-6); text-align: center; }
+.error-state h1 { font-size: 20px; margin: 0 0 var(--space-3); color: var(--text-primary); }
+.error-state p { font-size: 14px; color: var(--text-secondary); margin: 0 0 var(--space-4); line-height: 1.5; }
+.error-state-msg { text-align: left; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--danger-soft); color: #c95555; padding: var(--space-3); border-radius: var(--radius-md); overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+.error-state-actions { display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-4); flex-wrap: wrap; }
+.error-state-foot { font-size: 11px; color: var(--text-tertiary); margin-top: var(--space-4); }
+
 .toolbar {
   display: flex;
   gap: var(--space-3);
@@ -2047,6 +2070,98 @@ table.data-table {
    CONSTANTS & STORAGE
    ============================================================ */
 const STORAGE_KEY = 'capital-planner-v1';
+
+/* --- App version & build stamp ------------------------------------------
+   APP_VERSION is the single user-facing build identifier, shown in
+   Settings → About. Bump it on every meaningful release (date-build
+   format: YYYY.MM.DD, append a letter — 2026.06.14b — for a second build
+   the same day) and create a matching `stable-YYYY-MM-DD` git tag. Because
+   the PWA is served from cache, this is the only reliable way to confirm
+   which build a phone is actually running. package.json `version` is
+   dev-only metadata and tracked separately. */
+const APP_VERSION = '2026.06.14';
+
+/* --- Diagnostics & error logging ----------------------------------------
+   The app runs on a phone with no console, so an uncaught error would
+   otherwise vanish. logError() categorizes failures with a stable code and
+   keeps the last DIAG_MAX in a localStorage ring buffer, surfaced in
+   Settings → About & diagnostics where they can be copied into a report. */
+const DIAG_KEY = 'yv-diag-log-v1';
+const DIAG_MAX = 25;
+const ErrCode = {
+  STORAGE:   'E_STORAGE',    // localStorage read/write failed
+  PARSE:     'E_PARSE',      // JSON.parse of local/cloud state failed
+  SYNC_PUSH: 'E_SYNC_PUSH',  // Gist push failed
+  SYNC_PULL: 'E_SYNC_PULL',  // Gist pull/fetch failed
+  RENDER:    'E_RENDER',     // a render pass threw
+  UNCAUGHT:  'E_UNCAUGHT',   // window 'error' event
+  PROMISE:   'E_PROMISE',    // unhandledrejection
+  PWA:       'E_PWA',        // icon/manifest setup
+};
+
+function readDiagLog() {
+  try { const a = JSON.parse(localStorage.getItem(DIAG_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+function clearDiagLog() { try { localStorage.removeItem(DIAG_KEY); } catch {} }
+
+function logError(code, err, context) {
+  const entry = {
+    t: new Date().toISOString(),
+    code: code || 'E_UNKNOWN',
+    msg: (err && err.message) ? err.message : String(err == null ? '' : err),
+    ctx: context || '',
+    stack: (err && err.stack) ? String(err.stack).split('\n').slice(0, 4).join('\n') : ''
+  };
+  try { console.error(`[${entry.code}] ${entry.ctx}`.trim(), err); } catch {}
+  try {
+    const log = readDiagLog();
+    log.unshift(entry);
+    localStorage.setItem(DIAG_KEY, JSON.stringify(log.slice(0, DIAG_MAX)));
+  } catch {}
+  return entry;
+}
+
+/* Global safety nets. Without these an uncaught exception or rejected
+   promise dies silently — a blank screen on iOS with no breadcrumb. */
+function installErrorHandlers() {
+  window.addEventListener('error', (e) => {
+    // Bubbling-phase listener: catches script errors, not resource 404s.
+    logError(ErrCode.UNCAUGHT, e.error || e.message, e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '');
+    toast('Something went wrong — see Settings → About & diagnostics', 'danger');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    // Rejections are often benign (aborted fetch on navigation); log
+    // quietly without a toast so we don't cry wolf.
+    logError(ErrCode.PROMISE, e.reason, 'unhandledrejection');
+  });
+}
+
+/* Storage probe for the About panel. */
+function storageHealth() {
+  try { const k = '__yv_probe__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return 'OK'; }
+  catch { return 'Unavailable'; }
+}
+
+/* Minimal clipboard helper (no existing one to reuse). GitHub Pages is
+   https, so the async Clipboard API is available; fall back to a hidden
+   textarea + execCommand for older iOS. */
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('copy command rejected'));
+    } catch (e) { reject(e); }
+  });
+}
+
 const TODAY = startOfDay(new Date());
 
 const STATUSES = ['prospect', 'selected', 'applied', 'funded', 'completed', 'skipped'];
@@ -2358,7 +2473,7 @@ const Sync = {
           ? await (await fetch(file.raw_url)).text()
           : file.content;
         if (content && content.trim()) {
-          try { remote = JSON.parse(content); } catch { remote = null; }
+          try { remote = JSON.parse(content); } catch (e) { remote = null; logError(ErrCode.PARSE, e, 'startupSync: cloud payload'); }
         }
       }
       const remoteModified = (remote && remote._lastModified) || 0;
@@ -2423,6 +2538,7 @@ const Sync = {
       render();
       if (!silent) toast('Pulled from cloud');
     } catch (e) {
+      logError(ErrCode.SYNC_PULL, e, 'Sync.pull');
       this.setStatus('error', e.message);
       if (!silent) toast('Pull failed: ' + e.message, 'danger');
     }
@@ -2447,6 +2563,7 @@ const Sync = {
       this.setStatus('synced');
       if (!silent) toast('Pushed to cloud');
     } catch (e) {
+      logError(ErrCode.SYNC_PUSH, e, 'Sync.push');
       this.setStatus('error', e.message);
       if (!silent) toast('Push failed: ' + e.message, 'danger');
     }
@@ -2484,7 +2601,7 @@ const Sync = {
     if (!file) return null;
     const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
     if (!content || !content.trim()) return null;
-    try { return JSON.parse(content); } catch { return null; }
+    try { return JSON.parse(content); } catch (e) { logError(ErrCode.PARSE, e, 'fetchRevision'); return null; }
   },
   // Replace local state with a recovered revision and push it up so it
   // becomes the current version on every device (push stamps a fresh
@@ -3248,26 +3365,35 @@ const App = {
   optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
 
   init() {
-    const saved = this.load();
-    this.state = saved || this.defaultState();
-    if (!saved) {
-      this.state = seedSampleData(this.state);
-      this.save();
+    installErrorHandlers();
+    try {
+      const saved = this.load();
+      this.state = saved || this.defaultState();
+      if (!saved) {
+        this.state = seedSampleData(this.state);
+        this.save();
+      }
+      // Migrate offers to the two-field status model + sync legacy status.
+      (this.state.offers || []).forEach(normalizeOfferStatus);
+      this.rollProjectionStartIfStale();
+      setupPwa();
+      if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
+      else Sync.setStatus('unconfigured');
+      render();
+      bindGlobalEvents();
+      // Async pull — runs after first paint, doesn't block UI
+      if (Sync.isConfigured()) {
+        setTimeout(() => Sync.startupSync(), 50);
+      }
+      // Lazy-load the DD-method datapoints (re-renders cards when ready).
+      setTimeout(() => DDMethods.load(), 80);
+    } catch (e) {
+      // A throw during boot must not leave a blank screen — show a
+      // self-contained recovery panel that reads the diag log directly.
+      logError(ErrCode.RENDER, e, 'App.init');
+      const root = document.getElementById('app');
+      if (root) root.innerHTML = renderErrorState(e);
     }
-    // Migrate offers to the two-field status model + sync legacy status.
-    (this.state.offers || []).forEach(normalizeOfferStatus);
-    this.rollProjectionStartIfStale();
-    setupPwa();
-    if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
-    else Sync.setStatus('unconfigured');
-    render();
-    bindGlobalEvents();
-    // Async pull — runs after first paint, doesn't block UI
-    if (Sync.isConfigured()) {
-      setTimeout(() => Sync.startupSync(), 50);
-    }
-    // Lazy-load the DD-method datapoints (re-renders cards when ready).
-    setTimeout(() => DDMethods.load(), 80);
   },
 
   // Auto-roll the projection start date forward to today whenever it
@@ -3322,7 +3448,7 @@ const App = {
       if (!parsed || typeof parsed !== 'object') return null;
       return parsed;
     } catch (e) {
-      console.warn('Failed to load state', e);
+      logError(ErrCode.PARSE, e, 'App.load: localStorage state');
       return null;
     }
   },
@@ -3334,6 +3460,7 @@ const App = {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
       Sync.schedulePush();
     } catch (e) {
+      logError(ErrCode.STORAGE, e, 'App.save');
       toast('Could not save: storage unavailable', 'danger');
     }
   },
@@ -3973,30 +4100,55 @@ function runOptimizer(state) {
    ============================================================ */
 function render() {
   const root = document.getElementById('app');
-  // Idempotent status normalization covers every state path (load, sync
-  // pull, inline edits) in one place — guarantees subStatus/accountStatus
-  // exist and the legacy shadow status is in sync before anything renders.
-  if (App.state && App.state.offers) App.state.offers.forEach(normalizeOfferStatus);
-  // Preserve focus + caret on inputs across full re-renders. Without this,
-  // typing/backspacing in the search box loses focus on every keystroke
-  // because innerHTML destroys the input element.
-  const focused = document.activeElement;
-  const focusedId = focused && focused.id ? focused.id : null;
-  const selStart = focused && focused.selectionStart != null ? focused.selectionStart : null;
-  const selEnd = focused && focused.selectionEnd != null ? focused.selectionEnd : null;
+  try {
+    // Idempotent status normalization covers every state path (load, sync
+    // pull, inline edits) in one place — guarantees subStatus/accountStatus
+    // exist and the legacy shadow status is in sync before anything renders.
+    if (App.state && App.state.offers) App.state.offers.forEach(normalizeOfferStatus);
+    // Preserve focus + caret on inputs across full re-renders. Without this,
+    // typing/backspacing in the search box loses focus on every keystroke
+    // because innerHTML destroys the input element.
+    const focused = document.activeElement;
+    const focusedId = focused && focused.id ? focused.id : null;
+    const selStart = focused && focused.selectionStart != null ? focused.selectionStart : null;
+    const selEnd = focused && focused.selectionEnd != null ? focused.selectionEnd : null;
 
-  root.innerHTML = renderShell();
+    root.innerHTML = renderShell();
 
-  if (focusedId) {
-    const el = document.getElementById(focusedId);
-    if (el) {
-      el.focus({ preventScroll: true });
-      try { if (selStart != null && el.setSelectionRange) el.setSelectionRange(selStart, selEnd); } catch {}
+    if (focusedId) {
+      const el = document.getElementById(focusedId);
+      if (el) {
+        el.focus({ preventScroll: true });
+        try { if (selStart != null && el.setSelectionRange) el.setSelectionRange(selStart, selEnd); } catch {}
+      }
     }
+    bindViewEvents();
+    // Re-render charts that need actual DOM measurements
+    renderChartsAfterMount();
+  } catch (e) {
+    // Never blank the screen on a render bug — log it and show a
+    // recoverable error panel instead.
+    logError(ErrCode.RENDER, e, 'render:' + (App.view || '?'));
+    if (root) root.innerHTML = renderErrorState(e);
   }
-  bindViewEvents();
-  // Re-render charts that need actual DOM measurements
-  renderChartsAfterMount();
+}
+
+/* Self-contained recovery UI. Must not depend on renderShell()/state being
+   healthy, since it's shown precisely when those threw. Reads the diag log
+   straight from localStorage so it works even mid-boot. */
+function renderErrorState(err) {
+  const msg = (err && err.message) ? err.message : String(err || 'Unknown error');
+  return `
+    <div class="error-state">
+      <h1>Yield Vector hit a snag</h1>
+      <p>The view failed to render, but your data is safe in local storage. Try reloading. If it keeps happening, copy the diagnostics below when reporting it.</p>
+      <pre class="error-state-msg">${escapeHtml(msg)}</pre>
+      <div class="error-state-actions">
+        <button class="btn btn-primary" onclick="location.reload()">Reload</button>
+        <button class="btn btn-secondary" data-action="copy-diag">Copy diagnostics</button>
+      </div>
+      <p class="error-state-foot">Build v${escapeHtml(APP_VERSION)}</p>
+    </div>`;
 }
 
 function renderShell() {
@@ -5215,7 +5367,59 @@ function renderSettings() {
         ${renderProjectionDebugTable()}
       </details>
     </section>
+
+    <section class="form-section">
+      <h2>About &amp; diagnostics</h2>
+      <p class="section-desc">Build identifier and a log of the most recent errors. If something looks wrong, tap <strong>Copy diagnostics</strong> and include the text when reporting it.</p>
+      <div class="about-grid">
+        <div class="about-item"><span class="about-label">Version</span><span class="about-value">v${escapeHtml(APP_VERSION)}</span></div>
+        <div class="about-item"><span class="about-label">Local storage</span><span class="about-value">${storageHealth()}</span></div>
+        <div class="about-item"><span class="about-label">Cloud sync</span><span class="about-value">${Sync.isConfigured() ? 'Configured' : 'Not configured'}</span></div>
+      </div>
+      ${renderDiagnostics()}
+    </section>
   `;
+}
+
+function renderDiagnostics() {
+  const log = readDiagLog();
+  if (!log.length) return `<p class="diag-empty">No errors logged — all clear.</p>`;
+  return `
+    <div class="diag-actions">
+      <button class="btn btn-secondary btn-sm" data-action="copy-diag">Copy diagnostics</button>
+      <button class="btn btn-secondary btn-sm btn-danger" data-action="clear-diag">Clear log</button>
+    </div>
+    <div class="diag-log">
+      ${log.map(e => `
+        <div class="diag-entry">
+          <div class="diag-head"><span class="diag-code">${escapeHtml(e.code)}</span><span class="diag-time">${escapeHtml(formatDiagTime(e.t))}</span></div>
+          <div class="diag-msg">${escapeHtml(e.msg || '(no message)')}</div>
+          ${e.ctx ? `<div class="diag-ctx">@ ${escapeHtml(e.ctx)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function formatDiagTime(iso) {
+  try { const d = new Date(iso); return d.toLocaleString(); } catch { return iso || ''; }
+}
+
+/* Plain-text report for the clipboard — version + environment header, then
+   every logged error with its stack. */
+function diagReportText() {
+  const log = readDiagLog();
+  const head = [
+    'Yield Vector — diagnostics',
+    'Version:   v' + APP_VERSION,
+    'Generated: ' + new Date().toISOString(),
+    'Storage:   ' + storageHealth(),
+    'Sync:      ' + (Sync.isConfigured() ? 'configured' : 'not configured'),
+    'UA:        ' + (navigator.userAgent || 'n/a'),
+    'Errors:    ' + log.length,
+  ].join('\n');
+  const body = log.map(e =>
+    `\n[${e.code}] ${e.t}\n  ${e.msg}${e.ctx ? '\n  @ ' + e.ctx : ''}${e.stack ? '\n  ' + e.stack.replace(/\n/g, '\n  ') : ''}`
+  ).join('\n');
+  return head + '\n' + (body || '\n(no errors)');
 }
 
 function renderCommitmentsTable() {
@@ -7148,6 +7352,8 @@ function onClick(e) {
     case 'export-json': exportJson(); break;
     case 'reset-sample': if (confirm('Replace your data with sample data?')) { App.state = seedSampleData(App.defaultState()); App.save(); render(); toast('Sample data loaded'); } break;
     case 'clear-all': if (confirm('Erase ALL data? This cannot be undone.')) { App.state = App.defaultState(); App.save(); render(); toast('All data cleared'); } break;
+    case 'copy-diag': copyText(diagReportText()).then(() => toast('Diagnostics copied')).catch(() => toast('Could not copy — select the text manually', 'danger')); break;
+    case 'clear-diag': clearDiagLog(); render(); toast('Diagnostics cleared'); break;
 
     case 'run-optimizer': runOptimizerNow(); break;
     case 'clear-optimizer': App.optimizer.results = null; render(); break;
@@ -7442,7 +7648,7 @@ async function guardedManualPush() {
     let remote = null;
     if (file) {
       const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-      if (content && content.trim()) { try { remote = JSON.parse(content); } catch {} }
+      if (content && content.trim()) { try { remote = JSON.parse(content); } catch (e) { logError(ErrCode.PARSE, e, 'guardedManualPush: cloud precheck'); } }
     }
     const remoteMod = (remote && remote._lastModified) || 0;
     const localMod = (App.state && App.state._lastModified) || 0;
@@ -7508,7 +7714,7 @@ async function saveSyncConfigFromForm() {
         ? await (await fetch(file.raw_url)).text()
         : file.content;
       if (content && content.trim()) {
-        try { remote = JSON.parse(content); } catch {}
+        try { remote = JSON.parse(content); } catch (e) { logError(ErrCode.PARSE, e, 'sync precheck: cloud payload'); }
       }
     }
     if (remote && remote.settings && typeof remote.settings === 'object') {
