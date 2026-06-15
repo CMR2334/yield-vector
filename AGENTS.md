@@ -1,15 +1,16 @@
 # Yield Vector — AI Assistant Brief
 
-This document is for any AI assistant working in this directory. It is AI-agnostic — the same instructions apply whether you are Claude, Codex, Gemini, Cursor, or any other assistant.
+This document is for any AI assistant working in this directory. It is AI-agnostic — the same instructions apply whether you are Claude, Codex, Gemini, Cursor, or any other assistant. It is the **canonical technical reference** for the project; other docs link here rather than restating it.
 
 See [../docs/USER_PROFILE.md](../docs/USER_PROFILE.md) for the workspace owner's working style and communication preferences.
 See [../docs/PREFERENCES.md](../docs/PREFERENCES.md) for code and documentation standards.
+See [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md) before editing files so parallel Claude/Codex work does not overlap silently.
 
 ---
 
 ## What This Project Is
 
-Yield Vector is a credit card bonus planner PWA. It helps the owner track bank account bonuses, model cash flow timelines, and decide which bonuses to pursue and in what order. Think of it as a personal finance optimizer focused specifically on new-account bonuses (often called "churning").
+Yield Vector is a credit card / bank-account bonus planner PWA. It helps the owner track bank account bonuses, model cash-flow timelines, and decide which bonuses to pursue and in what order. Think of it as a personal finance optimizer focused specifically on new-account bonuses (often called "churning").
 
 - **Live URL:** https://CMR2334.github.io/yield-vector/
 - **Repo:** https://github.com/CMR2334/yield-vector
@@ -19,29 +20,38 @@ Yield Vector is a credit card bonus planner PWA. It helps the owner track bank a
 
 ## Architecture
 
-Single-file PWA. The entire application — HTML structure, CSS styles, and JavaScript logic — lives in one file: `index.html` (~4500 lines). There is no build step, no bundler, no framework. Vanilla JS and CSS only.
+Single-file PWA. The entire application — HTML structure, CSS styles, and JavaScript logic — lives in one file: `index.html` (~8,000 lines). There is no build step, no bundler, no framework. Vanilla JS and CSS only.
 
-Deployed via GitHub Pages from the `main` branch. A push to `main` triggers an automatic rebuild; the live URL reflects changes within 30–90 seconds.
+State is persisted to `localStorage`. Cloud sync is a GitHub Gist polled on focus/visibility and pushed on every `App.save()` (2.5 s debounce). Deployed via GitHub Pages from `main`; a push triggers a rebuild and the live URL reflects it within 30–90 seconds.
 
 **Key files:**
-- `index.html` — entire app
-- `auto-push.js` — file watcher that auto-commits and pushes on save (unreliable; don't depend on it)
+- `index.html` — entire app (HTML + CSS + JS)
+- `dd-methods.json` — baked DoC "methods that count as direct deposit" dataset (regenerate with `tools/build-dd-methods.js`)
+- `auto-push.js` — file watcher that auto-commits/pushes on save (unreliable; don't depend on it — see Commit protocol)
 - `package.json` — only dependency is `chokidar` (for the watcher)
-- `HANDOFF.md` — cross-session changelog; read at the start of every session, prepend new entries after meaningful changes
+- `tools/` — maintenance scripts (`build-dd-methods.js`, `create-reminders.swift`)
 
 ---
 
 ## Key Function Locations
 
-These line numbers are approximate and shift as the file grows. Search by function name if they don't match.
+Line numbers drift as the file grows — **search by function name** if they don't match. (Accurate as of `index.html` ≈ 8,000 lines.)
 
 | Function | ~Line | Purpose |
 |----------|-------|---------|
-| `effectiveHorizonDays()` | ~1961 | Auto mode: uses withdrawal-eligible dates only, adds +30 days |
-| `setupPwa()` | ~1542 | Runtime-generated canvas icon, smooth diagonal gradient |
-| `runOptimizer()` | ~2176 | Feasibility check: requires `shortfallDays === 0 && belowBufferDays === 0` |
-| `renderTimeline()` | ~2745 | "Today" label suppressed on data rows via CSS |
-| `renderHeroChart()` | ~3342 | Chart with marker tooltips; mobile uses `position:fixed` for tooltip |
+| `setupPwa()` | ~2700 | Runtime-generated canvas icon + manifest; smooth diagonal gradient |
+| `usFederalHolidays(year)` | ~2910 | ACH holiday calendar (11/yr), cached per year |
+| `directDepositEffectiveDate(dd)` | ~3030 | Planned DD date → next business day if weekend/holiday |
+| `withdrawalEligibleDate(offer)` | ~3510 | `lockStart + daysFundsMustRemain` |
+| `lockStartDate(offer)` | ~3530 | DD: max effective DD date; Held/Other: funding date |
+| `generateProjection()` | ~3550 | Day-by-day cash-flow model |
+| `effectiveHorizonDays()` | ~3735 | Auto mode: withdrawal-eligible dates only, +30 days |
+| `runOptimizer()` | ~3985 | Feasibility: `shortfallDays === 0 && belowBufferDays === 0` |
+| `renderTimeline()` | ~4270 | Horizontal bars; label col sticky, track col scrolls |
+| `renderHeroChart()` | ~5640 | SVG chart; tooltip appended to `<body>` for mobile clip fix |
+| `logError(code,err,ctx)` | ~2110 | Categorized error → console + diagnostics ring buffer |
+| `installErrorHandlers()` | ~2127 | Global `error` + `unhandledrejection` safety nets |
+| `renderErrorState(err)` | ~4140 | Self-contained render-failure recovery panel |
 
 ---
 
@@ -49,32 +59,73 @@ These line numbers are approximate and shift as the file grows. Search by functi
 
 The app models three offer types, each with distinct logic:
 
-- **New Funds Held** — minimum balance must be maintained for a specified period before the bonus is awarded.
-- **Direct Deposit** — requires a qualifying direct deposit within a window. Business-day logic applies (weekends and federal holidays do not count).
-- **Other** — catch-all for offers that don't fit the above categories.
+- **New Funds Held** — minimum balance must be maintained for a specified period before the bonus is awarded. Hold measured from funded date or account-open date depending on the bank.
+- **Direct Deposit** — requires qualifying ACH direct deposits within a window. Business-day logic applies (weekends + federal holidays shift to the next business day). Hold starts after the final DD's effective date.
+- **Other** — catch-all for combination offers or anything that doesn't fit the above.
 
 ---
 
-## Auto-Push Protocol
+## Versioning
 
-Always commit and push after making changes. The live URL rebuilds automatically.
+`APP_VERSION` (top of the `<script>` block in `index.html`) is the **single user-facing build identifier**, shown in **Settings → About & diagnostics**. Because the PWA is served from cache, it's the only reliable way to confirm which build a phone is actually running.
+
+- **Format:** date-build `YYYY.MM.DD`, with a trailing letter (`2026.06.14b`) for a second build the same day.
+- **On each meaningful release:** bump `APP_VERSION`, then create a matching `stable-YYYY-MM-DD` git tag (the named restore point) and add a CHANGELOG entry.
+- `package.json` `version` is semver dev-metadata, bumped independently; no tool consumes it.
+
+---
+
+## Error Handling & Diagnostics
+
+The app runs on a phone with no console, so failures must never vanish silently.
+
+- **Global safety nets** (`installErrorHandlers`, called first in `App.init`): `window` `error` + `unhandledrejection` are caught, logged, and (for errors) toasted.
+- **`logError(code, err, ctx)`** categorizes failures with a stable `ErrCode` (`E_STORAGE`, `E_PARSE`, `E_SYNC_PUSH`, `E_SYNC_PULL`, `E_RENDER`, `E_UNCAUGHT`, `E_PROMISE`, `E_PWA`) and keeps the last 25 in a `localStorage` ring buffer (`yv-diag-log-v1`).
+- **Settings → About & diagnostics** surfaces version, storage/sync health, and the recent-error log, with a one-tap **Copy diagnostics** report (includes UA + stacks) for bug reports.
+- **`render()` and `App.init()` are wrapped** so a render throw shows `renderErrorState()` (a recoverable panel) instead of a blank screen.
+- When adding code that can fail (parse, network, storage), route the catch through `logError` with the right code rather than an empty `catch {}`.
+
+---
+
+## Commit & Push Protocol
+
+Always commit and push after a meaningful change — the live URL rebuilds automatically and the owner often checks on iPhone, so push early and often rather than batching to the end.
 
 ```bash
 cd "/Users/collinrekowski/Automation/Yield Vector" && \
   git add index.html HANDOFF.md && \
-  git commit -m "auto update" && \
+  git commit -m "<descriptive, imperative summary>" && \
   git push origin main
 ```
 
-After pushing, the live URL is updated within 30–90 seconds. The owner often checks on their iPhone — push early and push often rather than batching all changes to the end.
+- **Use descriptive, imperative commit messages** ("Fix nav icon clipping", not "Fixed…", not "auto update"). The owner reverts specific changes from `git log` + tags, so each commit must be identifiable. `"auto update"` is reserved for the automated `auto-push.js` watcher only.
+- When working from a worktree, `cd` to the main repo path first so the commit lands on `main` (GitHub Pages serves `main`; worktree branches are not served).
+- After the owner confirms a good state, tag it: `git tag -a stable-YYYY-MM-DD -m "…" && git push origin stable-YYYY-MM-DD`.
+
+---
+
+## Documentation Map
+
+One source of truth per fact — don't duplicate (per [../docs/PREFERENCES.md](../docs/PREFERENCES.md)).
+
+| File | Role |
+|------|------|
+| `AGENTS.md` (this file) | Canonical AI-agnostic technical brief — architecture, function map, conventions |
+| `CLAUDE.md` | Claude Code-specific config; references this file + shared docs, doesn't restate them |
+| `README.md` | Human-facing overview + setup; links here for the function map |
+| `CHANGELOG.md` | Sparse, **release-level** history: milestones, commit hashes, revert commands |
+| `HANDOFF.md` | Granular **per-session** AI changelog; read top 3–5 entries at session start, prepend after meaningful work |
+| `HANDOFF_ARCHIVE.md` | Older HANDOFF rounds, moved out to keep the live log readable |
+| `SHORTCUT_SETUP.md` | One-time iOS Reminders Shortcut build guide |
 
 ---
 
 ## Session Protocol
 
-1. Read `HANDOFF.md` at the start of every session (top 3–5 entries).
-2. Do the work.
-3. Commit and push.
-4. Prepend a new entry to `HANDOFF.md` summarizing what changed.
-
-Push at least every 30 minutes of active work. Push before the owner steps away.
+1. Claim the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform <codex|claude> --scope "$PWD" --task "short description"`.
+2. Read `HANDOFF.md` at the start of every session (top 3-5 entries).
+3. Do the work.
+4. Commit and push (descriptive message); push at least every 30 minutes of active work and before the owner steps away.
+5. Release the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js done --id SESSION_ID`.
+6. Prepend a new entry to `HANDOFF.md` summarizing what changed.
+7. On a confirmed-good state, bump `APP_VERSION` + tag `stable-YYYY-MM-DD` + add a CHANGELOG milestone entry.

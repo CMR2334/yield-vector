@@ -6,7 +6,7 @@ Collin pre-approves all Bash, Read, Edit, Write, and computer-use actions for:
 - ~/Library/LaunchAgents/
 - /tmp/
 No need to request confirmation for these locations in any session.
-See ../USER_PROFILE.md for full working preferences.
+See ../docs/USER_PROFILE.md for full working preferences.
 
 
 
@@ -20,6 +20,19 @@ After completing a meaningful round of changes, prepend a new entry to
 HANDOFF.md following its template. Be proactive — the user shouldn't have
 to remind you.
 
+## Coordination guard
+Before editing files, follow [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md):
+
+```bash
+node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform claude --scope "$PWD" --task "short description"
+```
+
+If another active Claude/Codex session overlaps this project or the target files, pause and coordinate or use a Git worktree. Release the session after commit/push:
+
+```bash
+node /Users/collinrekowski/Automation/scripts/agent-session.js done --id SESSION_ID
+```
+
 ## Auto-push protocol (apply in every session)
 The `auto-push.js` watcher is **not reliable** — it dies on terminal close,
 laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
@@ -29,12 +42,13 @@ laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
    `index.html` and verified the JS parses, immediately run:
    ```bash
    cd "/Users/collinrekowski/Automation/Yield Vector" && \
-     git add index.html HANDOFF.md CLAUDE.md SHORTCUT_SETUP.md && \
+     git add index.html HANDOFF.md CHANGELOG.md AGENTS.md CLAUDE.md README.md SHORTCUT_SETUP.md && \
      git commit -m "<short descriptive message>" && \
      git push origin main
    ```
-   You're working in a worktree branch — `cd` to the main path first so
-   the commit lands on `main` (which is what GitHub Pages serves).
+   If you're working in a Claude Code worktree, `cd` to the main repo path
+   first so the commit lands on `main` (what GitHub Pages serves) — worktree
+   branches are not served.
 
    **Use DESCRIPTIVE commit messages** (e.g. `DD form: hide funding-date
    for standard DD`), NOT the legacy `"auto update"`. The user relies on
@@ -68,7 +82,7 @@ Live URL: `https://CMR2334.github.io/yield-vector/` (rebuilt automatically
 by GitHub Pages within 30–90s of every push to `main`).
 
 ## Project
-Single-file PWA credit card bonus planner. All app code lives in `index.html` (~4500 lines, vanilla JS + CSS, no build step).
+Single-file PWA credit card bonus planner. All app code lives in `index.html` (~8,000 lines, vanilla JS + CSS, no build step). See [AGENTS.md](AGENTS.md) for the canonical architecture + function map — this file stays Claude-specific and does not duplicate it.
 
 ## Permissions
 This project runs with `bypassPermissions` mode — all tool calls (Bash, Read, Edit, Write, etc.) are auto-approved without prompting. Configured in `.claude/settings.json`.
@@ -80,12 +94,16 @@ This project runs with `bypassPermissions` mode — all tool calls (Bash, Read, 
 - `.claude/settings.json` — project-level Claude Code config (committed)
 - `.claude/settings.local.json` — personal overrides (gitignored)
 
-## Architecture Notes
-- `effectiveHorizonDays()` (~line 1961) — auto mode uses withdrawal-eligible dates only, +30 days
-- `renderHeroChart()` (~line 3342) — chart with marker tooltips; mobile uses `position:fixed` for tooltip
-- `runOptimizer()` (~line 2176) — feasibility requires `shortfallDays === 0 && belowBufferDays === 0`
-- `renderTimeline()` (~line 2745) — "Today" label suppressed on data rows via CSS
-- `setupPwa()` (~line 1542) — runtime-generated canvas icon, smooth diagonal gradient
+## Architecture, versioning & error handling
+The canonical technical reference is **[AGENTS.md](AGENTS.md)** — the key-function
+map (with current line numbers), the versioning scheme (`APP_VERSION` date-build
+stamp surfaced in Settings → About, matched to `stable-YYYY-MM-DD` tags), and the
+error-handling contract (`logError`/`ErrCode`, global `error`/`unhandledrejection`
+handlers, the diagnostics ring buffer + copy-report panel). Read it rather than
+relying on line numbers, which drift as the file grows.
+
+When you ship a confirmed-good state: bump `APP_VERSION` in `index.html`, tag
+`stable-YYYY-MM-DD`, and prepend a milestone entry to [CHANGELOG.md](CHANGELOG.md).
 
 ## Auto-Push to GitHub Pages
 - Repo: https://github.com/CMR2334/yield-vector

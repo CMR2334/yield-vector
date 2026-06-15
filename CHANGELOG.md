@@ -2,10 +2,67 @@
 
 Significant changes to this project, in reverse chronological order.
 
+> **CHANGELOG vs HANDOFF.** This file is the **release-level** history: milestones
+> and notable feature waves, each with commit hashes and a revert command, kept
+> sparse so a human can scan the arc of the project. [HANDOFF.md](HANDOFF.md) is
+> the **per-session** AI changelog — granular, round-by-round, prepended every
+> session. If you want "what shipped and how do I undo it," read here; if you
+> want "what did the last agent just touch," read HANDOFF.
+
 **How to revert a change:**
 - To undo a commit cleanly (creates a new revert commit): `git revert HASH`
 - To restore a single file to an earlier state without a revert commit: `git checkout HASH -- index.html`
+- To restore to a tagged milestone: `git checkout stable-YYYY-MM-DD -- index.html`
 - To see what a commit changed: `git show HASH`
+
+---
+
+## 2026-06-15 — In-app versioning, error handling & diagnostics
+**Commit:** `9dc560f` (code) + docs realignment (this commit)
+**Files:** `index.html`, `package.json`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `HANDOFF.md`, `HANDOFF_ARCHIVE.md`
+**What changed:** Added `APP_VERSION` date-build stamp (v2026.06.15) shown in a new **Settings → About & diagnostics** panel; global `error`/`unhandledrejection` handlers + `logError`/`ErrCode` ring buffer (no more silent blank-screen failures on iOS); `render()`/`init()` wrapped to show a recovery panel instead of a blank page; upgraded silent `JSON.parse`/sync catches to logged errors. Docs realigned to the workspace standard (de-duplicated function map into AGENTS.md, revived this changelog, archived old HANDOFF rounds). `package.json` 1.0.0 → 1.1.0.
+**Revert:** `git revert 9dc560f`
+
+---
+
+## 2026-06-13 — Cloud-sync recovery + frozen-axis charts
+**Commits:** `bc45a7f` (restore-from-history + push-overwrite guard), `448b613` / `851aff6` / `6682f49` (freeze chart $ Y-axis + timeline label column on mobile)
+**Files:** `index.html`
+**What changed:** "Restore from history" recovery lists the last 20 Gist revisions with their offer/event counts so a bad overwrite can be undone; `guardedManualPush()` warns before a stale device clobbers newer cloud data. Froze the overview chart's $ Y-axis and the timeline label column on mobile via a sticky single-scroll layout.
+**Revert:** `git revert bc45a7f` (sync) · `git checkout 448b613~1 -- index.html` (charts)
+
+---
+
+## 2026-06-09 — Debit-card requirement + capital events
+**Commits:** `191888d` (debit requirement + "Actions required" card), `e46cee1` / `4e3cd1e` (capital events)
+**Files:** `index.html`
+**What changed:** Per-offer debit-card transaction requirement (count + deadline) and an "Actions required" at-a-glance card counting pending DDs, lump-sum deposits, and debit txns. One-time capital events (inflows/outflows) with independent "in projection" vs "in Upcoming actions" visibility.
+**Revert:** `git revert 191888d`
+
+---
+
+## 2026-06-08 — DD overhaul, status redesign, DoC method ranking
+**Tags:** `stable-2026-06-08` (`68f997d`), `stable-2026-06-08b` (`3fc777b`) — named restore points
+**Commits:** `88be7e7` (two-field status model + migration), `8abd6c0` (bake `dd-methods.json`, 1,158 banks) + `20dc8f4` (top-3 method ranking on cards), `a3e47a0` (color-coded date picker), `697b37c` (standard-DD field visibility)
+**Files:** `index.html`, `dd-methods.json`, `tools/build-dd-methods.js`
+**What changed:** Major feature wave. Open/Closed account status + 9-state sub-status with auto-flip and legacy migration; DD requirement modes (once-per-frequency / count) with business-day round-trip shading; baked DoC direct-deposit dataset with per-bank method ranking on offer cards; integrated custom color-coded date picker.
+**Revert:** `git checkout stable-2026-06-08 -- index.html` (restore to the tagged milestone)
+
+---
+
+## 2026-06-12 — Project rename (Churning → Yield Vector) + repo hygiene
+**Commits:** `cfb54bc` (folder rename + internal path refs), `8c83740` / `1b4af87` / `47b8614` (gitignore `nohup.out`/`launch.json`, commit `package-lock.json`, remove duplicate icon)
+**Files:** `index.html`, `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `package-lock.json`
+**What changed:** Renamed the project folder `Churning` → `Yield Vector`, updated internal doc path references (quoted for the space), and general repo cleanup.
+**Revert:** `git revert cfb54bc`
+
+---
+
+## 2026-05-17 — Timeline label/column polish
+**Commits:** `42b6326`, `c6cca5b`, `f3262f8`, `d0057f0`, `d592216`
+**Files:** `index.html`
+**What changed:** Shortened timeline labels (robust "Bonus" suffix stripping across all separator styles), narrowed the left label column, fixed settings date-input overflow and field-hint alignment.
+**Revert:** `git checkout 42b6326~1 -- index.html`
 
 ---
 

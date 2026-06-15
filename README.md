@@ -16,6 +16,7 @@ A single-file PWA for planning and tracking bank account opening bonuses (credit
 - **Cloud sync** — state synced via GitHub Gist; last-writer-wins conflict resolution
 - **iOS Reminders** — structured `_feed` on every Gist push; Apple Shortcut syncs deadlines to Reminders.app
 - **PWA** — installable on iPhone/Mac, works offline
+- **Diagnostics** — Settings → About shows the build version and a copyable error log; uncaught errors are caught and surfaced instead of failing silently
 
 ---
 
@@ -36,26 +37,13 @@ node auto-push.js    # watches index.html, commits + pushes on change
 
 ## Architecture
 
-**Single-file PWA.** The entire application — HTML, CSS, and JavaScript — lives in [`index.html`](index.html) (~4 500 lines). Vanilla JS and CSS only; no framework, no bundler, no build step.
+**Single-file PWA.** The entire application — HTML, CSS, and JavaScript — lives in [`index.html`](index.html) (~8,000 lines). Vanilla JS and CSS only; no framework, no bundler, no build step.
 
 State is persisted to `localStorage`. Cloud sync is a GitHub Gist polled on focus/visibility and pushed on every `App.save()` call (2.5 s debounce).
 
 ### Key function locations
 
-Line numbers are approximate; search by name if they drift.
-
-| Function | ~Line | Description |
-|---|---|---|
-| `generateProjection()` | 2800 | Day-by-day cash-flow model |
-| `effectiveHorizonDays()` | 1961 | Auto horizon: withdrawal-eligible dates + 30 d |
-| `runOptimizer()` | 2176 | Feasibility: `shortfallDays === 0 && belowBufferDays === 0` |
-| `renderHeroChart()` | 3342 | SVG chart; tooltip appended to `<body>` for mobile clip fix |
-| `renderTimeline()` | 2745 | Horizontal bars; label col sticky, track col scrolls |
-| `setupPwa()` | 1542 | Canvas-generated home-screen icon (matches header SVG) |
-| `lockStartDate(offer)` | 2560 | DD: max effective DD date; Held/Other: funding date |
-| `withdrawalEligibleDate(offer)` | 2580 | `lockStart + daysFundsMustRemain` |
-| `usFederalHolidays(year)` | 2310 | ACH holiday calendar, cached per year |
-| `directDepositEffectiveDate(dd)` | 2336 | Planned date → next business day if needed |
+The function map — with current line numbers — lives in **[AGENTS.md](AGENTS.md#key-function-locations)**, kept there as the single source of truth so it doesn't drift across docs. Search `index.html` by function name if a line number is stale.
 
 ---
 
@@ -92,11 +80,17 @@ Every push to `main` triggers a GitHub Pages rebuild. The live URL updates withi
 ```bash
 cd "/Users/collinrekowski/Automation/Yield Vector" && \
   git add index.html HANDOFF.md && \
-  git commit -m "auto update" && \
+  git commit -m "<descriptive, imperative summary>" && \
   git push origin main
 ```
 
+Use **descriptive, imperative commit messages** ("Fix nav icon clipping") so individual changes stay revertable from `git log`. `"auto update"` is reserved for the automated `auto-push.js` watcher.
+
 When working from a Claude Code worktree, `cd` to the main repo path first so the commit lands on `main` (worktree commits land on the worktree branch, which GitHub Pages does not serve).
+
+### Versioning
+
+`APP_VERSION` in `index.html` is the user-facing build stamp (date-build, e.g. `v2026.06.15`), shown in **Settings → About & diagnostics**. On a confirmed-good state, bump it, tag `stable-YYYY-MM-DD`, and add a [CHANGELOG.md](CHANGELOG.md) milestone entry.
 
 ---
 
@@ -104,8 +98,8 @@ When working from a Claude Code worktree, `cd` to the main repo path first so th
 
 - **GitHub Issues** — feature requests and bugs tracked on the repo.
 - **HANDOFF.md** — cross-session AI changelog; every AI session prepends a new entry after meaningful changes. Read the top 3–5 entries at the start of each session.
-- **AGENTS.md** — AI assistant brief (architecture, key functions, session protocol).
-- **CHANGELOG.md** — human-readable change log with commit hashes and revert instructions.
+- **AGENTS.md** — AI assistant brief; the canonical architecture + function map (other docs link here, not duplicate it).
+- **CHANGELOG.md** — release-level history: milestones with commit hashes, tags, and revert commands. (HANDOFF.md is the granular per-session log; older rounds are archived in HANDOFF_ARCHIVE.md.)
 - **iOS Reminders** — deadlines flow from the planner's `_feed` array into Apple Reminders via a one-time Apple Shortcut setup (see [SHORTCUT_SETUP.md](SHORTCUT_SETUP.md)).
 
 ---
