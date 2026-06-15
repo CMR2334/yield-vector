@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/collinrekowski/Automation/scripts/agent-session.js hook-start --platform codex",
+            "timeout": 10,
+            "statusMessage": "Logging AI session"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/collinrekowski/Automation/scripts/agent-session.js hook-start --platform codex",
+            "timeout": 10,
+            "statusMessage": "Logging AI session"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/collinrekowski/Automation/scripts/agent-session.js hook-stop --platform codex",
+            "timeout": 10,
+            "statusMessage": "Updating AI session"
+          }
+        ]
+      }
+    ]
+  }
+}
