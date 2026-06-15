@@ -638,7 +638,7 @@ a { color: inherit; text-decoration: none; }
    and capped at a moderate height so the rest of the page is reachable. */
 @media (max-width: 1024px) and (orientation: landscape) {
   .chart-wrap { margin-top: var(--space-3); }
-  .chart-scroll { max-height: 320px; }
+  .chart-scroll { max-height: 360px; }
   /* Landscape is wide: let the plot fill (flex:1 from base) so it fits
      without scroll; the Y-axis is visible regardless. */
 }
@@ -4331,7 +4331,7 @@ function renderOverview() {
       <div class="chart-wrap" id="hero-chart-wrap">
         <div class="chart-scroll" id="hero-chart-scroll">
           <div class="chart-yaxis" id="hero-chart-yaxis" aria-hidden="true"></div>
-          <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 320" preserveAspectRatio="xMidYMid meet"></svg>
+          <svg class="chart-svg" id="hero-chart" viewBox="0 0 800 360" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
         <div class="chart-tooltip" id="chart-tooltip"></div>
       </div>
@@ -5679,7 +5679,7 @@ function renderHeroChart(svg) {
 
   const wrap = document.getElementById('hero-chart-wrap');
   const tooltip = document.getElementById('chart-tooltip');
-  const W = 800, H = 320;
+  const W = 800, H = 360;
   // padL is small because the $ axis labels now render in the sticky HTML
   // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
   const padL = 8, padR = 28, padT = 16, padB = 36;
