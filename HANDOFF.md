@@ -38,6 +38,26 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-06-23 — Session H (claude-opus-4-8)
+**Round 52 — Held+DD card "Fund date" = funding date (not DD date)**
+- On a Held+DD offer card, "Fund date" used `lockStartDate(o)`, which for
+  `held-and-dd` anchors on the DD landing date — so it just duplicated the
+  "DD 1" row (e.g. both showed Jun 29). Per user: it should reflect the
+  planned funding date (the held LUMP SUM deposit), which is distinct.
+- Fix (`renderOfferCard`, the `.offer-dates` block, ~line 4885): for
+  `held-and-dd` the card's Fund date now shows `bizDayISO(effectiveFunding-
+  Date(o))` (planned funding date → next business day); all other offer
+  types keep `lockStartDate`. **Display-only** — does NOT touch
+  `lockStartDate`/`withdrawalEligibleDate`/projection/timeline (held-and-dd
+  still ties up the DD amounts from the DD date through withdrawal). Verified
+  in preview: Fund date Jul 20, DD 1 Jun 29 — no longer redundant.
+- Coordination note: started cold as a NEW session with 2 stale overlapping
+  claims (idle, already committed+pushed). Released both with `--force`
+  (the only "dirty" path was the pre-existing untracked
+  `Deal Stack Calculator.html`, left untouched). My Round 44–50 work is
+  intact in HEAD; Session G (Rounds 51, chart sizing, version stamp) built
+  on top of it.
+
 ### 2026-06-15 — Session G (claude-opus-4-8)
 **Round 51 — File-manager pass: versioning, error handling, doc realignment, repo hygiene**
 - **Repo hygiene.** Pruned 6 orphaned git worktrees (stale `Churning`-path

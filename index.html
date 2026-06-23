@@ -4883,7 +4883,15 @@ function renderOfferCard(o) {
         </div>
       </div>
       <div class="offer-dates">
-        ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
+        ${(() => {
+          // For Held+DD, lockStartDate() anchors on the DD landing date, so a
+          // plain "Fund date" just duplicates the "DD 1" row below. The
+          // meaningful fund date here is when the held LUMP SUM is deposited —
+          // i.e. the planned funding date — so show that instead. Other offer
+          // types keep lockStartDate (their actual fund/lock start).
+          const fundDate = (o.offerType === 'held-and-dd') ? bizDayISO(effectiveFundingDate(o)) : start;
+          return fundDate ? `<span><strong>Fund date:</strong> ${formatDateMedium(fundDate)}</span>` : '';
+        })()}
         ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
         ${o.offerExpirationDate ? `<span style="color:var(--warning);"><strong>Offer expires:</strong> ${formatDateMedium(o.offerExpirationDate)}</span>` : ''}
       </div>
