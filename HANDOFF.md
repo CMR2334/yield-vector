@@ -39,6 +39,34 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-06-23 — Session H (claude-opus-4-8)
+**Round 53 — Held+DD: model the held lump sum (was only modeling the DDs)**
+- BUG: a Held+DD offer's `requiredFundingAmount` (the held lump sum) never
+  appeared on the hero chart / projection — `generateProjection` only tied
+  up the DD amounts. The hold was also wrongly anchored to the DD date, and
+  ROI ignored the lump sum (e.g. 476% on a $10K/$600 offer).
+- Reframed Held+DD = "new-funds-held" held portion + qualifying DDs on top:
+  - `lockStartDate(held-and-dd)` → reflected funding date (was last DD date);
+    `withdrawalEligibleDate(held-and-dd)` → open/funded anchor + daysFunds-
+    MustRemain (same as new-funds-held; was DD-date + days). Both achieved by
+    removing the held-and-dd special-cases so they fall through to the held
+    logic.
+  - `generateProjection` held-and-dd: now applies the held lump sum
+    (requiredFundingAmount, funding date → withdrawal) AND each DD (landing →
+    withdrawal). Verified: $0 → $505 (after DD) → $10,505 (after lump sum) →
+    $0 (after withdrawal).
+  - `ddCapitalTime(held-and-dd)`: includes the lump sum's dollar-days, so
+    "Days tied up" + "Annualized" are realistic (32.6% vs 476.6%).
+  - Hero chart: emits the indigo "Initial funding" marker for held-and-dd
+    (the lump sum) in addition to the teal DD markers.
+- Planned funding date is now REQUIRED for Held+DD (label flips to "*" via
+  `syncDdSectionUI`; `isOfferComplete`/`offerIssues` enforce it) — it drives
+  the held deposit. Optional still for new-funds-held (falls back to signup).
+- Reverted R52's card special-case (lockStartDate already returns the
+  funding date for held-and-dd now, so the card shows it via plain `start`).
+- Coordination: released two more stale session claims with --force (only
+  dirty path was the untracked `Deal Stack Calculator.html`).
+
+### 2026-06-23 — Session H (claude-opus-4-8)
 **Round 52 — Held+DD card "Fund date" = funding date (not DD date)**
 - On a Held+DD offer card, "Fund date" used `lockStartDate(o)`, which for
   `held-and-dd` anchors on the DD landing date — so it just duplicated the

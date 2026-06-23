@@ -3521,16 +3521,10 @@ function withdrawalEligibleDate(offer) {
     if (rets.length === 0) return '';
     return isoDate(new Date(Math.max(...rets)));
   }
-  // HELD + DD: a real hold applies. Lock starts after the FINAL qualifying
-  // DD lands, then runs daysFundsMustRemain calendar days. Business-day
-  // shifted so withdrawal can't be initiated on a weekend/holiday.
-  if (offer.offerType === 'held-and-dd') {
-    const ls = lockStartDate(offer);
-    if (!ls || offer.daysFundsMustRemain == null) return null;
-    const calc = addDays(parseDate(ls), Number(offer.daysFundsMustRemain));
-    return bizDayISO(calc);
-  }
-  // New funds held:
+  // HELD + DD and NEW FUNDS HELD share the same hold model: a held lump sum
+  // (requiredFundingAmount) governed by daysFundsMustRemain from the chosen
+  // anchor. The qualifying DDs are modeled separately (see generateProjection);
+  // they do NOT drive the hold window. Anchor:
   //   'open date'   → bank counts from the account open date (US Bank
   //                   style). Open date itself stays as user-entered.
   //   'funded date' → bank counts from when funds actually posted.
@@ -3556,17 +3550,10 @@ function lockStartDate(offer) {
     if (starts.length === 0) return '';
     return isoDate(new Date(Math.min(...starts)));
   }
-  // HELD + DD: lock starts when the LAST DD effectively lands.
-  if (offer.offerType === 'held-and-dd' && Array.isArray(offer.directDeposits)) {
-    const dates = offer.directDeposits
-      .map(dd => parseDate(directDepositEffectiveDate(dd)))
-      .filter(Boolean);
-    if (dates.length === 0) return '';
-    const maxMs = Math.max(...dates.map(d => d.getTime()));
-    return isoDate(new Date(maxMs));
-  }
-  // New funds held: money unavailable from when the bank PROCESSES the
-  // deposit. Saturday-planned funding won't post until Monday.
+  // HELD + DD and NEW FUNDS HELD: the held lump sum is unavailable from when
+  // the bank PROCESSES the deposit (the planned funding date; Saturday-planned
+  // funding won't post until Monday). The qualifying DDs are tracked
+  // separately and don't move this date.
   return bizDayISO(effectiveFundingDate(offer));
 }
 
@@ -3603,6 +3590,14 @@ function ddCapitalTime(offer) {
   } else { // held-and-dd
     const we = parseDate(withdrawalEligibleDate(offer));
     if (!we) return null;
+    // Held lump sum: requiredFundingAmount from the funding date → withdrawal.
+    const fundStart = parseDate(lockStartDate(offer));
+    const fundAmt = Number(offer.requiredFundingAmount) || 0;
+    if (fundStart && fundAmt > 0) {
+      const heldDays = daysBetween(fundStart, we);
+      if (heldDays > 0) { dollarDays += fundAmt * heldDays; totalAmount += fundAmt; }
+    }
+    // Each qualifying DD from when it lands → withdrawal.
     for (const dd of dds) {
       const eff = parseDate(directDepositEffectiveDate(dd));
       if (!eff) continue;
@@ -3663,10 +3658,16 @@ function isOfferComplete(offer) {
   );
   if (!baseOk) return false;
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
-    return Array.isArray(offer.directDeposits)
+    const ddsOk = Array.isArray(offer.directDeposits)
       && offer.directDeposits.length > 0
       && offer.directDeposits.every(dd =>
         dd && dd.plannedDate && parseDate(dd.plannedDate) && Number(dd.amount) > 0);
+    if (!ddsOk) return false;
+    // Held + DD: the held lump sum needs a funding date (it drives the
+    // chart + hold window). Standard direct-deposit has no held lump sum.
+    if (offer.offerType === 'held-and-dd'
+      && !(offer.optionalPlannedFundingDate && parseDate(offer.optionalPlannedFundingDate))) return false;
+    return true;
   }
   return true;
 }
@@ -3685,6 +3686,10 @@ function offerIssues(offer) {
     } else if (!offer.directDeposits.every(dd => dd && dd.plannedDate && parseDate(dd.plannedDate) && Number(dd.amount) > 0)) {
       issues.push('Each direct deposit needs a date and amount > 0');
     }
+  }
+  if (offer.offerType === 'held-and-dd'
+    && !(offer.optionalPlannedFundingDate && parseDate(offer.optionalPlannedFundingDate))) {
+    issues.push('Planned funding date is required for Held + DD');
   }
   return issues;
 }
@@ -3853,11 +3858,17 @@ function generateProjection(state, options = {}) {
       }
       continue;
     }
-    // HELD + DD: each DD's amount is held from when it lands through the
-    // shared withdrawal-eligible date (the bonus hold period).
+    // HELD + DD: two distinct capital commitments, both tied up through the
+    // bonus hold (withdrawal-eligible) date:
+    //   1. the held LUMP SUM (requiredFundingAmount) from the funding date, and
+    //   2. each qualifying DD's amount from when it lands.
+    // Previously only (2) was modeled, so the held funds never hit the chart.
     if (o.offerType === 'held-and-dd' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
       const we = parseDate(withdrawalEligibleDate(o));
       if (!we) continue;
+      const fundStart = parseDate(lockStartDate(o));
+      const fundAmt = Number(o.requiredFundingAmount) || 0;
+      if (fundStart && fundAmt > 0 && fundStart < we) applyCommitment(fundAmt, fundStart, we, kind);
       for (const dd of o.directDeposits) {
         const eff = parseDate(directDepositEffectiveDate(dd));
         const amt = Number(dd.amount) || 0;
@@ -4883,15 +4894,7 @@ function renderOfferCard(o) {
         </div>
       </div>
       <div class="offer-dates">
-        ${(() => {
-          // For Held+DD, lockStartDate() anchors on the DD landing date, so a
-          // plain "Fund date" just duplicates the "DD 1" row below. The
-          // meaningful fund date here is when the held LUMP SUM is deposited —
-          // i.e. the planned funding date — so show that instead. Other offer
-          // types keep lockStartDate (their actual fund/lock start).
-          const fundDate = (o.offerType === 'held-and-dd') ? bizDayISO(effectiveFundingDate(o)) : start;
-          return fundDate ? `<span><strong>Fund date:</strong> ${formatDateMedium(fundDate)}</span>` : '';
-        })()}
+        ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
         ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
         ${o.offerExpirationDate ? `<span style="color:var(--warning);"><strong>Offer expires:</strong> ${formatDateMedium(o.offerExpirationDate)}</span>` : ''}
       </div>
@@ -5793,6 +5796,7 @@ function renderHeroChart(svg) {
     const offerColor = offerColorHex(o);  // '' if none — falls back to white stroke
     const withd = parseDate(withdrawalEligibleDate(o));
     const ddl = parseDate(depositDeadline(o));
+    // Per-DD markers (teal) for both DD types.
     if ((o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && Array.isArray(o.directDeposits)) {
       o.directDeposits.forEach((dd, idx) => {
         const effISO = directDepositEffectiveDate(dd);
@@ -5802,7 +5806,11 @@ function renderHeroChart(svg) {
         if (i < 0 || i >= proj.length) return;
         markers.push({ i, type: 'dd-fund', label: `DD ${idx + 1} — ${name}`, name, color: '#2d9cdb', offerColor, amount: Number(dd.amount) || 0 });
       });
-    } else {
+    }
+    // Held lump-sum fund marker (indigo) for the held types — new-funds-held
+    // AND held-and-dd (its held portion). Standard direct-deposit has no
+    // held lump sum, so it's skipped.
+    if (o.offerType !== 'direct-deposit') {
       const fund = parseDate(lockStartDate(o));
       if (fund) {
         const i = Math.round((fund - start) / 86400000);
@@ -6473,7 +6481,7 @@ function showOfferModal(offerId = null) {
             </div>
           </div>
           <div class="field" id="funding-date-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
-            <label for="f-funded">Planned funding date (optional)</label>
+            <label for="f-funded" id="f-funded-label">Planned funding date${o.offerType === 'held-and-dd' ? ' *' : ' (optional)'}</label>
             <input id="f-funded" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
             <span class="field-hint" id="f-funded-suggest">${(() => {
               const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
@@ -6581,6 +6589,11 @@ function showOfferModal(offerId = null) {
       // hold-day, funding-date, and lock-anchor fields (all held concepts).
       if (daysRemain) daysRemain.style.display = stdDD ? 'none' : '';
       if (fundingField) fundingField.style.display = stdDD ? 'none' : '';
+      // Funding date is REQUIRED for Held + DD (it's when the held lump sum is
+      // deposited — drives the chart + hold), but optional for new-funds-held
+      // (falls back to the signup date).
+      const fundedLabel = form.querySelector('#f-funded-label');
+      if (fundedLabel) fundedLabel.textContent = (type === 'held-and-dd') ? 'Planned funding date *' : 'Planned funding date (optional)';
       if (lockFromField) lockFromField.style.display = stdDD ? 'none' : '';
       // The deposit-deadline field is a DD-completion deadline for DD
       // offers, a deposit deadline otherwise.
