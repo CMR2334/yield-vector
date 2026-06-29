@@ -4815,12 +4815,12 @@ function renderDdMethodPanel(o) {
   // datapoint count backing it — rendered as a separate "N DP" badge so it
   // never reads as part of the method name ("Business checking 2").
   const rows = info.top3.map(w =>
-    `<span class="ddm-pill ${w.mine ? 'mine' : ''}" title="${escapeAttr(w.method)} — ${w.dps} Doctor of Credit datapoint${w.dps === 1 ? '' : 's'} that it posts as a direct deposit here${w.note ? ' · ' + escapeAttr(w.note) : ''}${w.mine ? ' · one of your source banks' : ''}">${w.mine ? '★ ' : ''}<span class="ddm-method">${escapeHtml(w.method)}</span><span class="ddm-dp">${w.dps} DP</span></span>`
+    `<span class="ddm-pill ${w.mine ? 'mine' : ''}" title="${escapeAttr(w.method)} — ${w.dps} Doctor of Credit datapoint${w.dps === 1 ? '' : 's'} that it posts as a direct deposit here${w.note ? ' · ' + escapeAttr(w.note) : ''}${w.mine ? ' · one of your source banks' : ''}">${w.mine ? '★&nbsp;' : ''}<span class="ddm-method">${escapeHtml(w.method)}</span><span class="ddm-dp">${w.dps} DP</span></span>`
   ).join('');
   let foot = '';
   if (!info.anyMine) {
     foot = info.hasSourceBanks
-      ? `<div class="ddm-foot">None of your source banks have datapoints here.</div>`
+      ? `<div class="ddm-foot">None of your source banks have datapoints.</div>`
       : `<div class="ddm-foot">Add your source banks in Settings to flag which of yours work.</div>`;
   } else if (!info.topHasMine && info.myBest) {
     foot = `<div class="ddm-foot">Your best option: <strong>★ ${escapeHtml(info.myBest.method)}</strong> (${info.myBest.dps} DP${info.myBest.dps === 1 ? '' : 's'})</div>`;
@@ -4829,7 +4829,6 @@ function renderDdMethodPanel(o) {
     <div class="ddm-inner">
       <div class="ddm-left">
         <div class="ddm-title" title="Deposit sources — account types (e.g. 'Business checking') or named banks/services — that Doctor of Credit users report will post as a direct deposit at this bank. 'N DP' is how many datapoints back each; more is stronger evidence.">Top DD methods</div>
-        <div class="ddm-src">sources that post as DD</div>
       </div>
       <div class="ddm-list">${rows}</div>
     </div>
