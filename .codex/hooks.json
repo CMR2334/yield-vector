@@ -13,18 +13,6 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /Users/collinrekowski/Automation/scripts/agent-session.js hook-start --platform codex",
-            "timeout": 10,
-            "statusMessage": "Logging AI session"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
