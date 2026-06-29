@@ -3678,7 +3678,7 @@ function offerIssues(offer) {
   if (!offer.bankName) issues.push('Bank name is required');
   if (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0) issues.push('Required funding amount must be > 0');
   if (offer.signupBonusAmount == null || offer.signupBonusAmount < 0) issues.push('Bonus amount required');
-  if (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate)) issues.push('Planned signup date required');
+  if (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate)) issues.push(offer.accountStatus === 'open' ? 'Signup date required' : 'Planned signup date required');
   if (!isStandardDD && (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0)) issues.push('Hold-through day is required');
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
     if (!Array.isArray(offer.directDeposits) || offer.directDeposits.length === 0) {
@@ -6462,7 +6462,7 @@ function showOfferModal(offerId = null) {
             <input id="f-expires" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" data-picker-mode="plain" />
           </div>
           <div class="field">
-            <label for="f-signup">Planned signup date *</label>
+            <label for="f-signup">${o.accountStatus === 'open' ? 'Signup date *' : 'Planned signup date *'}</label>
             <input id="f-signup" class="input yv-date" type="text" readonly inputmode="none" required placeholder="YYYY-MM-DD" value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" data-picker-mode="plain" />
           </div>
           <div class="field">
@@ -6624,6 +6624,12 @@ function showOfferModal(offerId = null) {
       const unit = form.querySelector('#ddreq-freq-unit');
       if (unit) unit.textContent = every === 'week' ? 'weeks' : every === '2weeks' ? 'cycles' : 'months';
     };
+    // Once the account is open the signup already happened; drop "Planned".
+    const syncSignupLabel = () => {
+      const acct = form.querySelector('#f-accountstatus');
+      const lbl = form.querySelector('label[for="f-signup"]');
+      if (acct && lbl) lbl.textContent = acct.value === 'open' ? 'Signup date *' : 'Planned signup date *';
+    };
     form.addEventListener('change', (ev) => {
       if (!ev.target) return;
       if (ev.target.name === 'offerType') syncDdSectionUI();
@@ -6634,6 +6640,7 @@ function showOfferModal(offerId = null) {
         const acct = form.querySelector('#f-accountstatus');
         if (acct) acct.value = 'open';
       }
+      if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') syncSignupLabel();
       // Debit-requirement Yes/No → show or hide the count/deadline fields.
       if (ev.target.name === 'debitRequired') {
         const wrap = form.querySelector('#debit-fields-wrap');
