@@ -4,3 +4,6 @@ node_modules/
 .claude/worktrees/
 nohup.out
 .claude/launch.json
+
+# Stray browser save-page artifact (Jun 2026) — ignored so it does not dirty the tree / park sessions
+Deal Stack Calculator.html
