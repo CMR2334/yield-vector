@@ -38,6 +38,43 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-07-02 — Session I (Claude Code cloud session)
+**Round 54 — Robustness/UX audit: modal survives background renders, sync flush on close, bank autocomplete**
+- Full-file audit pass (branch `claude/yield-vector-audit-ajzdaq`, draft PR —
+  NOT pushed to main; user reviews/merges). `APP_VERSION` → `2026.07.02`.
+- **`render()` now preserves an open modal.** It used to rebuild
+  `#modal-root` empty, so any background render (sync pull, midnight-roll
+  interval, resize) destroyed an in-progress Add/Edit form. Fix: detach the
+  live modal NODE before the innerHTML wipe and re-attach after — same node,
+  so typed values AND the listeners bound in showOfferModal survive.
+- **Resize → re-render only when WIDTH changes.** iOS fires resize on
+  toolbar collapse / keyboard open (height-only); those no longer trigger a
+  full DOM rebuild (scroll jank + the modal-wipe above).
+- **`TODAY` is `let` and refreshes at midnight** inside
+  `rollProjectionStartIfStale()` (returns true → re-render), so Today
+  markers/relativeDays stop pointing at yesterday when left open overnight.
+- **`Sync.flushPendingPush()`** — on `visibilitychange→hidden` + `pagehide`,
+  a pending debounced push fires immediately via `fetch keepalive` (<60KB
+  body; else normal push). Closes the "edited then closed the app within
+  2.5s" data-loss window behind the R47 incident class.
+- **`duplicateOffer` resets the two-field status** (prospect/closed,
+  includeInScenario false — old code set only legacy `status`, which
+  normalizeOfferStatus overwrote, leaving copies On-Track/Open) and assigns
+  the next FREE identity color instead of doubling the source's.
+- **Bank-name autocomplete**: `DDMethods.ensureBankDatalist()` builds a
+  body-level `<datalist id="bank-datalist">` from dd-methods.json (1,158
+  names); wired to `#f-bank` + `#source-bank-input`. Exact names also make
+  the DD-method slug lookup hit precisely.
+- Smaller: Escape closes the date-picker popover before the modal; stray
+  body-level chart tooltips removed on re-render (one leaked per render
+  after hover); toast `aria-live=polite`; `aria-current=page` on nav.
+- Verified headless (Chromium): all views render, zero console errors, and
+  each fix exercised (modal survives forced render with typed value; dup
+  resets; TODAY rolls; 1 tooltip after repeated renders; datalist = 1158).
+- Suggested next (not done): service worker for true offline + update
+  toast; dark mode; "bonuses earned YTD" stat; CSV export; delete button in
+  Offers table view; strict-close consistency for commitment/event modals.
+
 ### 2026-06-23 — Session H (claude-opus-4-8)
 **Round 53 — Held+DD: model the held lump sum (was only modeling the DDs)**
 - BUG: a Held+DD offer's `requiredFundingAmount` (the held lump sum) never

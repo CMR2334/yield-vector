@@ -17,6 +17,14 @@ Significant changes to this project, in reverse chronological order.
 
 ---
 
+## 2026-07-02 — Robustness audit: modal-safe renders, sync flush on close, bank autocomplete (v2026.07.02)
+**Branch:** `claude/yield-vector-audit-ajzdaq` (draft PR — merges to `main` on approval)
+**Files:** `index.html`, `HANDOFF.md`, `CHANGELOG.md`
+**What changed:** Background renders (sync pull, midnight roll, resize) no longer destroy an open Add/Edit modal — the live modal node is detached and re-attached across the re-render. Resize only re-renders on width changes (kills iOS toolbar/keyboard-triggered rebuilds). `TODAY` refreshes at midnight so Today markers/relative dates stay current. Pending debounced sync pushes flush via `fetch keepalive` when the app is backgrounded or closed (closes the R47-class data-loss window). `duplicateOffer` resets sub/account status and picks a fresh identity color. Bank-name autocomplete (`<datalist>` of the 1,158 DoC banks) on the offer modal + source-bank input. Escape closes the date picker before the modal; chart-tooltip DOM leak fixed; toast/nav a11y attributes.
+**Revert:** revert the PR merge commit, or `git checkout stable-2026-06-15 -- index.html` if tagged fallback needed.
+
+---
+
 ## 2026-06-15 — In-app versioning, error handling & diagnostics
 **Commit:** `9dc560f` (code) + docs realignment (this commit)
 **Files:** `index.html`, `package.json`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `HANDOFF.md`, `HANDOFF_ARCHIVE.md`

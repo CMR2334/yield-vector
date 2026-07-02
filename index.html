@@ -2079,7 +2079,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.06.15';
+const APP_VERSION = '2026.07.02';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -2162,7 +2162,10 @@ function copyText(text) {
   });
 }
 
-const TODAY = startOfDay(new Date());
+/* `let`, not `const`: refreshed by App.rollProjectionStartIfStale() when
+   midnight passes while the app is open, so "Today" markers and relative
+   dates don't keep pointing at yesterday. Never mutated in place. */
+let TODAY = startOfDay(new Date());
 
 const STATUSES = ['prospect', 'selected', 'applied', 'funded', 'completed', 'skipped'];
 const STATUS_LABELS = {
@@ -2613,6 +2616,42 @@ const Sync = {
     this.lastSyncAt = Date.now();
     this.setStatus('synced');
     render();
+  },
+
+  // Best-effort flush of a pending debounced push when the app is being
+  // backgrounded or closed. Without this, an edit made within the 2.5s
+  // debounce window never reaches the cloud until THIS device next opens —
+  // and if another device pushes meanwhile, last-writer-wins silently
+  // drops the edit (the R47 incident class). `keepalive: true` lets the
+  // request outlive the page; it caps the body at ~64KB, so oversized
+  // states fall back to a normal async push (works when merely
+  // backgrounding, best-effort when actually closing).
+  flushPendingPush() {
+    if (!this.pushTimer || !this.isConfigured()) return;
+    clearTimeout(this.pushTimer);
+    this.pushTimer = null;
+    const cfg = this.getConfig();
+    try {
+      try { App.state._feed = computeReminderFeed(App.state); } catch {}
+      const body = JSON.stringify({
+        files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
+      });
+      if (body.length < 60000) {
+        fetch(`https://api.github.com/gists/${cfg.gistId}`, {
+          method: 'PATCH',
+          keepalive: true,
+          headers: {
+            Authorization: `token ${cfg.token}`,
+            Accept: 'application/vnd.github+json',
+            'Content-Type': 'application/json'
+          },
+          body
+        }).then(r => { if (r.ok) { this.lastSyncAt = Date.now(); this.setStatus('synced'); } })
+          .catch(() => {}); // page may be gone; next safeSync reconciles
+      } else {
+        this.push({ silent: true });
+      }
+    } catch (e) { logError(ErrCode.SYNC_PUSH, e, 'flushPendingPush'); }
   },
 
   disconnect() {
@@ -3216,8 +3255,26 @@ const DDMethods = {
     this.loading = true;
     fetch('dd-methods.json')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(j => { this.data = j; this.loaded = true; this.loading = false; render(); })
+      .then(j => { this.data = j; this.loaded = true; this.loading = false; this.ensureBankDatalist(); render(); })
       .catch(() => { this.loading = false; this.failed = true; });
+  },
+  // Shared <datalist> of the 1,150+ DoC bank names, appended to <body>
+  // ONCE (it survives re-renders — render() only rebuilds #app). Backs
+  // native autocomplete on the offer modal's Bank-name field and the
+  // Settings source-bank field; typing a name that matches the list also
+  // makes the DD-method panel's slug lookup hit exactly.
+  ensureBankDatalist() {
+    if (!this.loaded || !this.data || !this.data.banks) return;
+    if (document.getElementById('bank-datalist')) return;
+    const dl = document.createElement('datalist');
+    dl.id = 'bank-datalist';
+    dl.innerHTML = Object.values(this.data.banks)
+      .map(b => b.name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .map(n => `<option value="${escapeAttr(n)}"></option>`)
+      .join('');
+    document.body.appendChild(dl);
   },
   slug(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); },
   // Find the DoC entry for an offer bank name (exact slug, else fuzzy
@@ -3404,15 +3461,23 @@ const App = {
   // backward — so a user explicitly setting a future start date in
   // Settings is preserved.
   rollProjectionStartIfStale() {
-    if (!this.state || !this.state.settings) return false;
+    let changed = false;
     const today = isoDate(new Date());
+    // Refresh the module-level TODAY when the calendar day has rolled —
+    // it feeds "Today" markers, relativeDays(), and upcoming-action
+    // windows, all of which would otherwise keep using yesterday.
+    if (isoDate(TODAY) !== today) {
+      TODAY = startOfDay(new Date());
+      changed = true;
+    }
+    if (!this.state || !this.state.settings) return changed;
     const cur = this.state.settings.projectionStartDate;
     if (!cur || cur < today) {
       this.state.settings.projectionStartDate = today;
       this.save();
-      return true;
+      changed = true;
     }
-    return false;
+    return changed;
   },
 
   defaultState() {
@@ -4124,8 +4189,20 @@ function render() {
     const selStart = focused && focused.selectionStart != null ? focused.selectionStart : null;
     const selEnd = focused && focused.selectionEnd != null ? focused.selectionEnd : null;
 
+    // If a modal is open, detach the LIVE node and re-attach it after the
+    // innerHTML wipe. A background render (sync pull, midnight roll,
+    // orientation change) must never destroy an in-progress form — moving
+    // the same node preserves typed values AND the listeners showOfferModal
+    // et al. bound to it, which an innerHTML snapshot would not.
+    const liveModal = document.getElementById('modal-root');
+    const keepModal = (liveModal && liveModal.classList.contains('open')) ? liveModal : null;
+
     root.innerHTML = renderShell();
 
+    if (keepModal) {
+      const freshModal = document.getElementById('modal-root');
+      if (freshModal) freshModal.replaceWith(keepModal);
+    }
     if (focusedId) {
       const el = document.getElementById(focusedId);
       if (el) {
@@ -4169,7 +4246,7 @@ function renderShell() {
     ${renderMobileNav()}
     <button class="fab" id="fab-add" data-action="add-offer" aria-label="Add offer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" pointer-events="none"><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg></button>
     <div class="modal" id="modal-root"></div>
-    <div class="toast" id="toast"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
   `;
 }
 
@@ -4232,7 +4309,7 @@ function renderHeader() {
         <span class="brand-name">Yield Vector</span>
       </div>
       <nav class="primary-nav">
-        ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_ICONS[k]}"/></svg>${l}</button>`).join('')}
+        ${views.map(([k, l]) => `<button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}" ${App.view === k ? 'aria-current="page"' : ''}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${NAV_ICONS[k]}"/></svg>${l}</button>`).join('')}
       </nav>
       <div class="header-trailing">
         ${renderSyncIndicator()}
@@ -4263,7 +4340,7 @@ function renderMobileNav() {
   return `
     <nav class="mobile-nav">
       ${items.map(([k, l, p]) => `
-        <button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}">
+        <button class="nav-btn ${App.view === k ? 'active' : ''}" data-view="${k}" ${App.view === k ? 'aria-current="page"' : ''}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0;"><path d="${p}"/></svg>
           <span>${l}</span>
         </button>
@@ -5315,7 +5392,7 @@ function renderSettings() {
       <h2>My source banks</h2>
       <p class="section-desc">The accounts you can push money <em>from</em> to fund offers / make direct deposits. Used to cross-reference which of your banks have a track record of coding as a direct deposit at a given offer's bank (Doctor of Credit datapoints).</p>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);">
-        <input id="source-bank-input" class="input" type="text" placeholder="e.g. Chase, Ally, Fidelity…" style="max-width:280px;" data-action="source-bank-keydown" autocomplete="off" />
+        <input id="source-bank-input" class="input" type="text" placeholder="e.g. Chase, Ally, Fidelity…" style="max-width:280px;" data-action="source-bank-keydown" autocomplete="off" list="bank-datalist" />
         <button class="btn btn-secondary" data-action="add-source-bank">+ Add bank</button>
       </div>
       ${(s.sourceBanks && s.sourceBanks.length)
@@ -5689,6 +5766,10 @@ function renderHeroChart(svg) {
 
   const wrap = document.getElementById('hero-chart-wrap');
   const tooltip = document.getElementById('chart-tooltip');
+  // handleHover() re-parents the tooltip to <body> (iOS clip fix), so a
+  // re-render strands the previous one there — remove any strays so they
+  // don't accumulate one per render.
+  document.querySelectorAll('body > .chart-tooltip').forEach(el => { if (el !== tooltip) el.remove(); });
   const W = 800, H = 360;
   // padL is small because the $ axis labels now render in the sticky HTML
   // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
@@ -6339,7 +6420,7 @@ function showOfferModal(offerId = null) {
         <div class="form-grid">
           <div class="field" style="grid-column: 1 / -1;">
             <label for="f-bank">Bank name *</label>
-            <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" />
+            <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" list="bank-datalist" autocomplete="off" />
           </div>
           <div class="field" style="grid-column: 1 / -1;">
             <label for="f-offer">Offer name (optional)</label>
@@ -7282,6 +7363,12 @@ function bindGlobalEvents() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      // Innermost layer first: an open date-picker popover swallows the
+      // Escape so the modal underneath doesn't close out from under it.
+      if (DatePicker.el && DatePicker.el.style.display !== 'none') {
+        DatePicker.close();
+        return;
+      }
       const modal = document.getElementById('modal-root');
       if (!modal?.dataset.strictClose) closeModal();
     }
@@ -7316,8 +7403,14 @@ function bindGlobalEvents() {
       // the chart and timeline pick up the new "today" boundary.
       if (App.rollProjectionStartIfStale()) render();
       if (Sync.isConfigured()) Sync.safeSync({ reason: 'tab visible' });
+    } else {
+      // Backgrounding (home swipe, app switcher, tab change) — flush any
+      // debounced push NOW so edits made in the last ~2.5s reach the cloud.
+      Sync.flushPendingPush();
     }
   });
+  // pagehide covers full closes/reloads where visibilitychange may not fire.
+  window.addEventListener('pagehide', () => Sync.flushPendingPush());
   // Tick the indicator every 30s so "Synced 2m ago" stays current
   setInterval(updateSyncIndicator, 30000);
   // Every 60s, check if midnight has rolled past while the app was
@@ -7325,11 +7418,19 @@ function bindGlobalEvents() {
   setInterval(() => { if (App.rollProjectionStartIfStale()) render(); }, 60000);
   // Re-render on orientation change so the chart's preserveAspectRatio + CSS
   // aspect-ratio rules pick up the new orientation. Debounce so rapid
-  // resize events during rotation don't thrash.
+  // resize events during rotation don't thrash. WIDTH changes only: iOS
+  // Safari fires resize when the toolbar collapses or the keyboard opens
+  // (height-only), and a full re-render there causes scroll jank for no
+  // layout benefit.
   let orientTimer = null;
+  let lastRenderWidth = window.innerWidth;
   const onResize = () => {
     if (orientTimer) clearTimeout(orientTimer);
-    orientTimer = setTimeout(() => render(), 120);
+    orientTimer = setTimeout(() => {
+      if (window.innerWidth === lastRenderWidth) return;
+      lastRenderWidth = window.innerWidth;
+      render();
+    }, 120);
   };
   window.addEventListener('orientationchange', onResize);
   window.addEventListener('resize', onResize);
@@ -7564,7 +7665,16 @@ function duplicateOffer(id) {
   const dup = JSON.parse(JSON.stringify(o));
   dup.id = uid('off');
   dup.bankName = o.bankName + ' (copy)';
-  dup.status = 'prospect';
+  // Reset the TWO-FIELD status too — setting only the legacy shadow would
+  // be overwritten by normalizeOfferStatus() on the next render, leaving
+  // the copy e.g. On-Track with an Open account like its source.
+  dup.subStatus = 'prospect';
+  dup.accountStatus = 'closed';
+  dup.includeInScenario = false;
+  normalizeOfferStatus(dup);
+  // Identity colors are one-per-offer; give the copy the next free swatch
+  // instead of silently doubling up on the source's.
+  dup.color = firstUnusedOfferColor(null);
   App.update(s => { s.offers.push(dup); });
   toast('Offer duplicated');
 }
