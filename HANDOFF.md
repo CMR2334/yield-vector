@@ -38,6 +38,42 @@ This matters because:
 
 ## Log (newest first)
 
+### 2026-07-03 — Session I (Claude Code cloud session)
+**Round 56 — Opt-in dark mode (Light stays the default)**
+- **Before-state:** light-only UI; all colors flow from `:root` tokens plus
+  a set of light-tuned hardcoded hexes (chip/tag text, brand gradient,
+  header glass, date-picker pastels, chart gridlines/crosshair).
+- **Setting:** `settings.theme: 'light' | 'dark' | 'auto'` (default
+  'light'; missing → light for existing saves). New **Settings →
+  Appearance** section, radio-group via the standard `data-setting`
+  pattern. Syncs across devices like any setting; 'auto' follows each
+  device's system appearance.
+- **Mechanism:** `applyTheme(pref)` resolves 'auto' via matchMedia and
+  stamps `<html data-theme="light|dark">` + swaps `<meta theme-color>`
+  (#4338ca light / #0f131c dark). Called (1) pre-paint by an IIFE that
+  peeks at localStorage directly — no white flash for dark users; (2) at
+  the top of every `render()` — covers sync pulls/imports/restores; (3) a
+  `prefers-color-scheme` matchMedia listener re-renders when the system
+  flips while in auto. `isDarkTheme()` = reads the resolved stamp.
+- **CSS:** one `html[data-theme="dark"]` block right after `:root` —
+  token overrides (surfaces #0f131c/#171c28/#1c2230, text #e7eaf2…,
+  borders, shadows, soft-tints as translucent rgba) + a component-override
+  layer for hardcoded spots (brand gradient → lavender range, header/
+  mobile-nav glass, chip/tag/banner text lifts, date-picker day tints,
+  inputs one step darker than cards, `color-scheme: dark` for native
+  widgets). **--accent stays #5b5cf6** so btn-primary contrast and the
+  legend↔trendline match hold; accent-as-TEXT spots get lifted per-class.
+- **Chart:** only scaffolding is theme-aware (gridline #242b3b, hover
+  crosshair #cdd3e0 in dark, via `darkChart` in renderHeroChart).
+  **Marker/trendline hexes + tooltip recipe untouched — still LOCKED per
+  R36** (tooltip bg is dark in both themes; labelLift keys by exact hex).
+- **End-state / verified** (headless Chromium): default light; radio →
+  dark stamps html/meta/body; persists across reload with pre-paint apply;
+  auto follows emulated system scheme both directions; back-to-light
+  restores; zero console errors; screenshots eyeballed (overview/chart/
+  planner/settings/modal+picker/mobile in dark; light unchanged).
+  `APP_VERSION` → 2026.07.03.
+
 ### 2026-07-02 — Session I (Claude Code cloud session)
 **Round 55 — Sync push serialization + 409 auto-retry (the E_SYNC_PUSH fix)**
 - **Before-state:** user's diagnostics log showed two `E_SYNC_PUSH — HTTP

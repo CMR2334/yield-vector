@@ -81,6 +81,125 @@
   --content-max-width: 1280px;
 }
 
+/* ============================================================
+   DARK THEME (opt-in — Light is the default)
+   applyTheme() stamps the RESOLVED theme on <html data-theme="...">.
+   The stored setting is settings.theme: 'light' (default) | 'dark' |
+   'auto' (follows the system); 'auto' is resolved to light/dark in JS
+   so the CSS only ever needs one dark selector.
+
+   Two layers:
+   1. TOKEN OVERRIDES — the :root design tokens re-valued for dark.
+      Everything built from tokens (cards, borders, text, forms) flips
+      automatically.
+   2. COMPONENT OVERRIDES — spots that hardcode light-tuned hexes
+      (chip/tag text lifts, header glass, brand gradient, date-picker
+      shading). Kept together here so light mode's CSS is untouched.
+
+   NOT themed on purpose: the chart marker/trendline hexes and the
+   tooltip color recipe (LOCKED per HANDOFF Round 36 — the tooltip bg is
+   dark in both themes, and the labelLift map is keyed by those exact
+   hexes), the toast (already dark), and offer identity colors.
+   ============================================================ */
+html { color-scheme: light; }
+html[data-theme="dark"] {
+  color-scheme: dark; /* native inputs, selects, scrollbars go dark */
+
+  --bg: #0f131c;
+  --bg-elevated: #171c28;
+  --card: #171c28;
+  --card-soft: #1c2230;
+
+  --text: #e7eaf2;
+  --text-secondary: #a6aebe;
+  --text-tertiary: #7c8598;
+
+  /* --accent stays #5b5cf6 so btn-primary keeps white-text contrast and
+     the legend's "Available capital" line still matches the trendline.
+     Accent-as-TEXT spots get lifted in the component layer below. */
+  --accent-hover: #6d6ef8;
+  --accent-soft: rgba(91, 92, 246, 0.16);
+  --accent-mid: #45478f;
+  --accent-strong: #b3b4ff; /* text-on-accent-soft role → light on dark */
+
+  --warning-soft: rgba(245, 158, 11, 0.14);
+  --danger: #ef8383;
+  --danger-soft: rgba(232, 113, 113, 0.14);
+  --success: #34d399;
+  --success-soft: rgba(16, 185, 129, 0.16);
+
+  --border: #2a3040;
+  --border-soft: #222836;
+  --border-strong: #3a4356;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 1px 3px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --shadow-fab: 0 8px 24px rgba(91, 92, 246, 0.45);
+}
+/* -- dark component overrides ------------------------------------- */
+html[data-theme="dark"] .app-header { background: rgba(15, 19, 28, 0.82); }
+html[data-theme="dark"] .mobile-nav { background: rgba(19, 24, 34, 0.94); }
+html[data-theme="dark"] .brand-name {
+  /* Same late-bloom diagonal as light, shifted into the lavender range
+     so the wordmark reads on the dark header instead of vanishing. */
+  background: linear-gradient(115deg, #a3a5ff 0%, #b6a9ff 58%, #c9b6ff 82%, #e0d3ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+html[data-theme="dark"] .nav-btn.active,
+html[data-theme="dark"] .btn-ghost:hover,
+html[data-theme="dark"] .btn-icon:hover { color: #a3a5ff; }
+html[data-theme="dark"] .sync-indicator { background: rgba(255, 255, 255, 0.06); }
+html[data-theme="dark"] .sync-indicator:hover { background: rgba(255, 255, 255, 0.10); color: var(--text-secondary); }
+html[data-theme="dark"] .hero-amount { color: var(--text); }
+/* Inputs one step darker than the card so fields read as inset wells. */
+html[data-theme="dark"] .input,
+html[data-theme="dark"] .select,
+html[data-theme="dark"] .textarea,
+html[data-theme="dark"] .yv-dp-head button { background: #121722; }
+html[data-theme="dark"] .modal { background: rgba(0, 0, 0, 0.55); }
+/* Accent/status text lifts — the light-tuned hexes are too dim on dark. */
+html[data-theme="dark"] .stat-value.warn,
+html[data-theme="dark"] .stat-value.lighten { color: #e4ab52; }
+html[data-theme="dark"] .stat-value.success { color: #34d399; }
+html[data-theme="dark"] .stat-value.accent { color: #9a9cff; }
+html[data-theme="dark"] .stat-value.danger { color: #f08c8c; }
+html[data-theme="dark"] .hero-meta .pill { color: #a3a5ff; }
+html[data-theme="dark"] .hero-meta .pill.warn { color: #f2b861; }
+html[data-theme="dark"] .action-tag { color: #a3a5ff; }
+html[data-theme="dark"] .action-tag.warn { color: #f2b861; }
+html[data-theme="dark"] .action-tag.success { color: #34d399; }
+html[data-theme="dark"] .action-tag.danger { color: #f09a9a; }
+html[data-theme="dark"] .chip-accent { color: #a3a5ff; }
+html[data-theme="dark"] .chip-warn { color: #f2b861; }
+html[data-theme="dark"] .chip-success { color: #34d399; }
+html[data-theme="dark"] .chip-offer-type-direct-deposit { color: #67c4ec; }
+html[data-theme="dark"] .chip-offer-type-new-funds-held { color: #a3a5ff; }
+html[data-theme="dark"] .chip-offer-type-held-and-dd { color: #c2a9f9; background: rgba(146, 108, 240, 0.16); }
+html[data-theme="dark"] .offer-dds { background: rgba(45, 156, 219, 0.10); }
+html[data-theme="dark"] .offer-dd-num { color: #67c4ec; }
+html[data-theme="dark"] .ddm-pill.mine { color: #34d399; border-color: rgba(52, 211, 153, 0.35); }
+html[data-theme="dark"] .ddm-pill.mine .ddm-dp { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+html[data-theme="dark"] .ddm-foot strong { color: #34d399; }
+html[data-theme="dark"] .banner.warn { color: #f2c06d; }
+html[data-theme="dark"] .banner.danger { color: #f09a9a; }
+/* Date-picker day shading: translucent tints instead of pastel fills. */
+html[data-theme="dark"] .yv-dp-day.good { background: rgba(16, 185, 129, 0.16); }
+html[data-theme="dark"] .yv-dp-day.good b, html[data-theme="dark"] .yv-dp-day.good i { color: #5fe0ac; }
+html[data-theme="dark"] .yv-dp-day.mid, html[data-theme="dark"] .yv-dp-day.amber { background: rgba(245, 158, 11, 0.16); }
+html[data-theme="dark"] .yv-dp-day.mid b, html[data-theme="dark"] .yv-dp-day.mid i, html[data-theme="dark"] .yv-dp-day.amber b { color: #f2b861; }
+html[data-theme="dark"] .yv-dp-day.bad { background: rgba(232, 113, 113, 0.16); }
+html[data-theme="dark"] .yv-dp-day.bad b, html[data-theme="dark"] .yv-dp-day.bad i { color: #f09a9a; }
+html[data-theme="dark"] .yv-dp-legend .s.good { background: rgba(16, 185, 129, 0.3); }
+html[data-theme="dark"] .yv-dp-legend .s.mid, html[data-theme="dark"] .yv-dp-legend .s.amber { background: rgba(245, 158, 11, 0.3); }
+html[data-theme="dark"] .yv-dp-legend .s.bad { background: rgba(232, 113, 113, 0.3); }
+html[data-theme="dark"] .about-item { background: rgba(255, 255, 255, 0.04); }
+html[data-theme="dark"] .error-state-msg { color: #f09a9a; }
+html[data-theme="dark"] .row-warn { background: rgba(245, 158, 11, 0.10); }
+html[data-theme="dark"] .row-danger { background: rgba(239, 68, 68, 0.14); }
+
 /* (BrokenDollar @font-face removed — the substitute fonts rendered the $
    glyph taller than SF Pro's digits, so amounts looked uneven. SF Pro's
    default $ has a continuous vertical line, but its cap-height matches
@@ -2079,7 +2198,37 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.02';
+const APP_VERSION = '2026.07.03';
+
+/* --- Theme (opt-in dark mode; Light is the default) ----------------------
+   settings.theme: 'light' (default) | 'dark' | 'auto' (follow the system).
+   applyTheme() resolves 'auto' via matchMedia and stamps the RESOLVED
+   value on <html data-theme="...">, which is all the CSS keys off. Called
+   pre-paint below (no light→dark flash on load), at the top of every
+   render() (covers sync pulls / imports / restores that swap settings),
+   and via the matchMedia listener when the system scheme flips in auto. */
+function applyTheme(pref) {
+  const mode = (pref === 'dark' || pref === 'auto') ? pref : 'light';
+  const resolved = mode === 'auto'
+    ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+    : mode;
+  const rootEl = document.documentElement;
+  if (rootEl.dataset.theme !== resolved) rootEl.dataset.theme = resolved;
+  // Keep the OS chrome (iOS status bar / Android switcher) in step. Light
+  // keeps the chip-gradient indigo that setupPwa() picks; dark matches --bg.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0f131c' : '#4338ca');
+}
+function isDarkTheme() { return document.documentElement.dataset.theme === 'dark'; }
+/* Pre-paint apply: peek at saved state directly so a dark-mode user never
+   sees a white flash. Function declarations hoist, so applyTheme is
+   callable here even though it's defined just above this IIFE's peers. */
+(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    applyTheme(saved && saved.settings ? saved.settings.theme : 'light');
+  } catch { applyTheme('light'); }
+})();
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -3527,6 +3676,7 @@ const App = {
     return {
       version: 1,
       settings: {
+        theme: 'light',  // 'light' (default) | 'dark' | 'auto'
         currentLiquidCapital: 200000,
         minimumCashBuffer: 20000,
         projectionStartDate: isoDate(TODAY),
@@ -4224,6 +4374,10 @@ function render() {
     // pull, inline edits) in one place — guarantees subStatus/accountStatus
     // exist and the legacy shadow status is in sync before anything renders.
     if (App.state && App.state.offers) App.state.offers.forEach(normalizeOfferStatus);
+    // Theme follows the same idempotent pattern: every state path (setting
+    // change, sync pull, import, restore) funnels through render(), so
+    // stamping here keeps <html data-theme> in sync with settings.theme.
+    applyTheme(App.state && App.state.settings ? App.state.settings.theme : 'light');
     // Preserve focus + caret on inputs across full re-renders. Without this,
     // typing/backspacing in the search box loses focus on every keystroke
     // because innerHTML destroys the input element.
@@ -5349,6 +5503,21 @@ function renderSettings() {
     </div>
 
     <section class="form-section">
+      <h2>Appearance</h2>
+      <p class="section-desc">Theme for the app. <strong>Auto</strong> follows each device's system appearance; the choice syncs across devices like every other setting.</p>
+      <div class="field" style="max-width:420px;">
+        <div class="radio-group">
+          <input type="radio" id="theme-light" name="themeChoice" value="light" ${(s.theme || 'light') === 'light' ? 'checked' : ''} data-setting="theme" />
+          <label for="theme-light">Light</label>
+          <input type="radio" id="theme-dark" name="themeChoice" value="dark" ${s.theme === 'dark' ? 'checked' : ''} data-setting="theme" />
+          <label for="theme-dark">Dark</label>
+          <input type="radio" id="theme-auto" name="themeChoice" value="auto" ${s.theme === 'auto' ? 'checked' : ''} data-setting="theme" />
+          <label for="theme-auto">Auto</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
       <h2>Capital & projection</h2>
       <p class="section-desc">These values drive the daily cash projection on the Overview.</p>
       <div class="form-grid" id="capital-grid">
@@ -6010,6 +6179,14 @@ function renderHeroChart(svg) {
 
   const todayIdx = Math.round((TODAY - start) / 86400000);
 
+  // Theme-aware chart internals. Marker/trendline hexes stay LOCKED (see
+  // HANDOFF R36) — only the light-tuned scaffolding flips: gridlines
+  // (near-white would glare on dark) and the hover crosshair (near-black
+  // would vanish on dark).
+  const darkChart = isDarkTheme();
+  const gridStroke = darkChart ? '#242b3b' : '#eef0f2';
+  const crosshairStroke = darkChart ? '#cdd3e0' : '#0d1421';
+
   const svgContent = `
     <defs>
       <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
@@ -6023,7 +6200,7 @@ function renderHeroChart(svg) {
     ${yTicks.map(t => {
       const y = yFor(t);
       // Gridline only — the $ label is rendered in the sticky .chart-yaxis.
-      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1"/>`;
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="${gridStroke}" stroke-width="1"/>`;
     }).join('')}
     <!-- Buffer line -->
     <line x1="${padL}" y1="${yFor(buffer).toFixed(1)}" x2="${W - padR}" y2="${yFor(buffer).toFixed(1)}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.7"/>
@@ -6097,7 +6274,7 @@ function renderHeroChart(svg) {
     })()}
     <!-- Hover overlay -->
     <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="chart-hover-area"/>
-    <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
+    <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="${crosshairStroke}" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
     <circle id="chart-hover-dot" cx="0" cy="0" r="5" fill="#6b7280" stroke="white" stroke-width="2" opacity="0"/>
   `;
 
@@ -7454,6 +7631,16 @@ function bindGlobalEvents() {
   });
   // pagehide covers full closes/reloads where visibilitychange may not fire.
   window.addEventListener('pagehide', () => Sync.flushPendingPush());
+  // Theme 'auto': re-render when the SYSTEM scheme flips so the resolved
+  // data-theme stamp and the chart's JS-computed colors both update live.
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onSchemeChange = () => {
+      if (App.state && App.state.settings && App.state.settings.theme === 'auto') render();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onSchemeChange);
+    else if (mq.addListener) mq.addListener(onSchemeChange); // older iOS Safari
+  }
   // Tick the indicator every 30s so "Synced 2m ago" stays current
   setInterval(updateSyncIndicator, 30000);
   // Every 60s, check if midnight has rolled past while the app was

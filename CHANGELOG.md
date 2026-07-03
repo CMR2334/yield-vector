@@ -17,6 +17,14 @@ Significant changes to this project, in reverse chronological order.
 
 ---
 
+## 2026-07-03 — Opt-in dark mode (v2026.07.03)
+**Branch:** `claude/yield-vector-audit-ajzdaq` (same draft PR as below)
+**Files:** `index.html`, `HANDOFF.md`, `CHANGELOG.md`
+**What changed:** New **Settings → Appearance** theme setting — Light (default, unchanged), Dark, or Auto (follows the device's system appearance). Implemented as `:root` token overrides + scoped component overrides under `html[data-theme="dark"]`, applied pre-paint (no flash), re-stamped on every render (sync pulls included), with a `prefers-color-scheme` listener for Auto. Chart gridlines/crosshair are theme-aware; the locked chart-marker/tooltip color recipes are untouched. `color-scheme: dark` themes native inputs/selects/scrollbars.
+**Revert:** revert the dark-mode commit on the PR branch, or select Light in Settings (default behavior is identical to pre-change).
+
+---
+
 ## 2026-07-02 — Robustness audit: modal-safe renders, sync flush on close, bank autocomplete (v2026.07.02)
 **Branch:** `claude/yield-vector-audit-ajzdaq` (draft PR — merges to `main` on approval)
 **Files:** `index.html`, `HANDOFF.md`, `CHANGELOG.md`
