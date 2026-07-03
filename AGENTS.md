@@ -89,7 +89,7 @@ The app runs on a phone with no console, so failures must never vanish silently.
 
 ## Commit & Push Protocol
 
-Always commit and push after a meaningful change — the live URL rebuilds automatically and the owner often checks on iPhone, so push early and often rather than batching to the end.
+Always commit and push after a meaningful change — the live URL rebuilds automatically and the owner often checks on iPhone, so push early and often rather than batching to the end. Push at least every 30 minutes of active work, and immediately when the owner signals stepping away ("I have to go") or a session is nearing its context limit — unpushed work is lost if the session ends unexpectedly. Do not rely on `auto-push.js` (it dies on terminal close / laptop sleep).
 
 ```bash
 cd "/Users/collinrekowski/Automation/Yield Vector" && \
@@ -104,6 +104,17 @@ cd "/Users/collinrekowski/Automation/Yield Vector" && \
 
 ---
 
+## Locked design values (do not re-tune)
+
+The owner signed off on these after many iterative rounds (HANDOFF Round 36). Do **not** adjust them unless explicitly asked — "make it brighter/darker" passes undo a careful balance. The raw hexes recur in 3+ places (chart marker fills, legend swatches, `labelLift` lookup keys) — search the exact hex before editing any one occurrence, or they fall out of sync silently.
+
+- **Chart marker fills / legend swatches:** initial funding `#5b5cf6` · direct deposit `#2d9cdb` · withdrawal / bonus payout / inflow `#10b981` · deposit deadline and outflow `#e87171` (red, **not** amber `#f59e0b` — amber is the buffer color and made outflows read as "warning").
+- **Tooltip "Available" amount:** `#8e90ff` (≈⅓ between the trendline `#5b5cf6` and white).
+- **Tooltip left labels** lift on dark BG via `labelLift`: `#5b5cf6→#8a8cff`, `#2d9cdb→#5cb4e4`, `#10b981→#6ee7b7`; red `#e87171` and amber `#f59e0b` stay raw. Event-type labels get inline `opacity:1` + `font-weight:600`.
+- **Right-side identity color:** `lightenHexForDark(offerColor)` (HSL lighten to ~74% L) when the offer has a color; otherwise the lifted event color.
+
+---
+
 ## Documentation Map
 
 One source of truth per fact — don't duplicate (per [../docs/PREFERENCES.md](../docs/PREFERENCES.md)).
@@ -114,7 +125,7 @@ One source of truth per fact — don't duplicate (per [../docs/PREFERENCES.md](.
 | `CLAUDE.md` | Claude Code-specific config; references this file + shared docs, doesn't restate them |
 | `README.md` | Human-facing overview + setup; links here for the function map |
 | `CHANGELOG.md` | Sparse, **release-level** history: milestones, commit hashes, revert commands |
-| `HANDOFF.md` | Granular **per-session** AI changelog; read top 3–5 entries at session start, prepend after meaningful work |
+| `HANDOFF.md` | Granular **per-session** AI changelog; read the Current state block + top 2–3 entries at session start, prepend after meaningful work |
 | `HANDOFF_ARCHIVE.md` | Older HANDOFF rounds, moved out to keep the live log readable |
 | `SHORTCUT_SETUP.md` | One-time iOS Reminders Shortcut build guide |
 
@@ -123,7 +134,7 @@ One source of truth per fact — don't duplicate (per [../docs/PREFERENCES.md](.
 ## Session Protocol
 
 1. Claim the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform <codex|claude> --scope "$PWD" --task "short description"`.
-2. Read `HANDOFF.md` at the start of every session (top 3-5 entries).
+2. Read `HANDOFF.md` at the start of every session (Current state block + top 2–3 entries).
 3. Do the work.
 4. Commit and push (descriptive message); push at least every 30 minutes of active work and before the owner steps away.
 5. Release the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js done --id SESSION_ID`.

@@ -1,120 +1,35 @@
 # Yield Vector — Claude Code Instructions
 
-## Pre-Approved Access
-Collin pre-approves all Bash, Read, Edit, Write, and computer-use actions for:
-- All paths under /Users/collinrekowski/Automation/
-- ~/Library/LaunchAgents/
-- /tmp/
-No need to request confirmation for these locations in any session.
-See ../docs/USER_PROFILE.md for full working preferences.
+Claude-specific config only. The canonical technical reference — architecture,
+key-function map, offer types, versioning, error handling, **locked design
+values**, and the commit & push protocol — is **[AGENTS.md](AGENTS.md)**. Read
+it; don't restate it.
 
-
-
-## Read first
-**At the start of every session, read [HANDOFF.md](HANDOFF.md).** It is the
-cross-session changelog — recent rounds describe what the previous session
-(possibly run on a different Claude model: Opus 4.8, Opus 4.7, Opus 4.6, or Sonnet
-4.6) just shipped. Skim the top 3–5 entries before doing any work.
-
-After completing a meaningful round of changes, prepend a new entry to
-HANDOFF.md following its template. Be proactive — the user shouldn't have
-to remind you.
-
-## Coordination guard
-Before editing files, follow [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md):
-
-```bash
-node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform claude --scope "$PWD" --task "short description"
-```
-
-If another active Claude/Codex session overlaps this project or the target files, pause and coordinate or use a Git worktree. Release the session after commit/push:
-
-```bash
-node /Users/collinrekowski/Automation/scripts/agent-session.js done --id SESSION_ID
-```
-
-## Auto-push protocol (apply in every session)
-The `auto-push.js` watcher is **not reliable** — it dies on terminal close,
-laptop sleep, or logout. Don't depend on it. Instead, treat pushing as
-**part of the agent's job**:
-
-1. **Push at the end of every meaningful change.** If you've edited
-   `index.html` and verified the JS parses, immediately run:
+## Session start
+1. Read [HANDOFF.md](HANDOFF.md): the Current state block + top 2–3 entries.
+   Prepend a new entry after each meaningful round — be proactive.
+2. Claim the session (guard details: [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md)):
    ```bash
-   cd "/Users/collinrekowski/Automation/Yield Vector" && \
-     git add index.html HANDOFF.md CHANGELOG.md AGENTS.md CLAUDE.md README.md SHORTCUT_SETUP.md && \
-     git commit -m "<short descriptive message>" && \
-     git push origin main
+   node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform claude --scope "$PWD" --task "short description"
    ```
-   If you're working in a Claude Code worktree, `cd` to the main repo path
-   first so the commit lands on `main` (what GitHub Pages serves) — worktree
-   branches are not served.
-
-   **Use DESCRIPTIVE commit messages** (e.g. `DD form: hide funding-date
-   for standard DD`), NOT the legacy `"auto update"`. The user relies on
-   git history + tags to revert specific changes, so each commit must be
-   identifiable from `git log --oneline`. After the user confirms they're
-   happy with a state, tag it: `git tag -a stable-YYYY-MM-DD -m "..." &&
-   git push origin stable-YYYY-MM-DD`. Tags are the named restore points.
-
-2. **Push at least every 30 minutes of active work**, even mid-session,
-   so the user can verify changes on their iPhone/laptop without waiting
-   for the session to end. If 30 minutes have passed since the last push
-   and you've made any committable change, push.
-
-3. **Push when conversation usage is getting close to the context limit**,
-   even if 30 minutes haven't elapsed. The user pays for unpushed work
-   if the session compacts or ends unexpectedly — flush early. Watch for:
-   the system reminder warning about context, your own internal sense
-   that the conversation is long, the conversation crossing a natural
-   work boundary, or any tool result indicating compression is imminent.
-   When in doubt, push.
-
-4. **Push before the user might step away**, especially when the user
-   says something like "I have to go," "concluding for the night," or
-   asks how to refresh their devices — those are signals to flush all
-   pending work to `main` immediately.
-
-5. **Don't try to start `auto-push.js`** as a substitute. It's not
-   reliable enough for the user's workflow.
-
-Live URL: `https://CMR2334.github.io/yield-vector/` (rebuilt automatically
-by GitHub Pages within 30–90s of every push to `main`).
-
-## Project
-Single-file PWA credit card bonus planner. All app code lives in `index.html` (~8,000 lines, vanilla JS + CSS, no build step). See [AGENTS.md](AGENTS.md) for the canonical architecture + function map — this file stays Claude-specific and does not duplicate it.
+   Release after commit+push with `… done --id SESSION_ID`.
 
 ## Permissions
-This project runs with `bypassPermissions` mode — all tool calls (Bash, Read, Edit, Write, etc.) are auto-approved without prompting. Configured in `.claude/settings.json`.
+`bypassPermissions` mode via `.claude/settings.json` — all tool calls
+auto-approved. Collin additionally pre-approves every action under
+`/Users/collinrekowski/Automation/`, `~/Library/LaunchAgents/`, and `/tmp/`.
 
-## Key File Locations
-- `index.html` — entire app (HTML + CSS + JS)
-- `auto-push.js` — file watcher that auto-commits and pushes to GitHub on save
-- `package.json` — only dependency is `chokidar` (for the watcher)
-- `.claude/settings.json` — project-level Claude Code config (committed)
-- `.claude/settings.local.json` — personal overrides (gitignored)
+## Push rules (details in AGENTS.md → Commit & Push Protocol)
+- Descriptive imperative commit messages; push after every meaningful change,
+  at least every 30 min, and immediately before the user steps away or the
+  context window nears its limit.
+- `auto-push.js` is unreliable (dies on sleep/terminal close) — never depend
+  on it or start it as a substitute.
+- From a Claude Code worktree, `cd` to the main repo path first — GitHub
+  Pages serves `main` only. Quote the path (it contains a space):
+  `cd "/Users/collinrekowski/Automation/Yield Vector"`.
+- Live URL: https://CMR2334.github.io/yield-vector/ (rebuilds 30–90 s after push).
 
-## Architecture, versioning & error handling
-The canonical technical reference is **[AGENTS.md](AGENTS.md)** — the key-function
-map (with current line numbers), the versioning scheme (`APP_VERSION` date-build
-stamp surfaced in Settings → About, matched to `stable-YYYY-MM-DD` tags), and the
-error-handling contract (`logError`/`ErrCode`, global `error`/`unhandledrejection`
-handlers, the diagnostics ring buffer + copy-report panel). Read it rather than
-relying on line numbers, which drift as the file grows.
-
-When you ship a confirmed-good state: bump `APP_VERSION` in `index.html`, tag
-`stable-YYYY-MM-DD`, and prepend a milestone entry to [CHANGELOG.md](CHANGELOG.md).
-
-## Auto-Push to GitHub Pages
-- Repo: https://github.com/CMR2334/yield-vector
-- Live URL: https://CMR2334.github.io/yield-vector/
-
-```bash
-node auto-push.js   # watches index.html, auto-commits + pushes on save
-```
-Requires: `gh auth login` done once, remote set to GitHub, GitHub Pages enabled on main/root.
-
-## Shared Documentation
-- User profile and preferences: /Users/collinrekowski/Automation/docs/USER_PROFILE.md
-- Workflow preferences: /Users/collinrekowski/Automation/docs/PREFERENCES.md
-- Automation workspace overview: /Users/collinrekowski/Automation/docs/CONTEXT.md
+## Shared docs
+`../docs/USER_PROFILE.md` (owner + working style) · `../docs/PREFERENCES.md`
+(code/doc standards) · `../docs/CONTEXT.md` (workspace overview).
