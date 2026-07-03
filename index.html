@@ -2547,8 +2547,33 @@ const Sync = {
     }
   },
 
+  // Pushes are SERIALIZED: GitHub answers HTTP 409 ("Gist cannot be
+  // updated") when two PATCHes hit the same Gist concurrently — the source
+  // of the E_SYNC_PUSH 409s in the diagnostics log (same-device overlap:
+  // e.g. a debounced push firing while a safeSync flush push is still in
+  // flight). If a push is already running, don't fire a second; flag it and
+  // re-push once the current one settles. The re-push snapshots the LATEST
+  // state, so no edit is ever dropped by coalescing.
+  _pushInFlight: null,
+  _pushQueuedAgain: false,
   async push({ silent = false } = {}) {
     if (!this.isConfigured()) { if (!silent) toast('Sync not configured', 'danger'); return; }
+    if (this._pushInFlight) {
+      this._pushQueuedAgain = true;
+      return this._pushInFlight;
+    }
+    this._pushInFlight = this._doPush({ silent });
+    try {
+      return await this._pushInFlight;
+    } finally {
+      this._pushInFlight = null;
+      if (this._pushQueuedAgain) {
+        this._pushQueuedAgain = false;
+        this.push({ silent: true });
+      }
+    }
+  },
+  async _doPush({ silent = false } = {}) {
     const cfg = this.getConfig();
     this.setStatus('syncing');
     try {
@@ -2561,7 +2586,20 @@ const Sync = {
       const body = JSON.stringify({
         files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
       });
-      await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+      try {
+        await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+      } catch (e) {
+        // CROSS-device collision (both devices pushed the same instant)
+        // still yields a 409 that serialization can't prevent. Last-writer-
+        // wins makes an immediate retry semantically safe — wait a beat
+        // (jittered so both devices don't re-collide) and try once more.
+        if (String(e && e.message).includes('409')) {
+          await new Promise(r => setTimeout(r, 800 + Math.random() * 700));
+          await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+        } else {
+          throw e;
+        }
+      }
       this.lastSyncAt = Date.now();
       this.setStatus('synced');
       if (!silent) toast('Pushed to cloud');
@@ -2630,6 +2668,11 @@ const Sync = {
     if (!this.pushTimer || !this.isConfigured()) return;
     clearTimeout(this.pushTimer);
     this.pushTimer = null;
+    // A push is already on the wire — a parallel keepalive PATCH would just
+    // 409 against it. Queue a follow-up instead (runs when it settles; if
+    // the page dies first, the in-flight push already carries this state
+    // minus at most the trailing keystroke).
+    if (this._pushInFlight) { this._pushQueuedAgain = true; return; }
     const cfg = this.getConfig();
     try {
       try { App.state._feed = computeReminderFeed(App.state); } catch {}

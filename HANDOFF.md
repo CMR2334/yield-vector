@@ -39,6 +39,34 @@ This matters because:
 ## Log (newest first)
 
 ### 2026-07-02 — Session I (Claude Code cloud session)
+**Round 55 — Sync push serialization + 409 auto-retry (the E_SYNC_PUSH fix)**
+- **Before-state:** user's diagnostics log showed two `E_SYNC_PUSH — HTTP
+  409: "Gist cannot be updated."` entries (6/27 + 6/28, on live build
+  v2026.06.15). Cause: GitHub 409s when two PATCHes hit the same Gist
+  concurrently. `Sync.push()` had NO in-flight guard — a debounced push
+  could overlap a safeSync flush push (same device), or two devices could
+  push the same instant. Failed pushes were dropped silently until the next
+  edit/pull cycle re-synced (data self-healed via last-writer-wins, which
+  is why status showed Synced — but each 409 was a real dropped upload).
+- **Change:** `Sync.push()` split into a serializing wrapper +
+  `Sync._doPush()`. If a push is in flight, a second call sets
+  `_pushQueuedAgain` and returns the in-flight promise; when the wire call
+  settles, ONE coalesced follow-up push fires with the LATEST state (no
+  edit dropped). Inside `_doPush`, a 409 gets one jittered retry
+  (800–1500ms) before surfacing as an error — safe under last-writer-wins.
+  `flushPendingPush()` now also defers to the in-flight guard instead of
+  firing a parallel keepalive PATCH.
+- **End-state / verified** (headless Chromium, ghFetch stubbed): 3
+  concurrent push() → exactly 2 wire calls (serialized + coalesced
+  follow-up); single 409 → retried, status synced, diag log EMPTY;
+  non-409 → logged E_SYNC_PUSH + error status; 409 on both attempts →
+  gives up (no infinite retry). Old 409 diag entries can be cleared —
+  they should not recur.
+- Told the user: the banners were concurrency collisions, not corruption;
+  recovery guardrails (R47 restore-from-history) were never needed since
+  the next push carried the same state.
+
+### 2026-07-02 — Session I (Claude Code cloud session)
 **Round 54 — Robustness/UX audit: modal survives background renders, sync flush on close, bank autocomplete**
 - Full-file audit pass (branch `claude/yield-vector-audit-ajzdaq`, draft PR —
   NOT pushed to main; user reviews/merges). `APP_VERSION` → `2026.07.02`.
