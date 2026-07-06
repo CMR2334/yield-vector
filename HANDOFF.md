@@ -17,14 +17,23 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-06, Round 58)
+## Current state (as of 2026-07-06, Round 60)
 
-- `index.html` ≈ 8,650 lines, single-file PWA. `APP_VERSION` = `2026.07.06a`
+- `index.html` ≈ 8,680 lines, single-file PWA. `APP_VERSION` = `2026.07.06c`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
-  CHANGELOG entry on each confirmed-good release). R57 and R58 are NOT yet
+  CHANGELOG entry on each confirmed-good release). R57–R60 are NOT yet
   committed or tagged — working-tree only, per explicit owner instruction on
-  R58 (DO NOT COMMIT); also still pending R56's Codex review (the sync fix
+  R58/R60 (DO NOT COMMIT); also still pending R56's Codex review (the sync fix
   is only bilateral once both devices refresh).
+- **Button-row layout (R60):** standalone multi-button action rows (Settings
+  sync-actions row, Data row) use a new `.btn-grid` class
+  (`grid-template-columns:repeat(auto-fit, minmax(140px,1fr))`) instead of
+  `flex-wrap`, for equal-width buttons at every viewport — same pattern as
+  `.dd-timing-row` (R58). New `.btn-outline-danger` class (transparent bg,
+  `--danger` border+text) replaces the `.btn-ghost.btn-danger` combo on
+  "Disconnect" so it gets a visible pill outline like its siblings. Modal
+  footers and 2-button rows (diagnostics, error-state) were swept and
+  intentionally left on flex — see R60 log entry for why.
 - **Form styling (R57 + R58 tuning):** every text/number/date/select/textarea
   field uses the `.field-box` label-inside-container pattern; radio-groups,
   checkbox rows, and the color-picker are intentionally NOT boxed. DD entry
@@ -60,6 +69,12 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-06 — Session N (claude-sonnet-5, /orchestrate worker)
+**Round 60 — Button-row grid uniformity + offer-card height verification (owner-reported, mobile screenshots)**
+- **[1] Button-row uniformity:** Settings sync-actions row (6 buttons: Save & test / Create new Gist / Pull now / Push now / Restore from history / Disconnect) and the Data row (4 buttons: Export JSON / Import JSON / Reset to sample data / Clear all data) used `display:flex; flex-wrap:wrap`, which let each button keep its own label-driven width and wrap into ragged, mismatched-width rows on phones. Both converted to a new shared `.btn-grid` class (`display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr))`) — the same auto-fit/minmax approach R58 already used for `.dd-timing-row` — giving equal-width, equal-height buttons at any viewport with no hardcoded breakpoint. "Disconnect" also swapped `.btn-ghost.btn-danger` (no border — sat visually misaligned beside its bordered `.btn-secondary` siblings, the owner's specific complaint) for a new `.btn-outline-danger` class (transparent bg, `--danger`-colored border + text) so it now participates as an outlined danger pill instead of a borderless link, without becoming solid red. Swept `.diag-actions` (Copy diagnostics/Clear log) and `.error-state-actions` (Reload/Copy diagnostics) — both are 2-button rows that fit comfortably side-by-side at 375px (verified by injecting a fake diag-log entry and screenshotting), so left unchanged. Modal footers (Delete | Cancel | Save changes, 3 instances) left unchanged per explicit owner sign-off in the task brief. `#sync-buttons`'s only JS dependency is `updateSyncButtonsLive()`'s `querySelectorAll('#sync-buttons [data-action=...]')` id-scoping — confirmed it doesn't touch the `style`/class attributes, so safe to convert.
+- **[2] Offer-card height verification — verdict: card did NOT change.** Owner asked whether offer cards had picked up new blank space above the label during the R57/R58 form-restyle rounds. Extracted the pre-restyle build (`git show 0ae5ee3:index.html`) and diffed `.offer-card`, `.offer-card-header`, `.offer-name` CSS rule bodies byte-for-byte against the current build — **identical in all three**. Rendered both builds side-by-side at 375px (two `python3 -m http.server` instances, separate origins so localStorage sample-data seeding didn't cross-contaminate) on the Offers tab and the Planner tab (same `renderOfferCard()` function, confirmed only one render call site exists — `renderOfferCardWithActions()` is defined but dead/unused, out of scope) — pixel-identical layout, identical `.offer-card-header` height (41.5px) and `.offer-name` top-position (flush with the header's own top, zero internal gap) in both builds. The R58 suspects named in the task brief (`.field label`/`.field-label`, `#offer-form .field label`) don't apply — `renderOfferCard()`'s template uses none of those classes; grepped the full CSS diff between builds for anything touching `.offer-stat-label`/`.offer-stats`/`.offer-card*` and found zero matches. The only "space above the label" is the card's `padding-top: var(--space-5)` (20px) — the same shared token used by the hero card, stat cards, and every other card type in the app (6+ other rules reference it), not something oversized or leaked specifically onto offer cards. Per the task's own branch-e instructions, did not compact this: it's systemic/intentional card padding shared app-wide, not an isolated low-risk artifact, and touching it would ripple across every card's visual language — outside this task's spacing/alignment-only, non-restructuring scope. No code change for this half of the round; diagnosis + this note stand in for a fix.
+- `APP_VERSION` → `2026.07.06c`. Verified: `node --check` on extracted script passes; locked chart/legend/tooltip hex counts (AGENTS.md) unchanged before/after; both button grids confirmed equal-width via computed `grid-template-columns` at 375px and 1280px (desktop screenshots were unreliable this session — a viewport/capture-timing glitch in the Preview tool unrelated to the HTML/CSS changes — cross-verified desktop via `preview_inspect` computed-style reads instead, e.g. 6×190.664px columns on the sync row at 1280px). **DO NOT COMMIT per explicit task instruction** — working tree only, same as R57–R59.
 
 ### 2026-07-06 — Session J continued (claude-fable-5, planner direct fix)
 **Round 59 — About-grid version overflow on mobile (owner-reported)**

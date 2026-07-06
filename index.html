@@ -441,6 +441,17 @@ a { color: inherit; text-decoration: none; }
 .btn-danger { color: var(--danger); }
 .btn-danger:hover { background: var(--danger-soft); }
 
+/* Outlined danger pill: for a destructive-adjacent action (e.g. "Disconnect")
+   that needs to sit inside a row of bordered .btn-secondary pills without
+   reading as either a primary action (solid) or a borderless ghost link
+   (the plain .btn-ghost.btn-danger combo has no border, so it looked
+   visually unaligned next to its bordered siblings — Round 60). Border
+   uses the --danger token per the app's danger color; background stays
+   transparent so it doesn't compete with the destructive-but-not-primary
+   "Clear all data" / "Delete" solid-danger buttons elsewhere. */
+.btn-outline-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-outline-danger:hover { background: var(--danger-soft); }
+
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 .btn-lg { padding: 12px 22px; font-size: 15px; }
 
@@ -1226,6 +1237,24 @@ a { color: inherit; text-decoration: none; }
   margin-top: 6px;
 }
 .dd-timing-row .input-group { width: 100%; max-width: 100%; }
+
+/* Uniform action-button grid: same auto-fit/minmax approach as
+   .dd-timing-row above, applied to rows of standalone buttons (Settings
+   sync-actions row, data-management row) that previously used
+   `display:flex; flex-wrap:wrap`, which let buttons keep their intrinsic
+   (label-driven) widths and wrap into ragged, mismatched-width rows on
+   phones — e.g. "Save & test" (narrow) next to "Restore from history"
+   (wide) breaking untidily at 375px. `auto-fit` + `minmax` forces every
+   button in a row to the same width and collapses to fewer columns as
+   the viewport narrows, with no hardcoded breakpoint (Round 60). 140px
+   min comfortably fits the longest label ("Restore from history") at
+   1-per-row on the narrowest supported phone width without truncation. */
+.btn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+}
+.btn-grid .btn { width: 100%; justify-content: center; }
 
 .offer-actions {
   display: flex;
@@ -2339,7 +2368,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.06b';
+const APP_VERSION = '2026.07.06c';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -6014,7 +6043,7 @@ function renderSettings() {
     <section class="form-section">
       <h2>Data</h2>
       <p class="section-desc">Export your data to JSON to back up or transfer between devices. Import to restore.</p>
-      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
+      <div class="btn-grid">
         <button class="btn btn-secondary" data-action="export-json">Export JSON</button>
         <label class="btn btn-secondary" style="cursor:pointer;">
           Import JSON
@@ -6215,7 +6244,7 @@ function renderSyncSection() {
         </div>
       </div>
 
-      <div id="sync-buttons" style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-4);">
+      <div id="sync-buttons" class="btn-grid" style="margin-top:var(--space-4);">
         <button class="btn btn-primary" data-action="sync-save">Save &amp; test</button>
         <button class="btn btn-secondary" data-action="sync-create-gist">Create new Gist</button>
         <!-- Pull/Push/Disconnect: enabled whenever credentials are *present*
@@ -6227,7 +6256,7 @@ function renderSyncSection() {
         <button class="btn btn-secondary" data-action="sync-pull" ${configured ? '' : 'disabled'}>Pull now</button>
         <button class="btn btn-secondary" data-action="sync-push" ${configured ? '' : 'disabled'}>Push now</button>
         <button class="btn btn-secondary" data-action="sync-history" ${configured ? '' : 'disabled'} title="Recover an earlier version from the Gist's revision history">Restore from history</button>
-        <button class="btn btn-ghost btn-danger" data-action="sync-disconnect" ${configured ? '' : 'disabled'}>Disconnect</button>
+        <button class="btn btn-outline-danger" data-action="sync-disconnect" ${configured ? '' : 'disabled'}>Disconnect</button>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-top:var(--space-4);font-size:12px;color:var(--text-tertiary);">
@@ -6244,7 +6273,7 @@ function renderSyncSection() {
             <li>Paste the token above, leave Gist ID empty, then click <strong>Create new Gist</strong>. The app will create a private Gist and fill in the ID for you.</li>
             <li>On every other device: open the same URL, paste the same token + Gist ID, click <strong>Save &amp; test</strong>. Your data appears.</li>
           </ol>
-          <p style="margin-top:8px;font-size:12px;">Pushes are debounced (~2.5s after edits stop). Conflict rule: whichever device wrote last wins, based on the embedded <code>_lastModified</code> timestamp.</p>
+          <p style="margin-top:8px;font-size:12px;">Pushes are debounced (~2.5s after edits stop). Conflict rule: every push first checks the cloud's revision lineage — a device that's behind adopts the cloud instead of overwriting it, and if both sides changed you're asked which to keep. A device is never silently overwritten by stale data.</p>
         </div>
       </div>
     </section>
