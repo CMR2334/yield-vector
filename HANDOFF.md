@@ -61,6 +61,10 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ## Log (newest first)
 
+### 2026-07-06 — Session J continued (claude-fable-5, planner direct fix)
+**Round 59 — About-grid version overflow on mobile (owner-reported)**
+- `.about-grid` used `minmax(0, 1fr)` — all three cells forced onto one row at any width, shrinking below content width, so `v2026.07.06a` overflowed its box on phones. Fixed: `minmax(140px, 1fr)` (cells wrap to rows on narrow screens) + `min-width:0; overflow-wrap:anywhere` on `.about-value` as a guard for long values. Full version format kept (owner offered 2-digit year; layout fix chosen instead — version string is load-bearing for build verification). Verified at 375px. `APP_VERSION` → `2026.07.06b`.
+
 ### 2026-07-06 — Session M (claude-sonnet-5, /orchestrate worker)
 **Round 58 — Typography hierarchy tuning, segmented-control centering, DD-timing uniformity (owner-requested)**
 - Three refinements to R57's form styling, all owner-requested with item 1's
