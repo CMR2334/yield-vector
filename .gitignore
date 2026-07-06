@@ -7,3 +7,6 @@ nohup.out
 
 # Stray browser save-page artifact (Jun 2026) — ignored so it does not dirty the tree / park sessions
 Deal Stack Calculator.html
+
+# Personal schedule workbook — private data; must never enter the public repo
+schedule_tmp.xlsx

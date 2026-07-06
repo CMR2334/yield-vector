@@ -2079,7 +2079,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.06.15';
+const APP_VERSION = '2026.07.05';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -2416,6 +2416,138 @@ const Sync = {
   lastSyncAt: 0,            // Date.now() of last successful round-trip
   pushTimer: null,
   startupDone: false,
+  // True when this device has local edits not yet confirmed onto the cloud.
+  // Set in App.save(); cleared on every pull-adopt and every successful PATCH.
+  // Used by the CAS push to distinguish "just stale, adopt silently" from
+  // "both sides changed, must ask" on a head divergence. Backed by the
+  // persisted App.state._dirtySince so it survives a reload (see App.save).
+  localDirty: false,
+  // _lastModified of the state as LOADED this session (set once in App.init,
+  // before any save re-stamps it). Used by the first-sync equal-state
+  // exemption: if the state we loaded was identical to the cloud and only
+  // system stamps (a projection date-roll) have moved local since, the device
+  // was really in sync — adopt+seed silently instead of prompting.
+  loadedModified: 0,
+
+  // Clear the dirty marker in BOTH places it lives (the volatile flag and the
+  // persisted _dirtySince field) so a reload can't resurrect it. Call after a
+  // pull-adopt or a successful PATCH — whenever this device's state is known
+  // to match the cloud. Note: on a pull-adopt the adopted cloud payload may
+  // carry the OTHER device's _dirtySince; nulling it here clears THIS
+  // (adopting) device's marker, which is what we want.
+  markClean() {
+    this.localDirty = false;
+    if (App.state) App.state._dirtySince = null;
+  },
+
+  // Single source of truth for resolving a "both sides changed" conflict —
+  // BOTH the push-side CAS and the pull-side remote-newer branch call this so
+  // the dialog text and OK/Cancel semantics can never drift between the two.
+  // `side` is 'push' | 'pull' — only used to log the right deferred code.
+  // `unknownLineage` switches to the one-time first-sync-after-upgrade copy
+  // (recommend Adopt — timestamps carry no signal there, so a reflexive
+  // keep-local is the hazard).
+  // Returns one of:
+  //   'defer'      — can't ask (background, no user) → caller leaves state
+  //                  untouched, sets status 'pending', keeps the dirty marker;
+  //                  the next foreground sync re-detects. Logged here.
+  //   'adopt'      — user chose the cloud → caller adopts remote (discarding
+  //                  this device's unsynced edits).
+  //   'keep-local' — user chose to keep local → caller pushes local up
+  //                  (overwrite intent), routed through the CAS push.
+  resolveDirtyConflict(remote, side, { unknownLineage = false } = {}) {
+    // No UI available (a background auto-sync) → never silently pick a side.
+    if (typeof document !== 'undefined' && document.hidden) {
+      if (side === 'pull') {
+        logError(ErrCode.SYNC_PULL, new Error('remote newer with local edits, no UI to resolve'), 'pull-conflict-deferred');
+      } else {
+        logError(ErrCode.SYNC_PUSH, new Error('head divergence with local edits, no UI to resolve'), 'cas-conflict-deferred');
+      }
+      return 'defer';
+    }
+    const rO = (remote && Array.isArray(remote.offers)) ? remote.offers.length : 0;
+    const lO = (App.state && Array.isArray(App.state.offers)) ? App.state.offers.length : 0;
+    const counts = `\n\n• Cloud: ${rO} offer${rO === 1 ? '' : 's'}\n• This device: ${lO} offer${lO === 1 ? '' : 's'}`;
+    const msg = unknownLineage
+      ? `First sync on this device's new version: the cloud and this device differ.${counts}\n\nRecommended: Adopt cloud (OK).\nChoose Keep this device (Cancel) ONLY if you made changes here that never synced.`
+      : `Sync conflict.\n\nThe cloud has changes from another device AND this device has unsynced edits.${counts}\n\nOK  = Adopt the cloud (discard this device's recent edits) — safe default.\nCancel = Keep this device's edits and overwrite the cloud.`;
+    const adopt = confirm(msg);
+    return adopt ? 'adopt' : 'keep-local';
+  },
+
+  // Is the local state trivial (nothing a user could lose)? Must cover EVERY
+  // user-editable collection — offers, commitments, standalone cash-flow
+  // events, and user-entered source banks — so a device holding only, say,
+  // events doesn't silently adopt the cloud and lose them. Also never trivial
+  // if the device is dirty (a pending unsynced edit is by definition
+  // something to lose, regardless of counts). Used to skip the unknown-lineage
+  // prompt and silently adopt an untouched fresh install.
+  _trivialLocalState() {
+    if (this.localDirty) return false;
+    const s = App.state;
+    if (!s) return true;
+    const len = (a) => (Array.isArray(a) ? a.length : 0);
+    return len(s.offers) === 0
+        && len(s.commitments) === 0
+        && len(s.events) === 0
+        && len(s.settings && s.settings.sourceBanks) === 0;
+  },
+
+  // THE UNIFIED FIRST-SYNC RULE. While lineage is unknown (no _baseRevision),
+  // any sync encounter with an EXISTING, DIVERGENT cloud state prompts ONCE
+  // (recommend Adopt) — timestamps carry zero signal in this window, so this
+  // replaces the old per-direction legacy-timestamp inferences. After any
+  // resolution (adopt seeds lineage; keep-local pushes and the PATCH seeds it)
+  // the rule never fires again. Called by BOTH safeSync and push before their
+  // normal (known-lineage) logic. Adopts in-place when it decides to adopt.
+  // Returns: 'n/a' (lineage known, or no real cloud state, or same state —
+  // caller proceeds with normal logic), 'adopted' (handled — caller returns),
+  // 'deferred' (background, no UI — caller sets 'pending' and returns), or
+  // 'keep-local' (user kept local — caller pushes it up, force).
+  resolveFirstSync({ remote, cloudHead, side }) {
+    const baseRev = App.state && App.state._baseRevision;
+    if (baseRev) return 'n/a';                 // lineage known — normal path
+    if (!(cloudHead && remote)) return 'n/a';  // fresh/empty cloud — normal path
+
+    const adoptCloud = () => {
+      App.state = remote;
+      App.state._baseRevision = cloudHead;
+      this.markClean();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+      this.lastSyncAt = Date.now();
+      this.setStatus('synced');
+      render();
+    };
+
+    const remoteMod = (remote && remote._lastModified) || 0;
+    const localMod = (App.state && App.state._lastModified) || 0;
+    // Silently adopt + seed lineage (no prompt, no toast — nothing to lose)
+    // when any of:
+    //   • equal live timestamps — same state right now; OR
+    //   • the state we LOADED matched the cloud and only system stamps have
+    //     moved local since (a projection date-roll re-stamps _lastModified,
+    //     which would otherwise defeat the equal check and force a needless
+    //     prompt). Gated on !localDirty so a genuine user edit since load still
+    //     prompts; OR
+    //   • trivial local state (no offers/commitments — an untouched install).
+    // adoptCloud() calls markClean(), so an equal-stamp encounter also clears a
+    // stale dirty marker (e.g. a PATCH that landed but whose response was lost).
+    if (remoteMod === localMod ||
+        (!this.localDirty && remoteMod === this.loadedModified) ||
+        this._trivialLocalState()) {
+      adoptCloud();
+      return 'adopted';
+    }
+    // Divergent, non-trivial, unknown lineage → ask ONCE.
+    const decision = this.resolveDirtyConflict(remote, side, { unknownLineage: true });
+    if (decision === 'defer') return 'deferred';
+    if (decision === 'adopt') {
+      adoptCloud();
+      toast('Adopted cloud — this device was behind after an update');
+      return 'adopted';
+    }
+    return 'keep-local';  // caller pushes local up (force)
+  },
 
   getConfig() {
     try { return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY)) || null; }
@@ -2478,15 +2610,56 @@ const Sync = {
       }
       const remoteModified = (remote && remote._lastModified) || 0;
       const localModified = (App.state && App.state._lastModified) || 0;
+      // Reuse the same GET response for the lineage head (no extra request).
+      const cloudHead = revisionOf(data);
+
+      // UNIFIED FIRST-SYNC RULE (unknown lineage). Runs before the timestamp
+      // branching because timestamps carry NO signal while lineage is unknown
+      // — a divergent cloud must be resolved by one prompt regardless of which
+      // side's stamp is newer (this is the pull-side twin of the push guard;
+      // the old per-direction legacy inferences are gone). 'n/a' → fall through
+      // to the normal known-lineage logic below.
+      const first = this.resolveFirstSync({ remote, cloudHead, side: 'pull' });
+      if (first === 'adopted') return;
+      if (first === 'deferred') { this.setStatus('pending'); return; }
+      if (first === 'keep-local') { await this.push({ silent: true, force: true }); return; }
 
       if (remote && remoteModified > localModified) {
-        // Remote wins — replace local
-        App.state = remote;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
-        this.lastSyncAt = Date.now();
-        this.setStatus('synced');
-        render();
-        if (reason) toast(`Pulled latest from cloud (${reason})`);
+        // Remote is newer. If this device has NO unsynced edits, adopt the
+        // cloud (below). But if it's dirty (_dirtySince set — e.g. a failed or
+        // deferred push, or a reload with unsynced edits), a blind adopt would
+        // silently discard exactly the edits the dirty marker exists to
+        // protect — the mirror image of the push-side clobber. Route through
+        // the SAME shared conflict resolver as the push side.
+        const adoptRemote = () => {
+          App.state = remote;
+          App.state._baseRevision = cloudHead;
+          this.markClean();
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+          this.lastSyncAt = Date.now();
+          this.setStatus('synced');
+          render();
+          if (reason) toast(`Pulled latest from cloud (${reason})`);
+        };
+        if (!this.localDirty) {
+          adoptRemote();
+        } else {
+          const decision = this.resolveDirtyConflict(remote, 'pull');
+          if (decision === 'defer') {
+            // Leave local state untouched; keep the dirty marker so the next
+            // foreground sync re-detects and asks.
+            this.setStatus('pending');
+          } else if (decision === 'adopt') {
+            adoptRemote();
+            toast('Adopted cloud — this device’s recent edits were discarded');
+          } else {
+            // 'keep-local' — the user chose to keep this device's edits and
+            // overwrite the cloud. Push them up with overwrite intent (force
+            // past the CAS so we don't re-prompt for the same decision — the
+            // single shared dialog above already covered it).
+            await this.push({ silent: true, force: true });
+          }
+        }
       } else if (!remote || localModified > remoteModified) {
         // Local newer or remote empty — push up. Skip if remoteModified > 0
         // and local seeded with no edits (avoids overwriting with sample data
@@ -2494,15 +2667,33 @@ const Sync = {
         if (remoteModified > 0 && localModified === 0) {
           // Local is fresh / unsaved — pull remote rather than push
           App.state = remote;
+          App.state._baseRevision = cloudHead;
+          this.markClean();
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
           this.lastSyncAt = Date.now();
           this.setStatus('synced');
           render();
           if (reason) toast(`Pulled latest from cloud (${reason})`);
         } else {
+          // Local newer → push through the CAS push (guards against a stale
+          // device clobbering data the cloud gained since our last pull).
           await this.push({ silent: true });
         }
       } else {
+        // Timestamps equal (common on the first run of a new build against an
+        // already-synced device). Nothing to transfer, but seed our lineage
+        // from the GET response we already have — otherwise _baseRevision
+        // stays falsy and the CAS guard is silently disabled on the next
+        // push. Persist without re-stamping _lastModified and without pushing.
+        if (cloudHead && App.state && App.state._baseRevision !== cloudHead) {
+          App.state._baseRevision = cloudHead;
+        }
+        // Equal stamps mean this device's edit is provably already in the
+        // cloud, so clear any lingering dirty marker — otherwise a PATCH that
+        // landed but whose response was lost leaves the device falsely dirty
+        // and it would raise bogus conflict prompts on later syncs.
+        this.markClean();
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
         this.lastSyncAt = Date.now();
         this.setStatus('synced');
       }
@@ -2531,7 +2722,20 @@ const Sync = {
         : file.content;
       if (!content || !content.trim()) throw new Error('Gist file is empty');
       const remote = JSON.parse(content);
+      // Manual pull is an explicit user action to adopt the cloud, so it
+      // adopts unconditionally — but if this device has unsynced edits, warn
+      // first so the user doesn't silently discard them.
+      if (this.localDirty && !silent) {
+        if (!confirm('This device has unsynced edits. Pulling replaces them with the cloud copy and cannot be undone here (use "Restore from history" to recover a prior cloud revision).\n\nPull and discard this device’s edits?')) {
+          this.setStatus('synced');
+          return;
+        }
+      }
       App.state = remote;
+      // Record the cloud head as our lineage so later CAS pushes compare
+      // correctly (manual pull is a pull-adopt path like the others).
+      App.state._baseRevision = revisionOf(data);
+      this.markClean();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
       this.lastSyncAt = Date.now();
       this.setStatus('synced');
@@ -2544,7 +2748,25 @@ const Sync = {
     }
   },
 
-  async push({ silent = false } = {}) {
+  // Single unified push. All push paths (App.save debounce, safeSync's
+  // local-newer branch, the manual "Push now" button) route through here so
+  // there is ONE place that talks to the Gist. It is a compare-and-swap:
+  // unless {force} is set, it GETs the gist first and, if the cloud head has
+  // moved off our lineage (_baseRevision) OR our lineage is unknown while a
+  // real cloud state exists, it treats that as a conflict and either silently
+  // adopts the cloud (this device was just stale) or asks the user (this
+  // device has unsynced edits) — the guard that stops a stale device from
+  // clobbering newer data. The pre-check FAILS CLOSED: if the cloud GET fails
+  // we DEFER (status 'pending', dirty marker kept) rather than fall back to an
+  // unguarded PATCH, so a flaky network can't bypass the guard. {force:true}
+  // skips the CAS check and is reachable ONLY after an explicit user
+  // "overwrite" decision or an explicit make-this-the-truth action: (1) the
+  // push-side CAS conflict dialog's overwrite branch (falls through to the
+  // PATCH below, in-place), (2) the pull-side (safeSync) conflict resolver's
+  // 'keep-local' branch — both route through the ONE shared
+  // resolveDirtyConflict() dialog, so a force here never double-prompts — and
+  // (3) restoreState. NEVER from a plain manual push.
+  async push({ silent = false, force = false } = {}) {
     if (!this.isConfigured()) { if (!silent) toast('Sync not configured', 'danger'); return; }
     const cfg = this.getConfig();
     this.setStatus('syncing');
@@ -2555,10 +2777,96 @@ const Sync = {
       App.state._lastModified = Date.now();
       try { App.state._feed = computeReminderFeed(App.state); } catch {}
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+
+      if (!force) {
+        // Compare-and-swap pre-check. Peek at the cloud before PATCHing.
+        let cloudData = null;
+        try {
+          cloudData = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
+        } catch (e) {
+          // FAIL CLOSED. If we can't read the cloud head we cannot prove this
+          // push is safe, so we never blind-PATCH — a fail-open would bypass
+          // the whole guard exactly when the network is flaky.
+          logError(ErrCode.SYNC_PUSH, e, 'cas-precheck-failed');
+          // A permanent failure (401/403 expired/revoked PAT, 404 deleted or
+          // wrong gist id) will never self-heal by retrying — surface it as an
+          // error so the indicator turns red and the manual "Push now" path can
+          // show "Push failed: HTTP <code>" so the user knows to fix creds.
+          // Transient/network-ish failures keep the defer-and-retry: 'pending',
+          // dirty marker kept, next cycle retries.
+          if (e && (e.status === 401 || e.status === 403 || e.status === 404)) {
+            this.setStatus('error', e.message);
+            if (!silent) toast('Push failed: ' + e.message, 'danger');
+          } else {
+            this.setStatus('pending');
+          }
+          return;
+        }
+        const cloudHead = revisionOf(cloudData);
+        const baseRev = App.state && App.state._baseRevision;
+        const remote = cloudHead ? await parseGistState(cloudData) : null;
+
+        // UNKNOWN LINEAGE → the unified first-sync rule (shared with safeSync).
+        // Prompts once on a divergent existing cloud, silently adopts/seeds
+        // otherwise; only an empty/fresh cloud falls through to the seed PATCH.
+        if (!baseRev) {
+          const first = this.resolveFirstSync({ remote, cloudHead, side: 'push' });
+          if (first === 'adopted') return;
+          if (first === 'deferred') { this.setStatus('pending'); return; }
+          // 'keep-local' → fall through to PATCH (overwrite intent).
+          // 'n/a'        → empty/fresh cloud → fall through to seed PATCH.
+        } else if (cloudHead && cloudHead !== baseRev && remote) {
+          // KNOWN LINEAGE, head moved off ours → marker-based CAS. Timestamps
+          // get NO vote (a re-stamp forges newness); the persisted dirty marker
+          // is the only signal.
+          const adoptCloud = () => {
+            App.state = remote;
+            App.state._baseRevision = cloudHead;
+            this.markClean();
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
+            this.lastSyncAt = Date.now();
+            this.setStatus('synced');
+            render();
+          };
+          if (!this.localDirty) {
+            // Merely stale (no unsynced edits) — cloud is authoritative.
+            adoptCloud();
+            toast('Cloud had newer data — updated this device instead of overwriting');
+            return;
+          }
+          // Both sides changed — shared resolver. 'defer' → 'pending';
+          // 'adopt' → take cloud; 'keep-local' → fall through to PATCH.
+          const decision = this.resolveDirtyConflict(remote, 'push');
+          if (decision === 'defer') { this.setStatus('pending'); return; }
+          if (decision === 'adopt') {
+            adoptCloud();
+            toast('Adopted cloud — this device’s recent edits were discarded');
+            return;
+          }
+          // 'keep-local' → fall through to PATCH (overwrite).
+        }
+      }
+
+      // Scrub _dirtySince from the UPLOADED copy only. If we shipped our own
+      // non-null marker, an old-build device (which has no markClean) would
+      // pull and store it verbatim, then after IT upgrades believe itself
+      // dirty during a later divergence and offer to overwrite newer cloud
+      // data. The wire copy is a shallow clone with _dirtySince:null; the
+      // LOCAL App.state keeps its marker until the PATCH actually succeeds
+      // (markClean in the success tail — a failed PATCH must stay dirty).
+      const wire = { ...App.state, _dirtySince: null };
       const body = JSON.stringify({
-        files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
+        files: { [SYNC_FILENAME]: { content: JSON.stringify(wire, null, 2) } }
       });
-      await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+      const patched = await ghFetch(`https://api.github.com/gists/${cfg.gistId}`, cfg.token, 'PATCH', body);
+      // The PATCH response carries the updated gist (incl. history); record the
+      // new head as our lineage so the next CAS check compares correctly, and
+      // persist it so lineage survives a reload. Our edits are now on the
+      // cloud, so this device is no longer dirty.
+      const newRev = revisionOf(patched);
+      if (newRev) App.state._baseRevision = newRev;
+      this.markClean();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
       this.lastSyncAt = Date.now();
       this.setStatus('synced');
       if (!silent) toast('Pushed to cloud');
@@ -2580,6 +2888,13 @@ const Sync = {
       files: { [SYNC_FILENAME]: { content: JSON.stringify(App.state, null, 2) } }
     });
     const data = await ghFetch('https://api.github.com/gists', token, 'POST', body);
+    // Seed lineage from the creation response so the brand-new Gist starts
+    // with known lineage (otherwise _baseRevision stays falsy and the CAS
+    // guard is disabled until the first pull). The local state is now on the
+    // cloud, so this device is clean.
+    App.state._baseRevision = revisionOf(data);
+    this.markClean();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
     return data.id;
   },
 
@@ -2608,8 +2923,15 @@ const Sync = {
   // _lastModified, so other devices pull it on their next sync).
   async restoreState(state) {
     App.state = state;
+    // A restore is an explicit "make THIS the truth" action, so clear any
+    // inherited lineage and force the push past the CAS check — otherwise a
+    // cloud that looks newer could decline the restore itself. The forced
+    // push records the fresh head as _baseRevision, which then BLOCKS a stale
+    // device's later auto-push (its lineage won't match) — this is the
+    // "restore won't recur-clobber" guarantee.
+    App.state._baseRevision = null;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
-    await this.push({ silent: true });
+    await this.push({ silent: true, force: true });
     this.lastSyncAt = Date.now();
     this.setStatus('synced');
     render();
@@ -2623,6 +2945,27 @@ const Sync = {
   }
 };
 
+// Head revision SHA of a Gist API response (newest history entry). Used as
+// the lineage marker (_baseRevision) for compare-and-swap sync. Returns null
+// if the response has no history (unknown lineage → callers degrade soft).
+function revisionOf(gistData) {
+  const h = gistData && Array.isArray(gistData.history) ? gistData.history : null;
+  return (h && h[0] && h[0].version) || null;
+}
+
+// Parse the synced state file out of a Gist API response. Mirrors the
+// truncated-file handling used elsewhere. Returns null on missing/empty/bad
+// payload (logged as a parse error) so callers can fall back.
+async function parseGistState(gistData) {
+  const file = (gistData && gistData.files &&
+    (gistData.files[SYNC_FILENAME] || Object.values(gistData.files)[0])) || null;
+  if (!file) return null;
+  const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+  if (!content || !content.trim()) return null;
+  try { return JSON.parse(content); }
+  catch (e) { logError(ErrCode.PARSE, e, 'parseGistState: cloud payload'); return null; }
+}
+
 async function ghGet(url, token) {
   const r = await fetch(url, {
     headers: {
@@ -2632,7 +2975,9 @@ async function ghGet(url, token) {
   });
   if (!r.ok) {
     const t = await r.text().catch(() => '');
-    throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+    const err = new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+    err.status = r.status;  // structured so callers can branch (e.g. auth vs transient)
+    throw err;
   }
   return r.json();
 }
@@ -2649,7 +2994,9 @@ async function ghFetch(url, token, method, body) {
   });
   if (!r.ok) {
     const t = await r.text().catch(() => '');
-    throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+    const err = new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 80) : ''}`);
+    err.status = r.status;
+    throw err;
   }
   return r.json();
 }
@@ -3369,9 +3716,24 @@ const App = {
     try {
       const saved = this.load();
       this.state = saved || this.defaultState();
+      // Snapshot the state's freshness AS LOADED, before any save (the fresh
+      // seed below, the projection roll) can re-stamp _lastModified this
+      // session. The first-sync equal-state exemption reads this so a device
+      // that was perfectly in sync at load still silently seeds lineage even
+      // after a system date-roll bumps local's live _lastModified.
+      Sync.loadedModified = (saved && saved._lastModified) || 0;
+      // Restore the persisted dirty marker: if localStorage holds edits that
+      // never reached the cloud (_dirtySince set), this device is dirty even
+      // across a reload, so the CAS conflict path won't silently adopt over
+      // them.
+      Sync.localDirty = Boolean(this.state && this.state._dirtySince);
       if (!saved) {
+        // Fresh device: seeding sample data is not a user edit, so save it
+        // system (no dirty marker) — otherwise a brand-new device would
+        // conflict-prompt instead of cleanly adopting real cloud data on its
+        // first sync.
         this.state = seedSampleData(this.state);
-        this.save();
+        this.save({ system: true });
       }
       // Migrate offers to the two-field status model + sync legacy status.
       (this.state.offers || []).forEach(normalizeOfferStatus);
@@ -3409,7 +3771,10 @@ const App = {
     const cur = this.state.settings.projectionStartDate;
     if (!cur || cur < today) {
       this.state.settings.projectionStartDate = today;
-      this.save();
+      // System save: an automatic date-roll is NOT a user edit, so it must not
+      // set the dirty marker (else a clean-but-stale device trips the conflict
+      // dialog and a reflexive Cancel clobbers the cloud — see App.save).
+      this.save({ system: true });
       return true;
     }
     return false;
@@ -3453,10 +3818,29 @@ const App = {
     }
   },
 
-  save() {
+  // {system:true} marks a purely-automatic save (projection-date roll,
+  // fresh-device seed) — it stamps _lastModified and schedules the push as
+  // usual, but does NOT set the dirty marker. Without this, a stale-but-clean
+  // device whose date auto-rolled would look "dirty" and trip the CAS conflict
+  // dialog; a reflexive Cancel would then clobber the cloud with stale data
+  // despite ZERO user edits. Default (user/import/reset saves) marks dirty.
+  save({ system = false } = {}) {
     try {
       // Stamp last-modified so cloud sync can resolve "who's newer"
       this.state._lastModified = Date.now();
+      // Mark unsynced local edits so the CAS push can tell "this device is
+      // just stale" from "both sides changed" on a head divergence. Persist
+      // the marker WITH the state (_dirtySince) so it survives a reload —
+      // a volatile flag alone would reset to false on reopen while
+      // localStorage still holds edits that never reached the cloud, and the
+      // next CAS check would then wrongly treat this device as clean and
+      // discard them. _dirtySince rides along in the payload; it does NOT
+      // affect _lastModified/"who's newer" semantics. Keep the earliest
+      // dirty time (don't churn it on every keystroke-save).
+      if (!system) {
+        if (!this.state._dirtySince) this.state._dirtySince = new Date().toISOString();
+        Sync.localDirty = true;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
       Sync.schedulePush();
     } catch (e) {
@@ -7658,36 +8042,18 @@ function applyOptimizerCombo(maskStr) {
 // through. Returns true if Sync is configured (or just got configured),
 // false if the user hasn't typed enough to save (in which case the
 // caller should bail and let the toast guide them).
-// Manual "Push now" with an overwrite guard. A plain push always stamps a
-// fresh _lastModified and wins last-writer-wins — so a STALE device pushing
-// silently destroys newer cloud data (this is exactly how the desktop wiped
-// the mobile's offers). Before pushing, peek at the cloud: if it's newer
-// than this device, warn with the offer counts so the user can choose Pull
-// instead. Recovery is still possible via "Restore from history" either way.
+// Manual "Push now". Routes through the UNFORCED CAS push — it must NOT do
+// its own timestamp check and force past the guard: a stale device that
+// re-stamped _lastModified would pass a timestamp warning and force-PATCH
+// straight over newer cloud data (the exact clobber this fix exists to stop).
+// The CAS handles divergence properly: if the cloud moved off our lineage it
+// either adopts silently (this device was just stale) or, if this device has
+// unsynced edits, shows the adopt-vs-overwrite conflict dialog. `force:true`
+// is reachable ONLY from that dialog's Overwrite branch and from
+// restoreState (an explicit make-this-the-truth action) — never from here.
 async function guardedManualPush() {
   const ok = await ensureSyncConfigSaved();
   if (!ok) return;
-  Sync.setStatus('syncing');
-  try {
-    const cfg = Sync.getConfig();
-    const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
-    const file = (data.files && (data.files[SYNC_FILENAME] || Object.values(data.files)[0])) || null;
-    let remote = null;
-    if (file) {
-      const content = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-      if (content && content.trim()) { try { remote = JSON.parse(content); } catch (e) { logError(ErrCode.PARSE, e, 'guardedManualPush: cloud precheck'); } }
-    }
-    const remoteMod = (remote && remote._lastModified) || 0;
-    const localMod = (App.state && App.state._lastModified) || 0;
-    if (remote && remoteMod > localMod) {
-      const rO = Array.isArray(remote.offers) ? remote.offers.length : 0;
-      const lO = Array.isArray(App.state.offers) ? App.state.offers.length : 0;
-      if (!confirm(`The cloud copy is NEWER than this device.\n\n• Cloud: ${rO} offer${rO === 1 ? '' : 's'}\n• This device: ${lO} offer${lO === 1 ? '' : 's'}\n\nPushing OVERWRITES the newer cloud data with this device's. If this device is the stale one, click Cancel and use "Pull now" instead.\n\nPush anyway?`)) {
-        Sync.setStatus('synced');
-        return;
-      }
-    }
-  } catch (e) { /* if the pre-check fails, fall through to a normal push */ }
   Sync.push();
 }
 
@@ -7745,8 +8111,11 @@ async function saveSyncConfigFromForm() {
       }
     }
     if (remote && remote.settings && typeof remote.settings === 'object') {
-      // Adopt the cloud state — this device joins the existing sync
+      // Adopt the cloud state — this device joins the existing sync. Record
+      // the cloud head as our lineage so later CAS pushes compare correctly.
       App.state = remote;
+      App.state._baseRevision = revisionOf(data);
+      Sync.markClean();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
       Sync.lastSyncAt = Date.now();
       Sync.setStatus('synced');
