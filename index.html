@@ -1544,11 +1544,11 @@ a { color: inherit; text-decoration: none; }
 .field-box {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 12px 18px;
+  padding: 10px 18px;
   background: var(--card-soft);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
@@ -1669,6 +1669,18 @@ a { color: inherit; text-decoration: none; }
    mixed one-line/two-line labels in the same grid row still keep their
    boxes aligned. */
 #offer-form .field > .field-box { margin-top: auto; }
+/* #offer-form .field label (R57 bottom-pin rule, ~line 1504) also matches
+   labels nested inside a .field-box here — its min-height:30px/flex/
+   align-items:flex-end was built for the OUTSIDE-box group-label baseline
+   hack, not the in-box label pattern, and was winning the cascade (ID+class
+   beats .field-box label's class+class) so every single-line in-box label
+   in the offer/commitment/event modals was force-stretched to 30px tall
+   instead of sizing to its own ~15.6px line-height — inflating every box by
+   the difference and reading as oversized with the label floating away
+   from its value (owner feedback, R61). Box-pinning above already replaced
+   the need for the label itself to carry baseline alignment inside a box,
+   so reset it back to .field-box's own sizing here. */
+#offer-form .field-box label { min-height: 0; display: block; align-items: normal; }
 /* Settings / non-modal forms: top-align each field so mixed hint presence
    doesn't leave big gaps or uneven heights. */
 .form-section .form-grid { align-items: start; }
@@ -2368,7 +2380,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.06c';
+const APP_VERSION = '2026.07.06d';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would

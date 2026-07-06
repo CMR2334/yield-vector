@@ -17,14 +17,29 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-06, Round 60)
+## Current state (as of 2026-07-06, Round 61)
 
-- `index.html` ≈ 8,680 lines, single-file PWA. `APP_VERSION` = `2026.07.06c`
+- `index.html` ≈ 8,700 lines, single-file PWA. `APP_VERSION` = `2026.07.06d`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
-  CHANGELOG entry on each confirmed-good release). R57–R60 are NOT yet
-  committed or tagged — working-tree only, per explicit owner instruction on
-  R58/R60 (DO NOT COMMIT); also still pending R56's Codex review (the sync fix
-  is only bilateral once both devices refresh).
+  CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
+  and deployed (R56 sync fix passed a 10-round Codex review before shipping;
+  the per-round "DO NOT COMMIT" notes meant "coordinator commits after
+  verification," not that work stays uncommitted). No stable- tag yet — owner
+  hasn't confirmed-good. Sync guard is bilateral once both devices run
+  ≥ 2026.07.05 (confirmed on the owner's phone via diagnostics).
+- **Field-box vertical rhythm (R61):** `.field-box` `gap` 6px (was 2px),
+  vertical padding 10px (was 12px) — box height is unchanged for single-line
+  fields, but the label now visibly separates from its value instead of
+  nearly touching it. Also fixed a real bug found during verification:
+  `#offer-form .field label`'s `min-height:30px` bottom-pin rule (meant for
+  labels OUTSIDE a box) was also winning inside `.field-box` in the offer/
+  commitment/event modals, force-stretching every single-line in-box label
+  there to 30px and inflating those boxes ~15px taller than Settings'
+  otherwise-identical fields. Reset via `#offer-form .field-box label {
+  min-height:0; display:block; align-items:normal; }` (~line 1672, right
+  after the `#offer-form .field > .field-box { margin-top:auto; }`
+  box-pinning rule). Don't reintroduce a `min-height`/`align-items:flex-end`
+  on `.field-box label` without re-checking this interaction.
 - **Button-row layout (R60):** standalone multi-button action rows (Settings
   sync-actions row, Data row) use a new `.btn-grid` class
   (`grid-template-columns:repeat(auto-fit, minmax(140px,1fr))`) instead of
@@ -34,17 +49,19 @@ grows past ~8 entries, keeping the newest 3–4 live.
   "Disconnect" so it gets a visible pill outline like its siblings. Modal
   footers and 2-button rows (diagnostics, error-state) were swept and
   intentionally left on flex — see R60 log entry for why.
-- **Form styling (R57 + R58 tuning):** every text/number/date/select/textarea
-  field uses the `.field-box` label-inside-container pattern; radio-groups,
-  checkbox rows, and the color-picker are intentionally NOT boxed. DD entry
-  rows (`renderDdRow`) use a slimmed bordered-input variant instead of the
-  full box. R58 tuned the typography hierarchy (group/box labels lighter +
-  lighter weight via `--text-tertiary`; values regular-weight via new
-  `--text-strong` token), fixed segmented-control vertical centering
-  (`#offer-form .field .radio-group label` override), and gave the DD
-  transfer-timing row a real equal-width grid (`.dd-timing-row`). See
-  AGENTS.md-adjacent reasoning in the R57/R58 HANDOFF entries before
-  changing input/label CSS again.
+- **Form styling (R57 + R58 + R61 tuning):** every text/number/date/select/
+  textarea field uses the `.field-box` label-inside-container pattern;
+  radio-groups, checkbox rows, and the color-picker are intentionally NOT
+  boxed. DD entry rows (`renderDdRow`) use a slimmed bordered-input variant
+  instead of the full box (own `padding:8px 10px`, does not share
+  `.field-box`'s gap/padding rules). R58 tuned the typography hierarchy
+  (group/box labels lighter + lighter weight via `--text-tertiary`; values
+  regular-weight via new `--text-strong` token), fixed segmented-control
+  vertical centering (`#offer-form .field .radio-group label` override), and
+  gave the DD transfer-timing row a real equal-width grid (`.dd-timing-row`).
+  R61 tuned the label/value gap + container padding and fixed the modal
+  label-height bug above. See AGENTS.md-adjacent reasoning in the R57/R58/R61
+  HANDOFF entries before changing input/label CSS again.
 - **Offer types:** `new-funds-held`, `direct-deposit`, `held-and-dd` ("Other"
   removed, R37). Held+DD models the held lump sum AND the DDs (R53); planned
   funding date is *required* for Held+DD, optional for new-funds-held.
@@ -69,6 +86,76 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-06 — Session O (claude-sonnet-5, /orchestrate worker)
+**Round 61 — Field-box vertical rhythm: label/value gap + padding + a real modal label-height bug (owner-reported)**
+- Owner feedback on the R57–R60 `.field-box` boxes: "It just looks awkward now
+  with the box heights. They may be a bit big/tall but also think it's just
+  that the label text is a bit too close to input vertically." Diagnosis
+  (given in the task brief, confirmed correct by measurement): generous outer
+  padding + tight label-to-value gap made the pair read cramped inside an
+  oversized box.
+- **Gap + padding (both ends of the diagnosis):** `.field-box` `gap` 2px → 6px;
+  vertical padding 12px → 10px (horizontal 18px untouched). Net effect for
+  single-line-label fields: box height is **unchanged** (the 4px padding cut
+  exactly offsets the 4px gap gain — e.g. Settings "Current liquid capital"
+  measured 68.59px both before and after) but the internal split moves from
+  lopsided (13px above the label / 2px gap / 13.9px below the value — 6-7x
+  more space around the pair than between its two halves) to balanced (11px /
+  6px / 11.9px — ~1.8-2x, matching the requested ratio).
+- **Found during verification — a real, separate bug, not just "nothing to
+  fix":** measuring the Add-offer modal surfaced that its single-line-label
+  boxes (Bank name, Bonus amount, Offer expires, etc.) were rendering at
+  79-83px — well outside the 64-72px target — even after the gap/padding fix,
+  while Settings' otherwise-identical single-line fields sat at 64-69px. Root
+  cause: `#offer-form .field label` (R57, ~line 1504; `min-height:30px;
+  display:flex; align-items:flex-end`) was written for the group-level label
+  bottom-pin pattern (labels sitting OUTSIDE a box), but its selector also
+  matches every label nested INSIDE a `.field-box` in that modal, and wins
+  the cascade there (`#offer-form .field label` is ID+class+tag,
+  `.field-box label` is only class+class) — so every single-line in-box
+  label was being force-stretched to 30px instead of its natural ~15.6px,
+  inflating the whole box by the difference. This is exactly the "verify
+  nothing similar still forces extra height" check the task asked for; it
+  surfaced a real hit, not a clean bill of health. Fixed with
+  `#offer-form .field-box label { min-height:0; display:block;
+  align-items:normal; }` placed directly after the existing
+  `#offer-form .field > .field-box { margin-top:auto; }` box-pinning rule
+  (~line 1671) — same file region, same "give .field-box its own reset"
+  pattern already used for the analogous `.modal .field-box .input[type=
+  "date"]` 44px override (~line 1817, itself an R57 fix). Two-line labels
+  (e.g. "Funds must remain deposited through day * (from funded date)")
+  were never affected by the 30px cap (their natural height already exceeds
+  it) and still grow to fit their wrapped text without crowding the value.
+- **Confirmed out of scope, left alone:** `.dd-row`'s slimmed input variant
+  has its own `padding:8px 10px` and doesn't inherit `.field-box`'s `gap`/
+  `padding`, so it wasn't touched. The native `<select>` uses `appearance:
+  auto` (browser-drawn chevron, no custom `background-position` to
+  recalculate), so it's structurally unaffected by the padding/gap change.
+  Whole-box click-to-focus is unaffected by either change — every
+  `.field-box` label keeps its native `<label for="...">` / `<input id=
+  "...">` pairing, which neither edit touches; confirmed the pairing is
+  still intact post-fix (e.g. `for="f-expires"` / `id="f-expires"`).
+- **A note on repo state during this session:** partway through, `CLAUDE.md`
+  changed on disk mid-task (external edit, not mine) — turned out to be part
+  of a broader, coherent removal of the `agent-session.js` claim/release
+  session-coordination protocol across `AGENTS.md`/`CLAUDE.md`/
+  `.claude/settings.json`/`.codex/hooks.json` (the `docs/AI_COORDINATION.md`
+  reference and the numbered claim/release steps are gone from both docs).
+  Not something this round touched or reverted — out of scope for a
+  CSS-spacing task — left as-is; `index.html`'s diff contains only the two
+  rules above (confirmed via `git diff index.html` showing exactly the
+  `gap`/`padding` change plus the one new label-reset rule, nothing else).
+- `APP_VERSION` → `2026.07.06d`. Verified: `node --check` on the extracted
+  inline script passes; locked chart/legend/tooltip hex count (AGENTS.md)
+  unchanged (33, before and after). Visually verified via Preview MCP
+  (`yield-vector-static`, port 4173) at 375px — Settings (Capital &
+  projection fields) and the Add-offer modal (Bank name focused + unfocused,
+  Bonus amount with a typed value, the two-line "Funds must remain..." field
+  under Held+DD, a select, a date field) — and at desktop (1280px), both
+  clean. Full before/after measurement table in the CHANGELOG entry.
+  **DO NOT COMMIT per explicit task instruction** — working tree only, same
+  as R57-R60.
 
 ### 2026-07-06 — Session N (claude-sonnet-5, /orchestrate worker)
 **Round 60 — Button-row grid uniformity + offer-card height verification (owner-reported, mobile screenshots)**
