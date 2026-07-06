@@ -1144,6 +1144,52 @@ a { color: inherit; text-decoration: none; }
    inside the row, not at the row level). */
 .dd-row { width: 100%; max-width: 100%; box-sizing: border-box; }
 .dd-row > * { min-width: 0; }
+/* Slimmed field-box variant (R57) for the DD entry rows: each row has no
+   per-input label (the "Planned direct deposits *" field label above the
+   whole list is the group label — a full label-in-container box per row
+   would repeat that label N times), so give the inputs a compact rounded
+   border instead of the full container treatment. Same border/radius/
+   focus language as .field-box, smaller padding to fit the dense grid. */
+.dd-row .input,
+.dd-row .input-group {
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+.dd-row .input { padding: 8px 10px; }
+/* The amount input lives INSIDE .input-group, which already carries the
+   border/background above — without this it doubled up (border nested
+   in border). Strip them from the inner input so only the group's outer
+   edge shows. */
+.dd-row .input-group .input {
+  background: transparent;
+  border: none;
+}
+/* Same prefix-overlap fix as .field-box (see that block, ~line 1496):
+   flex row instead of absolute-positioned prefix + padding-left clearance
+   guess, so the "$" glyph can't sit on top of the value's first digit. */
+.dd-row .input-group {
+  display: flex;
+  align-items: baseline;
+  padding-left: 10px;
+}
+.dd-row .input-group .input {
+  padding-left: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dd-row .input-group .input-prefix {
+  position: static;
+  flex: 0 0 auto;
+  transform: none;
+  margin-right: 4px;
+}
+.dd-row .input:focus,
+.dd-row .input-group:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.dd-row .input-group:focus-within .input { box-shadow: none; }
 
 .offer-actions {
   display: flex;
@@ -1395,6 +1441,141 @@ a { color: inherit; text-decoration: none; }
 #offer-form .field > .radio-group {
   margin-top: auto;
 }
+
+/* ============================================================
+   FIELD-BOX — single-value text/number/date/select container
+   ============================================================
+   Fintech-settings-style pattern (owner-provided reference, Round 57):
+   the label moves INSIDE a rounded bordered "well" that sits above the
+   value on its own line, borderless input beneath it. Scoped to fields
+   whose primary control is a single input/select/textarea (or an
+   .input-group wrapping one) — radio-groups, checkbox stacks, and the
+   color picker keep their existing look (per AGENTS.md: don't touch
+   what isn't broken, and those controls don't map to a "label above
+   value" shape). Uses the app's own --card-soft/--border-soft "recessed
+   panel" pairing already established by .card-soft/.ddm-panel/table
+   headers — NOT the reference screenshot's literal colors. */
+.field-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px 18px;
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* Label inside the box: small, muted, normal weight, sits above the
+   value — overrides the uppercase/letter-spaced look used by labels
+   OUTSIDE a box (radio-group headings, checkbox rows, etc). */
+.field-box label, .field-box .field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.3;
+  min-height: 0;
+  display: block;
+}
+.field-box:focus-within label { color: var(--accent); }
+/* The control itself becomes borderless/transparent — the box IS the
+   border now. Re-declared with higher specificity than the base
+   .input/.select/.textarea rule rather than stripping border there,
+   since plain (non-boxed) inputs don't exist in this app after R57 but
+   the base rule is kept for any future non-boxed use. */
+.field-box .input,
+.field-box .select,
+.field-box .textarea,
+.field-box input,
+.field-box select,
+.field-box textarea {
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  min-height: 0;
+  height: auto;
+  line-height: 1.35;
+}
+.field-box .input:focus,
+.field-box .select:focus,
+.field-box .textarea:focus,
+.field-box input:focus,
+.field-box select:focus,
+.field-box textarea:focus {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+/* .input-group PREFIX inside a box: the base .input-group mechanism
+   (below, ~line 1571) absolutely-positions .input-prefix over the input
+   and relies on padding-left to clear it — that padding number was tuned
+   for the OLD bordered input box, and 16px wasn't enough clearance for a
+   flush-left "$" once real digits render at the same offset (R57 bug:
+   prefix glyph overlapped the value's first digit, only visible once a
+   value existed — an empty input has nothing to collide with). Rather
+   than re-tune a magic padding number against a floating glyph, make
+   .input-group a normal flex row instead so the prefix sits in-flow as
+   a static flex item — no absolute positioning, no overlap possible by
+   construction. No app usage ever combines prefix + suffix in the same
+   .input-group (checked), so this flex row is safe to apply unconditio-
+   nally; suffix keeps the base absolute-right mechanism (confirmed
+   rendering correctly — narrow suffix values don't collide with it) and
+   still works fine as an out-of-flow absolutely-positioned child of a
+   flex container. Avoided :has() deliberately — unconditional flex needs
+   no feature-detection and covers both prefix-only and suffix-only
+   groups identically. */
+.field-box .input-group {
+  margin-top: 1px;
+  display: flex;
+  align-items: baseline;
+}
+.field-box .input-group.with-suffix .input { padding-right: 48px; }
+.field-box .input-group .input-suffix { right: 0; }
+.field-box .input-group .input-prefix {
+  position: static;
+  flex: 0 0 auto;
+  transform: none;
+  margin-right: 4px;
+  font-size: 16px;
+  color: var(--text-tertiary);
+}
+.field-box .input-group .input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 0;
+}
+.field-box .textarea { resize: vertical; min-height: 60px; }
+/* Native date/number appearance stripping still applies (see the
+   MODAL FORM CONTAINMENT block below) — the box wrapper doesn't change
+   that need, just where the border now lives. */
+.field-box .input[type="date"],
+.field-box .input[type="datetime-local"],
+.field-box .input[type="time"],
+.field-box .input[type="number"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+}
+/* #offer-form's bottom-pinned-input baseline hack (above) targeted the
+   label/input as separate flex children; now that both live inside one
+   .field-box, pin the BOX itself to the bottom of the field cell so
+   mixed one-line/two-line labels in the same grid row still keep their
+   boxes aligned. */
+#offer-form .field > .field-box { margin-top: auto; }
 /* Settings / non-modal forms: top-align each field so mixed hint presence
    doesn't leave big gaps or uneven heights. */
 .form-section .form-grid { align-items: start; }
@@ -1534,6 +1715,21 @@ a { color: inherit; text-decoration: none; }
   line-height: normal !important;
   padding-top: 10px !important;
   padding-bottom: 10px !important;
+}
+/* Field-box (R57) wins the fixed-height tie above by appearing later in
+   the cascade at equal specificity: inside a box the control is
+   borderless/flush, so the old bordered-input 44px/10px box-model no
+   longer applies — the .field-box padding (12px 18px) now carries the
+   tap-target height instead. */
+.modal .field-box .input[type="date"],
+.modal .field-box .input[type="datetime-local"],
+.modal .field-box .input[type="time"],
+.modal .field-box .input[type="number"] {
+  min-height: 0 !important;
+  height: auto !important;
+  line-height: 1.35 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 /* DD-requirement controls are meant to read as a compact inline rule
@@ -2079,7 +2275,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.05';
+const APP_VERSION = '2026.07.06';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -5617,47 +5813,59 @@ function renderSettings() {
       <p class="section-desc">These values drive the daily cash projection on the Overview.</p>
       <div class="form-grid" id="capital-grid">
         <div class="field">
-          <label for="s-liquid">Current liquid capital</label>
+          <div class="field-box">
+            <label for="s-liquid">Current liquid capital</label>
+            <div class="input-group">
+              <span class="input-prefix">$</span>
+              <input id="s-liquid" type="number" step="100" class="input" value="${s.currentLiquidCapital}" data-setting="currentLiquidCapital" />
+            </div>
+          </div>
           <span class="field-hint">Cash available to deploy right now.</span>
-          <div class="input-group">
-            <span class="input-prefix">$</span>
-            <input id="s-liquid" type="number" step="100" class="input" value="${s.currentLiquidCapital}" data-setting="currentLiquidCapital" />
-          </div>
         </div>
         <div class="field">
-          <label for="s-buffer">Minimum cash buffer</label>
+          <div class="field-box">
+            <label for="s-buffer">Minimum cash buffer</label>
+            <div class="input-group">
+              <span class="input-prefix">$</span>
+              <input id="s-buffer" type="number" step="100" class="input" value="${s.minimumCashBuffer}" data-setting="minimumCashBuffer" />
+            </div>
+          </div>
           <span class="field-hint">Days below this threshold are flagged but not breached.</span>
-          <div class="input-group">
-            <span class="input-prefix">$</span>
-            <input id="s-buffer" type="number" step="100" class="input" value="${s.minimumCashBuffer}" data-setting="minimumCashBuffer" />
+        </div>
+        <div class="field">
+          <div class="field-box">
+            <label for="s-start">Projection start date</label>
+            <input id="s-start" type="date" class="input" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
           </div>
-        </div>
-        <div class="field">
-          <label for="s-start">Projection start date</label>
           <span class="field-hint">Auto-advances to today each day.</span>
-          <input id="s-start" type="date" class="input" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
         </div>
         <div class="field">
-          <label for="s-horizon-mode">Projection horizon</label>
+          <div class="field-box">
+            <label for="s-horizon-mode">Projection horizon</label>
+            <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
+              <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 mo past last bonus)</option>
+              <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
+              <option value="6months" ${s.projectionHorizonMode === '6months' ? 'selected' : ''}>6 months</option>
+              <option value="1year" ${s.projectionHorizonMode === '1year' ? 'selected' : ''}>1 year</option>
+              <option value="2years" ${s.projectionHorizonMode === '2years' ? 'selected' : ''}>2 years</option>
+              <option value="custom" ${s.projectionHorizonMode === 'custom' ? 'selected' : ''}>Custom days…</option>
+            </select>
+          </div>
           <span class="field-hint">Currently showing <strong>${effectiveHorizonDays(App.state)} days</strong>.</span>
-          <select id="s-horizon-mode" class="select" data-setting="projectionHorizonMode">
-            <option value="auto" ${(s.projectionHorizonMode || 'auto') === 'auto' ? 'selected' : ''}>Auto (1 mo past last bonus)</option>
-            <option value="3months" ${s.projectionHorizonMode === '3months' ? 'selected' : ''}>3 months</option>
-            <option value="6months" ${s.projectionHorizonMode === '6months' ? 'selected' : ''}>6 months</option>
-            <option value="1year" ${s.projectionHorizonMode === '1year' ? 'selected' : ''}>1 year</option>
-            <option value="2years" ${s.projectionHorizonMode === '2years' ? 'selected' : ''}>2 years</option>
-            <option value="custom" ${s.projectionHorizonMode === 'custom' ? 'selected' : ''}>Custom days…</option>
-          </select>
         </div>
         ${(s.projectionHorizonMode === 'custom') ? `
         <div class="field">
-          <label for="s-horizon">Custom horizon (days)</label>
-          <input id="s-horizon" type="number" min="30" max="1825" step="1" class="input" value="${s.projectionHorizonDays}" data-setting="projectionHorizonDays" />
+          <div class="field-box">
+            <label for="s-horizon">Custom horizon (days)</label>
+            <input id="s-horizon" type="number" min="30" max="1825" step="1" class="input" value="${s.projectionHorizonDays}" data-setting="projectionHorizonDays" />
+          </div>
         </div>` : ''}
         <div class="field">
-          <label for="s-max">Optimizer max candidates</label>
+          <div class="field-box">
+            <label for="s-max">Optimizer max candidates</label>
+            <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
+          </div>
           <span class="field-hint">Brute force evaluates 2^n subsets. 15 ≈ 32k subsets.</span>
-          <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
         </div>
         <div class="field">
           <label>Default lock interval start</label>
@@ -5928,14 +6136,18 @@ function renderSyncSection() {
 
       <div class="form-grid">
         <div class="field">
-          <label for="sync-gist">Gist ID</label>
+          <div class="field-box">
+            <label for="sync-gist">Gist ID</label>
+            <input id="sync-gist" class="input" type="text" placeholder="e.g. a1b2c3d4e5..." value="${escapeAttr(cfg.gistId || '')}" autocomplete="off" spellcheck="false" />
+          </div>
           <span class="field-hint">From the Gist URL: <code>gist.github.com/&lt;you&gt;/<strong>this-part</strong></code></span>
-          <input id="sync-gist" class="input" type="text" placeholder="e.g. a1b2c3d4e5..." value="${escapeAttr(cfg.gistId || '')}" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
-          <label for="sync-token">Personal Access Token</label>
+          <div class="field-box">
+            <label for="sync-token">Personal Access Token</label>
+            <input id="sync-token" class="input" type="password" placeholder="ghp_... or github_pat_..." value="${escapeAttr(cfg.token || '')}" autocomplete="off" spellcheck="false" />
+          </div>
           <span class="field-hint">Stored locally per device. Scope: only <strong>gist</strong>.</span>
-          <input id="sync-token" class="input" type="password" placeholder="ghp_... or github_pat_..." value="${escapeAttr(cfg.token || '')}" autocomplete="off" spellcheck="false" />
         </div>
       </div>
 
@@ -6722,12 +6934,16 @@ function showOfferModal(offerId = null) {
       <form class="modal-body" id="offer-form">
         <div class="form-grid">
           <div class="field" style="grid-column: 1 / -1;">
-            <label for="f-bank">Bank name *</label>
-            <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" />
+            <div class="field-box">
+              <label for="f-bank">Bank name *</label>
+              <input id="f-bank" class="input" type="text" required placeholder="Chase, Citi, US Bank…" value="${escapeAttr(o.bankName)}" name="bankName" />
+            </div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
-            <label for="f-offer">Offer name (optional)</label>
-            <input id="f-offer" class="input" type="text" placeholder="Sapphire Banking, Priority $1500…" value="${escapeAttr(o.offerName)}" name="offerName" />
+            <div class="field-box">
+              <label for="f-offer">Offer name (optional)</label>
+              <input id="f-offer" class="input" type="text" placeholder="Sapphire Banking, Priority $1500…" value="${escapeAttr(o.offerName)}" name="offerName" />
+            </div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
             <label>Color</label>
@@ -6760,9 +6976,11 @@ function showOfferModal(offerId = null) {
             <span class="field-hint">Identity color for the card border, timeline bar, and chart marker stroke. Colors already used by other offers are hidden until freed.</span>
           </div>
           <div class="field">
-            <label for="f-bonus">Bonus amount *</label>
-            <div class="input-group"><span class="input-prefix">$</span>
-              <input id="f-bonus" class="input" type="number" step="5" min="0" required value="${o.signupBonusAmount ?? ''}" name="signupBonusAmount" />
+            <div class="field-box">
+              <label for="f-bonus">Bonus amount *</label>
+              <div class="input-group"><span class="input-prefix">$</span>
+                <input id="f-bonus" class="input" type="number" step="5" min="0" required value="${o.signupBonusAmount ?? ''}" name="signupBonusAmount" />
+              </div>
             </div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
@@ -6822,50 +7040,66 @@ function showOfferModal(offerId = null) {
           <div class="field" id="debit-fields-wrap" style="grid-column: 1 / -1;${o.debitRequirement.required ? '' : 'display:none;'}">
             <div class="form-grid">
               <div class="field">
-                <label for="f-debit-count">Qualifying debit purchases *</label>
-                <div class="input-group with-suffix">
-                  <input id="f-debit-count" class="input" type="number" min="1" max="99" step="1" value="${o.debitRequirement.count ?? ''}" name="debitCount" />
-                  <span class="input-suffix">txns</span>
+                <div class="field-box">
+                  <label for="f-debit-count">Qualifying debit purchases *</label>
+                  <div class="input-group with-suffix">
+                    <input id="f-debit-count" class="input" type="number" min="1" max="99" step="1" value="${o.debitRequirement.count ?? ''}" name="debitCount" />
+                    <span class="input-suffix">txns</span>
+                  </div>
                 </div>
               </div>
               <div class="field">
-                <label for="f-debit-by">Complete by (optional)</label>
-                <input id="f-debit-by" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.debitRequirement.byDate || '')}" name="debitByDate" data-picker-mode="plain" />
+                <div class="field-box">
+                  <label for="f-debit-by">Complete by (optional)</label>
+                  <input id="f-debit-by" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.debitRequirement.byDate || '')}" name="debitByDate" data-picker-mode="plain" />
+                </div>
               </div>
             </div>
             <span class="field-hint">Some SUBs require N qualifying debit-card purchases. Counts toward "Actions required" on the Overview.</span>
           </div>
           <div class="field">
-            <label for="f-funding">Required funding *</label>
-            <div class="input-group"><span class="input-prefix">$</span>
-              <input id="f-funding" class="input" type="number" step="100" min="0" required value="${o.requiredFundingAmount ?? ''}" name="requiredFundingAmount" />
+            <div class="field-box">
+              <label for="f-funding">Required funding *</label>
+              <div class="input-group"><span class="input-prefix">$</span>
+                <input id="f-funding" class="input" type="number" step="100" min="0" required value="${o.requiredFundingAmount ?? ''}" name="requiredFundingAmount" />
+              </div>
             </div>
           </div>
           <div class="field">
-            <label for="f-expires">Offer expires</label>
-            <input id="f-expires" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" data-picker-mode="plain" />
+            <div class="field-box">
+              <label for="f-expires">Offer expires</label>
+              <input id="f-expires" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" data-picker-mode="plain" />
+            </div>
           </div>
           <div class="field">
-            <label for="f-signup">${o.accountStatus === 'open' ? 'Signup date *' : 'Planned signup date *'}</label>
-            <input id="f-signup" class="input yv-date" type="text" readonly inputmode="none" required placeholder="YYYY-MM-DD" value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" data-picker-mode="plain" />
+            <div class="field-box">
+              <label for="f-signup">${o.accountStatus === 'open' ? 'Signup date *' : 'Planned signup date *'}</label>
+              <input id="f-signup" class="input yv-date" type="text" readonly inputmode="none" required placeholder="YYYY-MM-DD" value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" data-picker-mode="plain" />
+            </div>
           </div>
           <div class="field">
-            <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of signup' : 'Days after signup to deposit'}</label>
-            <div class="input-group with-suffix">
-              <input id="f-days-deposit" class="input" type="number" min="0" step="1" value="${o.daysAfterSignupAllowedBeforeDeposit ?? ''}" name="daysAfterSignupAllowedBeforeDeposit" />
-              <span class="input-suffix">days</span>
+            <div class="field-box">
+              <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of signup' : 'Days after signup to deposit'}</label>
+              <div class="input-group with-suffix">
+                <input id="f-days-deposit" class="input" type="number" min="0" step="1" value="${o.daysAfterSignupAllowedBeforeDeposit ?? ''}" name="daysAfterSignupAllowedBeforeDeposit" />
+                <span class="input-suffix">days</span>
+              </div>
             </div>
           </div>
           <div class="field" id="days-remain-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
-            <label for="f-days-remain" id="days-remain-label">Funds must remain deposited through day * (from ${o.lockStartsFrom === 'open date' ? 'account opening' : 'funded date'})</label>
-            <div class="input-group with-suffix">
-              <input id="f-days-remain" class="input" type="number" min="0" step="1" value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
-              <span class="input-suffix">days</span>
+            <div class="field-box">
+              <label for="f-days-remain" id="days-remain-label">Funds must remain deposited through day * (from ${o.lockStartsFrom === 'open date' ? 'account opening' : 'funded date'})</label>
+              <div class="input-group with-suffix">
+                <input id="f-days-remain" class="input" type="number" min="0" step="1" value="${o.daysFundsMustRemain ?? ''}" name="daysFundsMustRemain" />
+                <span class="input-suffix">days</span>
+              </div>
             </div>
           </div>
           <div class="field" id="funding-date-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
-            <label for="f-funded" id="f-funded-label">Planned funding date${o.offerType === 'held-and-dd' ? ' *' : ' (optional)'}</label>
-            <input id="f-funded" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
+            <div class="field-box">
+              <label for="f-funded" id="f-funded-label">Planned funding date${o.offerType === 'held-and-dd' ? ' *' : ' (optional)'}</label>
+              <input id="f-funded" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
+            </div>
             <span class="field-hint" id="f-funded-suggest">${(() => {
               const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
               return sug ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)` : '';
@@ -6884,26 +7118,32 @@ function showOfferModal(offerId = null) {
             <span class="field-hint">Where the bank measures the hold from. <strong>Open date</strong> = e.g. US Bank "60 days from open" — funding later means a shorter actual lock. <strong>Funded date</strong> = e.g. Citi "keep $50k for 60 days from deposit". Money is always treated as tied up only from when you actually deposit.</span>
           </div>
           <div class="field">
-            <label for="f-substatus">Sub status</label>
-            <select id="f-substatus" class="select" name="subStatus">
-              ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
-            </select>
+            <div class="field-box">
+              <label for="f-substatus">Sub status</label>
+              <select id="f-substatus" class="select" name="subStatus">
+                ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
+              </select>
+            </div>
             <span class="field-hint">Where this offer is in its lifecycle. Selecting Approved, On-Track, Met (Waiting), Earned, or Didn't Track auto-sets the account to Open.</span>
           </div>
           <div class="field">
-            <label for="f-accountstatus">Account status</label>
-            <select id="f-accountstatus" class="select" name="accountStatus">
-              ${ACCOUNT_STATUSES.map(s => `<option value="${s}" ${o.accountStatus === s ? 'selected' : ''}>${ACCOUNT_STATUS_LABELS[s]}</option>`).join('')}
-            </select>
+            <div class="field-box">
+              <label for="f-accountstatus">Account status</label>
+              <select id="f-accountstatus" class="select" name="accountStatus">
+                ${ACCOUNT_STATUSES.map(s => `<option value="${s}" ${o.accountStatus === s ? 'selected' : ''}>${ACCOUNT_STATUS_LABELS[s]}</option>`).join('')}
+              </select>
+            </div>
             <span class="field-hint">Closed force-excludes the offer from the cash projection (money is back).</span>
           </div>
           <div class="field">
-            <label for="f-confidence">Confidence</label>
-            <select id="f-confidence" class="select" name="confidence">
-              <option value="confirmed" ${o.confidence === 'confirmed' ? 'selected' : ''}>Confirmed</option>
-              <option value="likely" ${o.confidence === 'likely' ? 'selected' : ''}>Likely</option>
-              <option value="uncertain" ${o.confidence === 'uncertain' ? 'selected' : ''}>Uncertain</option>
-            </select>
+            <div class="field-box">
+              <label for="f-confidence">Confidence</label>
+              <select id="f-confidence" class="select" name="confidence">
+                <option value="confirmed" ${o.confidence === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+                <option value="likely" ${o.confidence === 'likely' ? 'selected' : ''}>Likely</option>
+                <option value="uncertain" ${o.confidence === 'uncertain' ? 'selected' : ''}>Uncertain</option>
+              </select>
+            </div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
             <label class="checkbox-row">
@@ -6919,25 +7159,29 @@ function showOfferModal(offerId = null) {
         </button>
         <div class="advanced-fields" id="advanced-fields">
           <div class="form-grid">
-            <div class="field"><label for="f-doc">DoC / source URL</label><input id="f-doc" class="input" type="url" placeholder="https://doctorofcredit.com/..." value="${escapeAttr(o.docUrl)}" name="docUrl" /></div>
+            <div class="field"><div class="field-box"><label for="f-doc">DoC / source URL</label><input id="f-doc" class="input" type="url" placeholder="https://doctorofcredit.com/..." value="${escapeAttr(o.docUrl)}" name="docUrl" /></div></div>
             <div class="field">
-              <label for="f-entity">Entity used</label>
-              <select id="f-entity" class="select" name="entityUsed">
-                <option value="" ${!o.entityUsed ? 'selected' : ''}>—</option>
-                ${ENTITY_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.entityUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
-                ${o.entityUsed && !ENTITY_OPTIONS.includes(o.entityUsed) ? `<option value="${escapeAttr(o.entityUsed)}" selected>${escapeHtml(o.entityUsed)} (legacy)</option>` : ''}
-              </select>
+              <div class="field-box">
+                <label for="f-entity">Entity used</label>
+                <select id="f-entity" class="select" name="entityUsed">
+                  <option value="" ${!o.entityUsed ? 'selected' : ''}>—</option>
+                  ${ENTITY_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.entityUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                  ${o.entityUsed && !ENTITY_OPTIONS.includes(o.entityUsed) ? `<option value="${escapeAttr(o.entityUsed)}" selected>${escapeHtml(o.entityUsed)} (legacy)</option>` : ''}
+                </select>
+              </div>
             </div>
             <div class="field">
-              <label for="f-email">Email used</label>
-              <select id="f-email" class="select" name="emailUsed">
-                <option value="" ${!o.emailUsed ? 'selected' : ''}>—</option>
-                ${EMAIL_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.emailUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
-                ${o.emailUsed && !EMAIL_OPTIONS.includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
-              </select>
+              <div class="field-box">
+                <label for="f-email">Email used</label>
+                <select id="f-email" class="select" name="emailUsed">
+                  <option value="" ${!o.emailUsed ? 'selected' : ''}>—</option>
+                  ${EMAIL_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.emailUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                  ${o.emailUsed && !EMAIL_OPTIONS.includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
+                </select>
+              </div>
             </div>
           </div>
-          <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" class="textarea" name="notes">${escapeHtml(o.notes || '')}</textarea></div>
+          <div class="field"><div class="field-box"><label for="f-notes">Notes</label><textarea id="f-notes" class="textarea" name="notes">${escapeHtml(o.notes || '')}</textarea></div></div>
         </div>
       </form>
       <div class="modal-footer">
@@ -7285,36 +7529,42 @@ function showCommitmentModal(commitmentId = null) {
       <form class="modal-body" id="commitment-form">
         <div class="form-grid">
           <div class="field" style="grid-column: 1 / -1;">
-            <label for="c-name">Name *</label>
-            <input id="c-name" class="input" type="text" required value="${escapeAttr(c.commitmentName)}" name="commitmentName" />
-          </div>
-          <div class="field">
-            <label for="c-amount">Amount *</label>
-            <div class="input-group"><span class="input-prefix">$</span>
-              <input id="c-amount" class="input" type="number" step="100" min="0" required value="${c.amount ?? ''}" name="amount" />
+            <div class="field-box">
+              <label for="c-name">Name *</label>
+              <input id="c-name" class="input" type="text" required value="${escapeAttr(c.commitmentName)}" name="commitmentName" />
             </div>
           </div>
           <div class="field">
-            <label for="c-type">Type</label>
-            <select id="c-type" class="select" name="type">
-              ${COMMITMENT_TYPES.map(t => `<option value="${t.value}" ${c.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
-            </select>
+            <div class="field-box">
+              <label for="c-amount">Amount *</label>
+              <div class="input-group"><span class="input-prefix">$</span>
+                <input id="c-amount" class="input" type="number" step="100" min="0" required value="${c.amount ?? ''}" name="amount" />
+              </div>
+            </div>
           </div>
-          <div class="field"><label for="c-start">Start date *</label><input id="c-start" class="input" type="date" required value="${c.startDate}" name="startDate" /></div>
-          <div class="field"><label for="c-end">End date *</label><input id="c-end" class="input" type="date" required value="${c.endDate}" name="endDate" /></div>
-          <div class="field"><label for="c-status">Status</label><select id="c-status" class="select" name="status">
+          <div class="field">
+            <div class="field-box">
+              <label for="c-type">Type</label>
+              <select id="c-type" class="select" name="type">
+                ${COMMITMENT_TYPES.map(t => `<option value="${t.value}" ${c.type === t.value ? 'selected' : ''}>${t.label}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field"><div class="field-box"><label for="c-start">Start date *</label><input id="c-start" class="input" type="date" required value="${c.startDate}" name="startDate" /></div></div>
+          <div class="field"><div class="field-box"><label for="c-end">End date *</label><input id="c-end" class="input" type="date" required value="${c.endDate}" name="endDate" /></div></div>
+          <div class="field"><div class="field-box"><label for="c-status">Status</label><select id="c-status" class="select" name="status">
             <option value="confirmed" ${c.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
             <option value="hypothetical" ${c.status === 'hypothetical' ? 'selected' : ''}>Hypothetical</option>
             <option value="completed" ${c.status === 'completed' ? 'selected' : ''}>Completed</option>
             <option value="cancelled" ${c.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
-          </select></div>
-          <div class="field"><label for="c-bonus">Expected bonus</label>
+          </select></div></div>
+          <div class="field"><div class="field-box"><label for="c-bonus">Expected bonus</label>
             <div class="input-group"><span class="input-prefix">$</span>
               <input id="c-bonus" class="input" type="number" step="1" min="0" value="${c.expectedBonus ?? 0}" name="expectedBonus" />
             </div>
-          </div>
+          </div></div>
           <div class="field" style="grid-column:1/-1;"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${c.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
-          <div class="field" style="grid-column:1/-1;"><label for="c-notes">Notes</label><textarea id="c-notes" class="textarea" name="notes">${escapeHtml(c.notes || '')}</textarea></div>
+          <div class="field" style="grid-column:1/-1;"><div class="field-box"><label for="c-notes">Notes</label><textarea id="c-notes" class="textarea" name="notes">${escapeHtml(c.notes || '')}</textarea></div></div>
         </div>
       </form>
       <div class="modal-footer">
@@ -7382,28 +7632,31 @@ function showEventModal(eventId = null) {
       </div>
       <form class="modal-body" id="event-form">
         <div class="form-grid">
-          <div class="field"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
-          <div class="field"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div>
+          <div class="field"><div class="field-box"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div></div>
+          <div class="field"><div class="field-box"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div></div>
           <!-- Linked-offer selector: required when category = bonus payout
                (visibility toggled via JS on the change event below). Auto-
                fills the Name field with the offer's bank/offer name on
                selection so the chart marker matches the offer card. -->
           <div class="field" id="e-offer-field" style="grid-column:1/-1;${e.category === 'bonus payout' ? '' : 'display:none;'}">
-            <label for="e-offer">Linked offer *</label>
-            <select id="e-offer" class="select" name="sourceBonusOfferId">
-              <option value="">— Select offer —</option>
-              ${App.state.offers.filter(o => o.status !== 'skipped').map(o => {
-                const lbl = o.bankName + (o.offerName ? ' — ' + o.offerName : '');
-                return `<option value="${o.id}" ${e.sourceBonusOfferId === o.id ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
-              }).join('')}
-            </select>
+            <div class="field-box">
+              <label for="e-offer">Linked offer *</label>
+              <select id="e-offer" class="select" name="sourceBonusOfferId">
+                <option value="">— Select offer —</option>
+                ${App.state.offers.filter(o => o.status !== 'skipped').map(o => {
+                  const lbl = o.bankName + (o.offerName ? ' — ' + o.offerName : '');
+                  return `<option value="${o.id}" ${e.sourceBonusOfferId === o.id ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+                }).join('')}
+              </select>
+            </div>
             <span class="field-hint">Bonus payouts must match an existing offer so naming and identity color stay in sync with the offer card.</span>
           </div>
-          <div class="field" style="grid-column: 1 / -1;"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div>
-          <div class="field"><label for="e-amount">Amount *</label>
+          <div class="field" style="grid-column: 1 / -1;"><div class="field-box"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div></div>
+          <div class="field"><div class="field-box"><label for="e-amount">Amount *</label>
             <div class="input-group"><span class="input-prefix">$</span>
               <input id="e-amount" class="input" type="number" step="0.01" required value="${e.amount}" name="amount" />
             </div>
+          </div>
             <span class="field-hint">Sign is set automatically from the category — Inflow / Bonus payout are positive; Outflow / Fee are negative. Correction and Other use whatever sign you enter.</span>
           </div>
           <div class="field" style="grid-column:1/-1;">
@@ -7413,29 +7666,35 @@ function showEventModal(eventId = null) {
             <span class="field-hint">All three are independent. Uncheck "Display on chart" and/or "Show in Upcoming actions" to keep an event in your running balance without cluttering those views — useful for paychecks and recurring bills.</span>
           </div>
           <div class="field">
-            <label for="e-recur">Recurrence</label>
-            <select id="e-recur" class="select" name="recurrenceKind">
-              <option value="none" ${(e.recurrence?.kind || 'none') === 'none' ? 'selected' : ''}>One-time</option>
-              <option value="weekly" ${e.recurrence?.kind === 'weekly' ? 'selected' : ''}>Weekly</option>
-              <option value="biweekly" ${e.recurrence?.kind === 'biweekly' ? 'selected' : ''}>Bi-weekly</option>
-              <option value="monthly" ${e.recurrence?.kind === 'monthly' ? 'selected' : ''}>Monthly</option>
-              <option value="custom" ${e.recurrence?.kind === 'custom' ? 'selected' : ''}>Custom (every N days)</option>
-            </select>
+            <div class="field-box">
+              <label for="e-recur">Recurrence</label>
+              <select id="e-recur" class="select" name="recurrenceKind">
+                <option value="none" ${(e.recurrence?.kind || 'none') === 'none' ? 'selected' : ''}>One-time</option>
+                <option value="weekly" ${e.recurrence?.kind === 'weekly' ? 'selected' : ''}>Weekly</option>
+                <option value="biweekly" ${e.recurrence?.kind === 'biweekly' ? 'selected' : ''}>Bi-weekly</option>
+                <option value="monthly" ${e.recurrence?.kind === 'monthly' ? 'selected' : ''}>Monthly</option>
+                <option value="custom" ${e.recurrence?.kind === 'custom' ? 'selected' : ''}>Custom (every N days)</option>
+              </select>
+            </div>
             <span class="field-hint">Used for paychecks, recurring bills, and other repeating cash flows. The "Date" above is the first occurrence.</span>
           </div>
           <div class="field" id="e-recur-every-field" style="${e.recurrence?.kind === 'custom' ? '' : 'display:none;'}">
-            <label for="e-recur-every">Every</label>
-            <div class="input-group with-suffix">
-              <input id="e-recur-every" class="input" type="number" min="1" max="365" step="1" name="recurrenceEveryDays" value="${e.recurrence?.everyDays || 7}" />
-              <span class="input-suffix">days</span>
+            <div class="field-box">
+              <label for="e-recur-every">Every</label>
+              <div class="input-group with-suffix">
+                <input id="e-recur-every" class="input" type="number" min="1" max="365" step="1" name="recurrenceEveryDays" value="${e.recurrence?.everyDays || 7}" />
+                <span class="input-suffix">days</span>
+              </div>
             </div>
           </div>
           <div class="field" id="e-recur-end-field" style="grid-column:1/-1;${(e.recurrence?.kind && e.recurrence.kind !== 'none') ? '' : 'display:none;'}">
-            <label for="e-recur-end">Ends (optional)</label>
-            <input id="e-recur-end" class="input" type="date" name="recurrenceEndDate" value="${escapeAttr(e.recurrence?.endDate || '')}" />
+            <div class="field-box">
+              <label for="e-recur-end">Ends (optional)</label>
+              <input id="e-recur-end" class="input" type="date" name="recurrenceEndDate" value="${escapeAttr(e.recurrence?.endDate || '')}" />
+            </div>
             <span class="field-hint">Leave blank to repeat through the projection horizon.</span>
           </div>
-          <div class="field" style="grid-column:1/-1;"><label for="e-notes">Notes</label><textarea id="e-notes" class="textarea" name="notes">${escapeHtml(e.notes || '')}</textarea></div>
+          <div class="field" style="grid-column:1/-1;"><div class="field-box"><label for="e-notes">Notes</label><textarea id="e-notes" class="textarea" name="notes">${escapeHtml(e.notes || '')}</textarea></div></div>
         </div>
       </form>
       <div class="modal-footer">

@@ -17,12 +17,20 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-05, Round 56)
+## Current state (as of 2026-07-06, Round 57)
 
-- `index.html` ≈ 8,000 lines, single-file PWA. `APP_VERSION` = `2026.07.05`
+- `index.html` ≈ 8,600 lines, single-file PWA. `APP_VERSION` = `2026.07.06`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
-  CHANGELOG entry on each confirmed-good release). R56 is NOT yet tagged
-  (Codex review pending; the fix is only bilateral once both devices refresh).
+  CHANGELOG entry on each confirmed-good release). R57 is NOT yet committed
+  or tagged — working-tree only, pending a visual screenshot check (see R57
+  log entry) and R56's Codex review (the sync fix is only bilateral once
+  both devices refresh).
+- **Form styling (R57):** every text/number/date/select/textarea field uses
+  the `.field-box` label-inside-container pattern; radio-groups, checkbox
+  rows, and the color-picker are intentionally NOT boxed. DD entry rows
+  (`renderDdRow`) use a slimmed bordered-input variant instead of the full
+  box. See AGENTS.md-adjacent reasoning in the R57 HANDOFF entry before
+  changing input/label CSS again.
 - **Offer types:** `new-funds-held`, `direct-deposit`, `held-and-dd` ("Other"
   removed, R37). Held+DD models the held lump sum AND the DDs (R53); planned
   funding date is *required* for Held+DD, optional for new-funds-held.
@@ -47,6 +55,83 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-06 — Session L (claude-sonnet-5, /orchestrate worker)
+**Round 57 — Input restyle: label-inside-container pattern**
+- Restyled every text/number/date/select/textarea field to a fintech-style
+  bordered container with the label moved INSIDE it (owner-provided
+  reference). New `.field-box` wrapper class (`.field label`/`.field-hint`
+  CSS block, ~line 1377) holds `label` + the control; uses the app's own
+  `--card-soft`/`--border-soft`/`--radius-lg` tokens for the box and
+  `--accent`/`--accent-soft` for `:focus-within` — NOT the reference's
+  purple. Touched: Settings `#capital-grid` + Cloud sync fields
+  (`renderSettings`/`renderSyncSection`), and every qualifying field in
+  `showOfferModal`, `showCommitmentModal`, `showEventModal` (~line 6813+),
+  including the advanced fields (DoC URL, Entity, Email, Notes).
+- **Deliberately left unboxed** (per the design brief — "checkbox/radio/
+  color-picker stays as-is"): all `.radio-group` fields (Offer type, Debit
+  requirement, Lock-from, DD-req mode), the checkbox-row fields (Include in
+  projection/scenario, Display on chart, etc.), the offer color-picker, the
+  inline DD-requirement count/frequency mini-controls (no `<label for>`,
+  just adjacent text like "Once per"/"for" — boxing would need invented
+  labels), the DD-transfer-timing 3-input row (no per-control label), and
+  `source-bank-input` (no label at all, just a placeholder).
+- `renderDdRow`'s DD entry-table inputs got a SLIMMED variant instead
+  (`.dd-row .input` CSS, ~line 1145) — compact rounded border, no
+  label-in-box, since there's no per-row label to move (the group label
+  "Planned direct deposits *" sits once above the whole list; boxing each
+  row would repeat it N times).
+- Modal blast-radius date/number height rule (`.modal .input[type=date]`
+  etc., fixed 44px + 10px padding) fought the new borderless-inside-box
+  look at equal CSS specificity — added a later, box-scoped override
+  (`.modal .field-box .input[type=date]` etc.) right after it so the
+  cascade resolves correctly; noted inline so a future edit to one doesn't
+  silently desync from the other.
+- **Verification:** extracted the inline `<script>` and ran `node --check`
+  — passes; diffed the extracted script against a pre-edit copy and
+  confirmed every changed line is inside an HTML template-literal (no
+  `id`/`name`/`for` attributes changed, no JS logic touched). Locked
+  chart/legend/tooltip hexes (AGENTS.md) untouched — grepped to confirm.
+  **Could NOT complete the visual screenshot pass myself**: this session's
+  Preview MCP (`preview_start`) resolves `.claude/launch.json` against the
+  agent's home directory, not the repo root, so it couldn't find the
+  project's existing `.claude/launch.json` (config name `yield-vector`,
+  port 8765) — writing a new one at `~/.claude/` would be a persistent,
+  out-of-scope change to the user's global config, so declined to do that
+  unilaterally. Worked around by serving the repo directly via
+  `python3 -m http.server 4173` and confirming via `curl` that the served
+  HTML contains the expected `.field-box` markup/CSS.
+- **Coordinator visual re-verify found ONE defect, now fixed:** the `$`
+  prefix in `.input-group` fields overlapped the value's first digit once
+  a value existed (Settings liquid capital/buffer, offer Bonus
+  amount/Required funding, DD-row amount, commitment Amount/Expected
+  bonus, event Amount). Root cause: the base `.input-group` mechanism
+  absolutely-positions `.input-prefix` and relies on a padding-left guess
+  on the input to clear it (original: 12px prefix inset + 28px padding =
+  16px clearance); my R57 override shrank that to 16px padding while ALSO
+  bumping the prefix font-size to 16px, leaving ~0px clearance. Fixed by
+  making `.field-box .input-group` (and the `.dd-row` slimmed equivalent)
+  a real flex row instead: prefix as a static in-flow item, input
+  `flex:1` with no padding hack — overlap isn't possible by construction.
+  Suffix fields (`with-suffix`, "days" etc.) were confirmed already
+  correct and deliberately left on the original absolute-right mechanism
+  — not touched. Also caught and fixed a second, related bug while in
+  this code: the DD-row amount input sat inside `.input-group`, which
+  already carried a border/background from the shared `.dd-row .input,
+  .dd-row .input-group` rule, so the input needed its own
+  `border:none;background:transparent` to avoid a doubled border (this
+  one wasn't reported — an R57-introduced bug I found doing the sweep).
+  Re-verified with a live preview server (serverId
+  `979ac45d-f665-4509-8af4-247327fcc2f9`, port 4173): typed real values
+  into all 8 prefix sites and screenshotted each — `$ 200000`, `$ 1500`,
+  `$ 50000`, `$ 75000`, `$ 2500`, `$ 12345` all render with clean
+  prefix/value separation, focus ring still uses `--accent`, suffix
+  "days" fields still right-aligned correctly. Re-ran `node --check` and
+  the locked-hex count check — both still clean.
+- `APP_VERSION` bumped 2026.07.05 → 2026.07.06. NOT committed (working-tree
+  only, per instruction) and NOT tagged — do that after final sign-off.
+
+---
 
 ### 2026-07-05 — Session K (claude-opus-4-8, /orchestrate executor)
 **Round 56 — Sync compare-and-swap: stop stale-device data loss**
