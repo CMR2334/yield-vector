@@ -26,6 +26,13 @@
   --card-soft: #fafafc;
 
   --text: #2a2e3d;
+  /* Round 58: dedicated "body-strong" tone for input VALUE text — one shade
+     lighter than --text so values (the primary data) read as distinct from
+     heading-weight --text while staying unmistakably darker than every
+     label tone below. No existing token sat between --text and
+     --text-secondary, so this is a deliberate addition, not a --text swap
+     (card titles/modal titles/stat-values keep using --text, untouched). */
+  --text-strong: #374151;
   --text-secondary: #5b6374;
   --text-tertiary: #9099a8;
   --text-inverse: #ffffff;
@@ -1156,7 +1163,12 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
 }
-.dd-row .input { padding: 8px 10px; }
+/* Round 58: match .field-box's value-text tone (--text-strong, ~line 28) —
+   this slimmed variant has no per-row label but is still VALUE text, so it
+   gets the same body-strong color as boxed values, not the heading-tone
+   --text default it inherited from the base .input rule. Font-weight was
+   already 400 (default, no override existed), so only color moves here. */
+.dd-row .input { padding: 8px 10px; color: var(--text-strong); }
 /* The amount input lives INSIDE .input-group, which already carries the
    border/background above — without this it doubled up (border nested
    in border). Strip them from the inner input so only the group's outer
@@ -1190,6 +1202,30 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .dd-row .input-group:focus-within .input { box-shadow: none; }
+
+/* DD transfer-timing row (Settings → "Direct-deposit transfer timing"):
+   the three mini inputs ("in"/"season"/"back") previously sized by a
+   per-item max-width guess (130/150/140px) tuned to roughly fit each
+   suffix word — close but never exactly equal, and wrapped untidily on
+   phones since nothing forced equal widths once they broke to new rows.
+   Round 58: a real 3-equal-column grid instead. `auto-fit` + `minmax`
+   lets the browser collapse to fewer columns (down to 1) on narrow
+   viewports while every column in a row is still forced equal width by
+   the grid itself — no hardcoded breakpoint needed, and identical widths
+   hold at every size by construction rather than by three coincidentally
+   close magic numbers. 132px min: the base .input-group.with-suffix .input
+   rule (~line 1721) reserves 28px left + 60px right padding for the
+   prefix/suffix mechanism, so anything much narrower clips the value
+   itself before it ever reaches the suffix — checked against a
+   defensively-typed 3-digit value ("999", beyond the inputs' own max="10")
+   at 320px viewport width to confirm no crowding/clipping. */
+.dd-timing-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.dd-timing-row .input-group { width: 100%; max-width: 100%; }
 
 .offer-actions {
   display: flex;
@@ -1420,10 +1456,13 @@ a { color: inherit; text-decoration: none; }
      creates the modal-wide horizontal-scroll bug on phones. */
   min-width: 0;
 }
+/* Round 58: one step lighter (--text-secondary → --text-tertiary) and one
+   weight step down (600 → 500) so these read as quiet wayfinding — never
+   competing with the darker, heavier input VALUE text below. */
 .field label, .field-label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 500;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1.25;
@@ -1434,6 +1473,24 @@ a { color: inherit; text-decoration: none; }
    so it doesn't distort the single-column Settings forms (which have
    hints in varying positions and were rendering at uneven heights). */
 #offer-form .field label { min-height: 30px; display: flex; align-items: flex-end; }
+/* Round 58: the bottom-pin rule above is meant for the GROUP-level label
+   ("Offer type *") sitting outside a box, but `label` also matches every
+   individual segment `<label>` inside a nested .radio-group (Offer type,
+   DD-requirement mode, Funded/Open date) — its `align-items: flex-end`
+   was winning over .radio-group label's own `align-items: center` (same
+   specificity elsewhere, but here the shared #offer-form .field ID+class
+   prefix ties them, and source order decided it), bottom-anchoring text
+   in the pill instead of centering it. Needed one more class than the
+   rule above to win on specificity within #offer-form; the plain
+   `.radio-group label` rule (~line 1808) already centers correctly for
+   the one segmented control outside #offer-form (Settings → Default lock
+   interval start), so this override only needs to exist here. */
+#offer-form .field .radio-group label {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 #offer-form .field > .input,
 #offer-form .field > .select,
 #offer-form .field > .textarea,
@@ -1474,11 +1531,14 @@ a { color: inherit; text-decoration: none; }
 }
 /* Label inside the box: small, muted, normal weight, sits above the
    value — overrides the uppercase/letter-spaced look used by labels
-   OUTSIDE a box (radio-group headings, checkbox rows, etc). */
+   OUTSIDE a box (radio-group headings, checkbox rows, etc). Round 58:
+   color matched to the same --text-tertiary muted tone as the outside-box
+   group labels (was --text-secondary, one shade darker than the group
+   labels — now both label registers read as the same quiet wayfinding). */
 .field-box label, .field-box .field-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   text-transform: none;
   letter-spacing: 0;
   line-height: 1.3;
@@ -1491,6 +1551,10 @@ a { color: inherit; text-decoration: none; }
    .input/.select/.textarea rule rather than stripping border there,
    since plain (non-boxed) inputs don't exist in this app after R57 but
    the base rule is kept for any future non-boxed use. */
+/* Round 58: value text is regular weight (was 500) and one shade lighter
+   than heading-tone --text — --text-strong is the app's dedicated
+   body-strong tone (see :root, ~line 28), staying comfortably darker than
+   every label so values remain the unmistakable primary data at a glance. */
 .field-box .input,
 .field-box .select,
 .field-box .textarea,
@@ -1502,8 +1566,8 @@ a { color: inherit; text-decoration: none; }
   padding: 0;
   border-radius: 0;
   font-size: 16px;
-  font-weight: 500;
-  color: var(--text);
+  font-weight: 400;
+  color: var(--text-strong);
   min-height: 0;
   height: auto;
   line-height: 1.35;
@@ -2275,7 +2339,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.06';
+const APP_VERSION = '2026.07.06a';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -5879,16 +5943,16 @@ function renderSettings() {
         <div class="field" style="grid-column:1 / -1;">
           <label>Direct-deposit transfer timing (business days)</label>
           <span class="field-hint">Round trip for a DD: initiate → <strong>in</strong> days → posts → <strong>season</strong> days → sent back → <strong>back</strong> days → returns. Weekends/holidays extend each leg. Drives DD held-days and ROI.</span>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
-            <div class="input-group with-suffix" style="max-width:130px;">
+          <div class="dd-timing-row">
+            <div class="input-group with-suffix">
               <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.inDays) ?? 1}" data-setting="ddTransfer.inDays" aria-label="Transfer in days" />
               <span class="input-suffix">in</span>
             </div>
-            <div class="input-group with-suffix" style="max-width:150px;">
+            <div class="input-group with-suffix">
               <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.seasonDays) ?? 1}" data-setting="ddTransfer.seasonDays" aria-label="Season days" />
               <span class="input-suffix">season</span>
             </div>
-            <div class="input-group with-suffix" style="max-width:140px;">
+            <div class="input-group with-suffix">
               <input type="number" min="0" max="10" step="1" class="input" value="${(s.ddTransfer && s.ddTransfer.backDays) ?? 1}" data-setting="ddTransfer.backDays" aria-label="Transfer back days" />
               <span class="input-suffix">back</span>
             </div>

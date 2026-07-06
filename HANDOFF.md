@@ -17,19 +17,24 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-06, Round 57)
+## Current state (as of 2026-07-06, Round 58)
 
-- `index.html` ≈ 8,600 lines, single-file PWA. `APP_VERSION` = `2026.07.06`
+- `index.html` ≈ 8,650 lines, single-file PWA. `APP_VERSION` = `2026.07.06a`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
-  CHANGELOG entry on each confirmed-good release). R57 is NOT yet committed
-  or tagged — working-tree only, pending a visual screenshot check (see R57
-  log entry) and R56's Codex review (the sync fix is only bilateral once
-  both devices refresh).
-- **Form styling (R57):** every text/number/date/select/textarea field uses
-  the `.field-box` label-inside-container pattern; radio-groups, checkbox
-  rows, and the color-picker are intentionally NOT boxed. DD entry rows
-  (`renderDdRow`) use a slimmed bordered-input variant instead of the full
-  box. See AGENTS.md-adjacent reasoning in the R57 HANDOFF entry before
+  CHANGELOG entry on each confirmed-good release). R57 and R58 are NOT yet
+  committed or tagged — working-tree only, per explicit owner instruction on
+  R58 (DO NOT COMMIT); also still pending R56's Codex review (the sync fix
+  is only bilateral once both devices refresh).
+- **Form styling (R57 + R58 tuning):** every text/number/date/select/textarea
+  field uses the `.field-box` label-inside-container pattern; radio-groups,
+  checkbox rows, and the color-picker are intentionally NOT boxed. DD entry
+  rows (`renderDdRow`) use a slimmed bordered-input variant instead of the
+  full box. R58 tuned the typography hierarchy (group/box labels lighter +
+  lighter weight via `--text-tertiary`; values regular-weight via new
+  `--text-strong` token), fixed segmented-control vertical centering
+  (`#offer-form .field .radio-group label` override), and gave the DD
+  transfer-timing row a real equal-width grid (`.dd-timing-row`). See
+  AGENTS.md-adjacent reasoning in the R57/R58 HANDOFF entries before
   changing input/label CSS again.
 - **Offer types:** `new-funds-held`, `direct-deposit`, `held-and-dd` ("Other"
   removed, R37). Held+DD models the held lump sum AND the DDs (R53); planned
@@ -55,6 +60,52 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-06 — Session M (claude-sonnet-5, /orchestrate worker)
+**Round 58 — Typography hierarchy tuning, segmented-control centering, DD-timing uniformity (owner-requested)**
+- Three refinements to R57's form styling, all owner-requested with item 1's
+  exact tuning delegated to my judgment ("lightening slightly and ever so
+  slightly less bold"). `APP_VERSION` → `2026.07.06a`.
+- **Typography:** group labels + box labels both now `--text-tertiary`
+  (were split between `--text-secondary`/`--text-tertiary` levels, box
+  labels darker than group labels) at weight 500 (group labels were 600).
+  Values (`.field-box` inputs + `.dd-row` slimmed variant) now weight 400
+  (was 500) and a new `--text-strong` token (`#374151`, ~line 28) — no
+  existing token sat between `--text` (#2a2e3d) and `--text-secondary`
+  (#5b6374), so minted one rather than reusing `--text` (which stays the
+  card-title/modal-title/stat-value heading tone, untouched).
+- **Segmented-control centering:** root cause was `#offer-form .field label`
+  (the R57 bottom-pin rule meant for the group-level label like "Offer
+  type *") also matching every individual `.radio-group` segment label,
+  its `align-items:flex-end` beating `.radio-group label`'s own
+  `align-items:center` on specificity. Added `#offer-form .field
+  .radio-group label { align-items:center; justify-content:center;
+  min-height:40px; }` — fixes ALL segmented controls in the offer modal
+  (Offer type, DD-requirement mode, Funded/Open date, Debit requirement),
+  confirmed at 390px where "HELD + DD" (1-line) was visibly bottom-anchored
+  against "NEW FUNDS HELD" (2-line) before the fix.
+- **DD-timing row:** new `.dd-timing-row` class (~line 1206, near `.dd-row`)
+  replaces the old per-item inline `max-width:130/150/140px` guesses with
+  a real `grid-template-columns: repeat(auto-fit, minmax(132px, 1fr))` —
+  identical widths by construction, collapses to fewer columns on narrow
+  viewports instead of wrapping unevenly. 132px floor (not a rounder
+  number) is deliberate: the base `.input-group.with-suffix .input`
+  padding (28px left + 60px right) clips a 3-digit value below that;
+  verified by forcing "999" into all three inputs at 320px width.
+- **Scope respected:** did not touch the "inline DD-requirement count/
+  frequency mini-controls" (`ddreq-count-n` etc.) — R57 deliberately left
+  these unboxed/unlabeled, and they're neither `.field-box` nor `.dd-row`
+  nor the DD-timing row, so they're out of item 1's stated scope and still
+  read `--text`/inherited weight. Not a defect, a scope boundary.
+- **Verification:** `node --check` on extracted inline script passes.
+  Locked-hex counts (AGENTS.md) diffed before/after against HEAD — all 9
+  unchanged. Visually verified via Preview MCP (global `yield-vector-static`
+  launch config, port 4173 — this one resolves correctly against the repo
+  root, unlike R57's session-local `yield-vector`/8765 config) at desktop
+  (1280px) and mobile (390px, 320px): Settings (group labels/values,
+  DD-timing row) and the Add/Edit Offer modal (box labels/values,
+  offer-type + DD-req-mode + Funded/Open-date segmented controls) at both
+  widths. Did not commit or push per explicit instruction.
 
 ### 2026-07-06 — Session L (claude-sonnet-5, /orchestrate worker)
 **Round 57 — Input restyle: label-inside-container pattern**
