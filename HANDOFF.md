@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 66)
+## Current state (as of 2026-07-07, Round 67)
 
-- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08a`
+- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08b`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -37,7 +37,11 @@ grows past ~8 entries, keeping the newest 3–4 live.
   Step 11 (this entry) ran the end-to-end verification battery + docs + version
   bump; the one issue verification surfaced (inline card status-change didn't
   stamp `closed_date`) was fixed pre-push via a shared `reconcileClosedDate`
-  helper. See the R66 log entry for the full feature list.
+  helper. See the R66 log entry for the full feature list. **R67** then shortened
+  the Overview churn "Upcoming" window to 60 days and added per-offer churn snooze
+  (`churn_snoozed_until`, timed or indefinite) across the Overview section, the
+  card line, and the feed (suppressed while snoozed) — owner requests; both R66
+  and R67 are working-tree changes pending the planner's review/commit.
 - **Field-box vertical rhythm (R61):** `.field-box` `gap` 6px (was 2px),
   vertical padding 10px (was 12px) — box height is unchanged for single-line
   fields, but the label now visibly separates from its value instead of
@@ -161,6 +165,43 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor — churn tweaks)
+**Round 67 — Churn window shortened + churnability snooze**
+
+Two owner-requested changes on top of R66's churnability feature.
+- **Churn window 90 → 60.** `CHURN_HORIZON_DAYS` (index.html ~line 5674) is now
+  60 (owner: "Make the churnability window 60 days"). This governs ONLY the
+  Overview "Upcoming" bucket; the feed's `CHURN_FEED_LOOKAHEAD_DAYS` was already
+  60 and the 180-day past-grace constant is untouched.
+- **Churn snooze** (owner: "snooze option … with option for snooze to be
+  indefinite"). New per-offer `churn_snoozed_until: ISO | 'forever' | null`
+  (default null) in `schemaV2Defaults()`. Snoozed = `'forever'` OR an ISO strictly
+  after today (a lapsed timed snooze reads as unsnoozed — the comparison handles
+  expiry, no cleanup migration). New pure `churnSnoozeActive(offer)` is the single
+  reader for all three surfaces. **Deliberately NOT in `TEMPLATE_TERMS_KEYS`** —
+  personal state must never travel into a template; the whitelist excludes it by
+  construction (the harness asserts a real `offerToTemplate` strip omits it).
+  - *Overview section:* snoozed offers drop out of both buckets; each visible row
+    gets a subtle "Snooze" affordance (inline expanding menu, no modal: **30 days
+    / 90 days / Indefinitely** → today+N ISO or `'forever'`); a bottom muted
+    "N snoozed — show" reveal lists snoozed rows ("Snoozed until <M-D-YYYY>" /
+    "Snoozed indefinitely") each with **Unsnooze**. Render gate is now ≥1 visible
+    row OR ≥1 snoozed (reveal stays reachable); hidden only when neither.
+  - *Card churn line:* while snoozed appends a muted one-line suffix — "eligible
+    now — snoozed" / "eligible <date> — snoozed until <date>".
+  - *Feed:* `churn-eligible` is suppressed while snoozed (disappear/reappear
+    rides the existing `_feedEmitted`/`_feedRemoved` tombstones — snooze →
+    `removed[]`, unsnooze/lapse → resurrects). Feed-contract comment +
+    `docs/SHORTCUT_BUILD_GUIDE.md` Finding 9 note the suppression.
+- Persistence rides the existing `App.update` save path (debounced Gist push).
+  New onClick handlers: `churn-snooze-toggle`/`churn-reveal-toggle` (local DOM,
+  no re-render, mirror `toggleTemplatePicker`) and `churn-snooze`/`churn-unsnooze`
+  (App.update). `APP_VERSION` `2026.07.08a` → `2026.07.08b`.
+- **Verification:** `node --check` clean; a 42/42 Node VM harness (snooze-state
+  null/lapsed/future/'forever' × eligible-now/upcoming/none, template whitelist
+  exclusion, horizon-60 boundary 59d shown/61d not); Preview scenarios all green.
+  DO NOT COMMIT — planner reviews then commits.
 
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate step 11 — verification + docs)
 **Round 66 — Bonusflow run verification, documentation & version bump**

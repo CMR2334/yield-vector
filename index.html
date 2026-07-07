@@ -850,6 +850,9 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-tertiary); margin: var(--space-3) 0 2px;
 }
 .churn-group-label:first-child { margin-top: 0; }
+/* Each row is a wrap: the clickable nav area + a trailing snooze-control
+   cluster as siblings, so tapping a snooze button never opens the offer. */
+.churn-row-wrap { position: relative; }
 .churn-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
   gap: var(--space-3); padding: var(--space-3) var(--space-4);
@@ -860,7 +863,7 @@ a { color: inherit; text-decoration: none; }
 .churn-row.clickable { cursor: pointer; }
 .churn-row.clickable:active { transform: translateY(0.5px); }
 .churn-row.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.churn-row[style*="--offer-color"]::before {
+.churn-row-wrap[style*="--offer-color"] .churn-row::before {
   content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px;
   width: 3px; border-radius: 2px; background: var(--offer-color);
 }
@@ -871,7 +874,29 @@ a { color: inherit; text-decoration: none; }
 }
 .churn-row-date { font-size: 12px; color: var(--text-secondary); font-feature-settings: 'tnum' 1; }
 .churn-row-date.success { color: #047857; font-weight: 600; }
+.churn-row-date.muted { color: var(--text-tertiary); }
 .churn-wait-chip { flex: 0 0 auto; white-space: nowrap; }
+
+/* Snooze affordance — a subtle trailing control cluster under each row. The
+   "Snooze" button reveals an inline row of duration choices (no modal). */
+.churn-snooze {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 0 var(--space-4) 2px calc(var(--space-4) + 2px);
+  min-height: 22px; flex-wrap: wrap;
+}
+.churn-snooze-btn, .churn-unsnooze-btn, .churn-snoozed-toggle {
+  color: var(--text-tertiary); padding: 2px 6px; font-size: 11px; font-weight: 600;
+}
+.churn-snooze-btn:hover, .churn-unsnooze-btn:hover, .churn-snoozed-toggle:hover {
+  color: var(--accent); background: var(--accent-soft);
+}
+.churn-snooze-menu { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.churn-snooze-menu[hidden] { display: none; }
+.churn-snooze-menu .btn { font-size: 11px; padding: 2px 8px; }
+.churn-snoozed-reveal-wrap { margin-top: var(--space-3); }
+.churn-snoozed-list[hidden] { display: none; }
+.churn-snoozed-list { margin-top: 2px; }
+.churn-row-snoozed .churn-row-name { color: var(--text-secondary); font-weight: 500; }
 
 /* iOS calendar-icon-style date block: bright red month, large dark day */
 .action-day {
@@ -1562,6 +1587,7 @@ a { color: inherit; text-decoration: none; }
 .yv-life-v.success { color: #047857; font-weight: 600; }
 .yv-life-v.warn { color: #b45309; font-weight: 600; }
 .yv-life-v.muted { color: var(--text-tertiary); }
+.yv-life-snooze { color: var(--text-tertiary); font-weight: 400; }
 .yv-life-tag {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--text-tertiary); background: var(--bg); padding: 1px 5px;
@@ -2761,7 +2787,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.08a';
+const APP_VERSION = '2026.07.08b';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -3275,6 +3301,10 @@ function schemaV2Defaults() {
     churn_wait_months: null,       // Number | null
     churn_anchor: 'bonus_received',// 'bonus_received' | 'account_closed' | 'account_opened'
     churn_notes: '',
+    churn_snoozed_until: null,     // ISO | 'forever' | null — snooze the churn
+                                   // section/feed for this offer. Personal state;
+                                   // deliberately NOT in TEMPLATE_TERMS_KEYS.
+
     bonus_received_date: null,     // ISO | null (anchor date; new — no legacy equiv)
     closed_date: null,             // ISO | null (anchor date; new — no legacy equiv)
     monthly_fee: null,             // Number | null
@@ -3302,7 +3332,7 @@ function schemaV2Defaults() {
 // Whitelist of the OFFER keys a template preserves — offer TERMS only. Anything
 // not on this list (plannedSignupDate, optionalPlannedFundingDate,
 // bonus_received_date, closed_date, last_edited, entityUsed, emailUsed, notes,
-// churn_notes, lifecycle_suggest_dismissed, accountStatus/subStatus/status,
+// churn_notes, churn_snoozed_until, lifecycle_suggest_dismissed, accountStatus/subStatus/status,
 // confidence, includeInScenario, directDeposits) is dropped by construction —
 // a whitelist (not a blacklist) means a NEW personal field added to offers
 // later can never silently leak into a template. color + docUrl are cosmetic /
@@ -5671,7 +5701,7 @@ function safeToCloseDate(offer) {
    date the account can be opened again. The card, the Overview "Upcoming
    churn dates" section, and the `churn-eligible` feed kind all read this. */
 // How far ahead the Overview churn section looks for "Upcoming" eligibility.
-const CHURN_HORIZON_DAYS = 90;
+const CHURN_HORIZON_DAYS = 60;
 // Feed emit window: emit `churn-eligible` when the eligible date is at most this
 // many days AHEAD (upcoming) ...
 const CHURN_FEED_LOOKAHEAD_DAYS = 60;
@@ -5717,6 +5747,23 @@ function churnEligibleDate(offer) {
   const eligible = addMonthsClamped(anchor, months);
   if (!eligible) return null;
   return isoDate(eligible);
+}
+
+// Whether an offer's churn is currently snoozed. True when churn_snoozed_until
+// is the sentinel 'forever' OR an ISO date strictly after today. A TIMED snooze
+// whose date is today-or-earlier has lapsed and reads as NOT snoozed — the
+// comparison alone handles expiry, so no cleanup migration is ever needed.
+// Pure; tolerant of a missing/garbage value (returns false). The Overview
+// section, the card churn line, and the `churn-eligible` feed kind all read
+// this so snooze state can never diverge between surfaces.
+function churnSnoozeActive(offer) {
+  if (!offer) return false;
+  const s = offer.churn_snoozed_until;
+  if (s === 'forever') return true;
+  if (typeof s !== 'string' || !s) return false;
+  const d = parseDate(s);
+  if (!d) return false;
+  return d.getTime() > TODAY.getTime();
 }
 
 function simpleReturn(offer) {
@@ -6561,16 +6608,29 @@ function renderOverview() {
 // marked churnable (churnable===true) — no dead chrome for users who never set
 // churnability. Each row taps through to that offer's edit modal via the shared
 // open-action-target routing (targetKind:'offer').
+//
+// SNOOZE: each visible row carries a subtle "Snooze" affordance (inline
+// expanding action row: 30 days / 90 days / Indefinitely) that writes
+// churn_snoozed_until. Snoozed offers drop out of both buckets and collect at
+// the section bottom behind a muted "N snoozed — show" reveal, each with an
+// Unsnooze button. The section stays mounted when there's ≥1 visible row OR ≥1
+// snoozed offer (so a fully-snoozed section is still reachable to unsnooze);
+// it's hidden entirely only when neither exists.
 function renderOverviewChurnSection() {
   const offers = App.state.offers || [];
-  // Gate: only render the section when churnability is actually in use.
+  // Gate: only consider offers when churnability is actually in use.
   if (!offers.some(o => o.churnable === true)) return '';
 
   const horizon = addDays(TODAY, CHURN_HORIZON_DAYS);
   const eligibleNow = [];
   const upcoming = [];
+  const snoozed = [];
   for (const o of offers) {
     if (o.churnable !== true) continue;
+    // Snoozed churnable offers are pulled out of the buckets entirely and
+    // listed behind the reveal — regardless of whether their eligible date is
+    // computable (you snoozed it; you can always unsnooze it).
+    if (churnSnoozeActive(o)) { snoozed.push({ o }); continue; }
     const elig = churnEligibleDate(o);
     if (!elig) continue;                       // not computable (missing anchor/wait)
     const d = parseDate(elig);
@@ -6579,26 +6639,66 @@ function renderOverviewChurnSection() {
     else if (d.getTime() <= horizon.getTime()) upcoming.push({ o, elig, d });
     // Beyond the horizon → not shown here.
   }
-  // Only mount the section when there's at least one computable date to list
-  // (eligible now or within the horizon). Churnable offers whose date isn't yet
-  // computable — missing anchor or wait period — surface that gap on their own
+  // Mount when there's at least one computable date to list (eligible now or
+  // within the horizon) OR at least one snoozed offer (the reveal must stay
+  // reachable). Churnable offers whose date isn't yet computable — missing
+  // anchor or wait period, and not snoozed — surface that gap on their own
   // cards, not as an empty overview card.
-  if (!eligibleNow.length && !upcoming.length) return '';
+  if (!eligibleNow.length && !upcoming.length && !snoozed.length) return '';
   eligibleNow.sort((a, b) => a.d - b.d);       // soonest first (oldest-eligible first)
   upcoming.sort((a, b) => a.d - b.d);
+  snoozed.sort((a, b) => (a.o.bankName || '').localeCompare(b.o.bankName || ''));
 
+  const offerName = (o) => `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+
+  // A visible (non-snoozed) row: navigation main area + a subtle snooze menu.
+  // The clickable nav div and the snooze controls are SIBLINGS inside a wrap so
+  // interacting with the snooze menu never triggers the row's open-offer click.
   const row = (r, isNow) => {
-    const name = `${r.o.bankName}${r.o.offerName ? ' — ' + r.o.offerName : ''}`;
-    const months = Number(r.o.churn_wait_months);
+    const o = r.o;
+    const months = Number(o.churn_wait_months);
     const waitChip = Number.isFinite(months) && months > 0
       ? `<span class="chip chip-muted churn-wait-chip">${months} mo wait</span>` : '';
     const dateText = isNow ? 'Eligible now' : formatDateDisplay(r.elig);
-    return `<div class="churn-row clickable" data-action="open-action-target" data-target-kind="offer" data-target-id="${escapeAttr(r.o.id)}" role="button" tabindex="0"${offerColorHex(r.o) ? ` style="--offer-color:${offerColorHex(r.o)};"` : ''}>
-      <div class="churn-row-main">
-        <div class="churn-row-name">${escapeHtml(name)}</div>
-        <div class="churn-row-date ${isNow ? 'success' : ''}">${escapeHtml(dateText)}</div>
+    const idAttr = escapeAttr(o.id);
+    const menuId = `churn-snooze-menu-${idAttr}`;
+    return `<div class="churn-row-wrap"${offerColorHex(o) ? ` style="--offer-color:${offerColorHex(o)};"` : ''}>
+      <div class="churn-row clickable" data-action="open-action-target" data-target-kind="offer" data-target-id="${idAttr}" role="button" tabindex="0">
+        <div class="churn-row-main">
+          <div class="churn-row-name">${escapeHtml(offerName(o))}</div>
+          <div class="churn-row-date ${isNow ? 'success' : ''}">${escapeHtml(dateText)}</div>
+        </div>
+        ${waitChip}
       </div>
-      ${waitChip}
+      <div class="churn-snooze">
+        <button type="button" class="btn btn-ghost btn-xs churn-snooze-btn" data-action="churn-snooze-toggle" data-id="${idAttr}" aria-expanded="false" aria-controls="${menuId}" title="Snooze this churn reminder">Snooze</button>
+        <div class="churn-snooze-menu" id="${menuId}" hidden>
+          <button type="button" class="btn btn-ghost btn-xs" data-action="churn-snooze" data-id="${idAttr}" data-snooze="30">30 days</button>
+          <button type="button" class="btn btn-ghost btn-xs" data-action="churn-snooze" data-id="${idAttr}" data-snooze="90">90 days</button>
+          <button type="button" class="btn btn-ghost btn-xs" data-action="churn-snooze" data-id="${idAttr}" data-snooze="forever">Indefinitely</button>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  // A snoozed row (inside the reveal): shows the until-copy + an Unsnooze button.
+  const snoozedRow = (r) => {
+    const o = r.o;
+    const su = o.churn_snoozed_until;
+    const untilText = (su && su !== 'forever' && parseDate(su))
+      ? `Snoozed until ${formatDateDisplay(su)}`
+      : 'Snoozed indefinitely';
+    const idAttr = escapeAttr(o.id);
+    return `<div class="churn-row-wrap churn-row-snoozed"${offerColorHex(o) ? ` style="--offer-color:${offerColorHex(o)};"` : ''}>
+      <div class="churn-row clickable" data-action="open-action-target" data-target-kind="offer" data-target-id="${idAttr}" role="button" tabindex="0">
+        <div class="churn-row-main">
+          <div class="churn-row-name">${escapeHtml(offerName(o))}</div>
+          <div class="churn-row-date muted">${escapeHtml(untilText)}</div>
+        </div>
+      </div>
+      <div class="churn-snooze">
+        <button type="button" class="btn btn-ghost btn-xs churn-unsnooze-btn" data-action="churn-unsnooze" data-id="${idAttr}">Unsnooze</button>
+      </div>
     </div>`;
   };
 
@@ -6611,8 +6711,17 @@ function renderOverviewChurnSection() {
     bodyParts.push(`<div class="churn-group-label">Upcoming (next ${CHURN_HORIZON_DAYS} days)</div>`);
     bodyParts.push(upcoming.map(r => row(r, false)).join(''));
   }
+  // Snoozed reveal — a muted toggle + a hidden block of snoozed rows. Present
+  // only when at least one offer is snoozed.
+  if (snoozed.length) {
+    const n = snoozed.length;
+    bodyParts.push(`<div class="churn-snoozed-reveal-wrap">
+      <button type="button" class="btn btn-ghost btn-xs churn-snoozed-toggle" data-action="churn-reveal-toggle" aria-expanded="false" aria-controls="churn-snoozed-list">${n} snoozed — show</button>
+      <div class="churn-snoozed-list" id="churn-snoozed-list" hidden>${snoozed.map(snoozedRow).join('')}</div>
+    </div>`);
+  }
   // Guaranteed non-empty: the section returns early above unless at least one
-  // bucket has an entry.
+  // bucket has an entry or an offer is snoozed.
   const body = bodyParts.join('');
 
   return `
@@ -6956,6 +7065,10 @@ function buildReminderItems(state) {
   for (const o of state.offers || []) {
     if (!o.id) continue;
     if (o.churnable !== true) continue;
+    if (churnSnoozeActive(o)) continue;   // suppressed while snoozed — a lapsed
+                                          // timed snooze re-emits naturally; the
+                                          // disappear/reappear rides the existing
+                                          // _feedEmitted/_feedRemoved tombstones.
     const elig = churnEligibleDate(o);
     if (!elig) continue;
     const daysOut = daysBetween(TODAY, parseDate(elig));
@@ -7075,9 +7188,12 @@ function buildReminderItems(state) {
        churnable===true AND computable AND the eligible date within
        CHURN_FEED_LOOKAHEAD_DAYS (60) ahead OR at most
        CHURN_FEED_PAST_GRACE_DAYS (180) behind (past-
-       but-recent stays actionable; ancient history isn't resurrected). Binds to
-       the STABLE offer id, so unsetting churnable / clearing the anchor / the
-       window passing tombstones it automatically.
+       but-recent stays actionable; ancient history isn't resurrected).
+       SUPPRESSED while the offer's churn is snoozed (churn_snoozed_until is
+       'forever' or a future ISO — churnSnoozeActive()); a lapsed timed snooze
+       re-emits naturally. Binds to the STABLE offer id, so unsetting churnable /
+       clearing the anchor / snoozing / the window passing tombstones it
+       automatically.
 
    NOTE: this function MUTATES state (manifestVersion, _feedEmitted,
    _feedRemoved) — call it only on the push/persist path (Sync.push /
@@ -7600,7 +7716,17 @@ function renderLifecycleInfo(o) {
     const elig = churnEligibleDate(o);
     if (elig) {
       const past = parseDate(elig) && parseDate(elig).getTime() <= TODAY.getTime();
-      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v ${past ? 'success' : ''}">${past ? 'eligible now' : 'eligible ' + escapeHtml(formatDateDisplay(elig))}</span></div>`);
+      // While snoozed, append a muted suffix on the SAME line. A timed snooze
+      // shows the until-date ("snoozed until 9-1-2026"); a 'forever' snooze (or
+      // any active snooze without a resolvable date) shows a bare "snoozed".
+      let snoozeSuffix = '';
+      if (churnSnoozeActive(o)) {
+        const su = o.churn_snoozed_until;
+        snoozeSuffix = (su && su !== 'forever' && parseDate(su))
+          ? ` <span class="yv-life-snooze">— snoozed until ${escapeHtml(formatDateDisplay(su))}</span>`
+          : ` <span class="yv-life-snooze">— snoozed</span>`;
+      }
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v ${snoozeSuffix ? '' : (past ? 'success' : '')}">${past ? 'eligible now' : 'eligible ' + escapeHtml(formatDateDisplay(elig))}${snoozeSuffix}</span></div>`);
     } else if (Number(o.churn_wait_months) > 0) {
       // Churnable with a wait set but the anchor date isn't recorded yet.
       const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
@@ -12222,6 +12348,10 @@ function onClick(e) {
     case 'toggle-req-done': toggleRequirementDone(id, target.dataset.reqId); break;
     case 'lifecycle-mark-waiting': lifecycleMarkWaiting(id); break;
     case 'lifecycle-dismiss-suggest': lifecycleDismissSuggest(id); break;
+    case 'churn-snooze-toggle': toggleChurnSnoozeMenu(target); break;
+    case 'churn-snooze': churnSnooze(id, target.dataset.snooze); break;
+    case 'churn-unsnooze': churnUnsnooze(id); break;
+    case 'churn-reveal-toggle': toggleChurnSnoozedReveal(target); break;
     case 'close-modal': closeModal(); break;
 
     case 'add-commitment': showCommitmentModal(); break;
@@ -12589,6 +12719,66 @@ function lifecycleDismissSuggest(offerId) {
     if (!o) return;
     o.lifecycle_suggest_dismissed = true;
   });
+}
+
+/* ---- Churn snooze (F6) actions --------------------------------------------- */
+// Toggle a row's inline snooze-duration menu open/closed. LOCAL DOM only (no
+// re-render) — mirrors toggleTemplatePicker: flip aria-expanded + the menu's
+// hidden attribute. The menu re-renders closed on the next full render anyway.
+function toggleChurnSnoozeMenu(btn) {
+  if (!btn) return;
+  const menu = document.getElementById(btn.getAttribute('aria-controls'));
+  if (!menu) return;
+  const open = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!open));
+  menu.hidden = open;
+}
+
+// Toggle the bottom "N snoozed — show" reveal. LOCAL DOM only.
+function toggleChurnSnoozedReveal(btn) {
+  if (!btn) return;
+  const list = document.getElementById(btn.getAttribute('aria-controls'));
+  if (!list) return;
+  const open = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!open));
+  list.hidden = open;
+  // Swap the affordance copy between show/hide without disturbing the count.
+  const n = list.querySelectorAll('.churn-row-wrap').length;
+  btn.textContent = open ? `${n} snoozed — show` : `${n} snoozed — hide`;
+}
+
+// Snooze an offer's churn: 'forever' (indefinite) or a day-count ('30'/'90')
+// → today+N ISO. Rides App.update so it persists (debounced Gist push) and
+// re-renders (the row leaves the buckets, the reveal count updates). No-op on
+// an unknown offer or an unrecognized duration.
+function churnSnooze(offerId, dur) {
+  if (!offerId || !dur) return;
+  let value;
+  if (dur === 'forever') {
+    value = 'forever';
+  } else {
+    const days = Number(dur);
+    if (!Number.isFinite(days) || days <= 0) return;
+    value = isoDate(addDays(TODAY, days));
+  }
+  App.update(s => {
+    const o = (s.offers || []).find(x => x.id === offerId);
+    if (!o) return;
+    o.churn_snoozed_until = value;
+  });
+  toast(dur === 'forever' ? 'Churn snoozed indefinitely' : `Churn snoozed ${dur} days`);
+}
+
+// Clear an offer's churn snooze (back to the active buckets + feed). App.update
+// path — persists + re-renders like any edit.
+function churnUnsnooze(offerId) {
+  if (!offerId) return;
+  App.update(s => {
+    const o = (s.offers || []).find(x => x.id === offerId);
+    if (!o) return;
+    o.churn_snoozed_until = null;
+  });
+  toast('Churn unsnoozed');
 }
 
 function duplicateOffer(id) {
