@@ -1321,6 +1321,81 @@ a { color: inherit; text-decoration: none; }
 .req-add-row .select { flex: 1 1 auto; max-width: 240px; }
 .req-empty { font-size: 12px; color: var(--text-tertiary); padding: 6px 2px; }
 
+/* ---- DoC import (Phase 6): paste area + preview/confirm panel ------------- */
+.doc-import {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--card-soft);
+  overflow: hidden;
+}
+.doc-import-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; background: none; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--accent); text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.doc-import-toggle:hover { color: var(--accent-hover); }
+.doc-import-toggle svg { flex: 0 0 auto; }
+.doc-import-body { padding: 0 12px 12px; border-top: 1px solid var(--border-soft); }
+.doc-import-help { font-size: 12px; color: var(--text-secondary); margin: 10px 0 8px; line-height: 1.45; }
+.doc-import-paste {
+  width: 100%; min-height: 96px; resize: vertical; font-size: 13px;
+  font-family: var(--font-mono); line-height: 1.4; color: var(--text-strong);
+}
+.doc-import-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.doc-import-status { font-size: 12px; }
+.doc-import-status.muted { color: var(--text-tertiary); }
+.doc-import-status.success { color: var(--success); }
+.doc-import-status.danger { color: var(--danger); }
+.doc-import-preview:empty { display: none; }
+.doc-import-preview { margin-top: 12px; }
+.doc-preview-head, .doc-import-empty {
+  font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin-bottom: 10px;
+}
+.doc-import-empty { color: var(--text-tertiary); }
+.doc-fields { display: flex; flex-direction: column; gap: 6px; }
+.doc-field {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer;
+}
+.doc-field .doc-check { flex: 0 0 auto; margin-top: 3px; width: 15px; height: 15px; }
+.doc-field-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.doc-field-head { display: flex; align-items: center; gap: 6px; }
+.doc-field-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+}
+.doc-conf { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.doc-conf-high { background: var(--success); }
+.doc-conf-medium { background: var(--warning); }
+.doc-conf-low { background: var(--text-tertiary); }
+.doc-field-val {
+  font-size: 14px; color: var(--text-strong); font-weight: 500;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0;
+}
+.doc-field-val .doc-new { word-break: break-word; }
+.doc-overwrite { display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); }
+.doc-overwrite .doc-old { text-decoration: line-through; font-size: 13px; }
+.doc-note { font-size: 11px; color: var(--warning); line-height: 1.35; }
+.doc-snippet {
+  font-size: 11px; color: var(--text-tertiary); font-style: italic;
+  line-height: 1.4; word-break: break-word;
+}
+.doc-leftovers {
+  margin-top: 12px; padding: 8px 10px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+  background: var(--card-soft);
+}
+.doc-leftovers-head {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--text-tertiary); margin-bottom: 6px;
+}
+.doc-leftover { font-size: 12px; color: var(--text-secondary); line-height: 1.5; word-break: break-word; }
+.doc-apply-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.doc-apply-hint { font-size: 11px; color: var(--text-tertiary); }
+
 /* Card checklist (step 3): compact requirement list on the offer card. */
 .offer-req-checklist {
   display: flex; flex-direction: column; gap: 2px;
@@ -8802,6 +8877,859 @@ function niceStep(raw) {
 }
 
 /* ============================================================
+   DoC IMPORT (Phase 6): deterministic "glance" parser
+   ============================================================
+   parseDocPost(raw) → { fields:{<key>:{value,confidence,snippet}}, unparsed:[…] }
+   Pure, offline, network-free. Accepts plain text OR raw HTML (a pasted DoC
+   post). HTML is walked on a DETACHED document via DOMParser — never innerHTML'd
+   into the live DOM — so untrusted markup can't execute or touch the page.
+
+   Design source: docs/assessments/2026-07-05 Part I + the 8 corpus quirks.
+   The machine target is the "Offer at a glance" list — a `Label: value` block at
+   the top of every post — plus the leading "Update M/D/YY:" paragraphs (recency
+   reconciliation) and a light body scan for churn-eligibility language.
+
+   Every extracted field carries the verbatim source snippet (≤120 chars) it came
+   from, so the preview panel can show the user exactly what a value was read off.
+   Confidence: 'high' (unambiguous glance value), 'medium' (a reconciled/derived
+   value, or a fuzzy label hit), 'low' (a best-guess, e.g. churn anchor). The
+   parser NEVER writes app state — it only proposes; the preview panel applies. */
+
+// Normalize a raw paste to plain text + strike-through spans. If it looks like
+// HTML (has a tag), walk it on a detached DOMParser document: text is the
+// visible text; `struck` is the concatenated text of every <del>/<s>/<strike>
+// element so callers can prefer the non-struck (current) value (quirk 4). Plain
+// text passes through unchanged with struck:''. Never throws.
+function docNormalizeInput(raw) {
+  const s = String(raw == null ? '' : raw);
+  const looksHtml = /<\w+[\s>/]/.test(s) || /<\/\w+>/.test(s);
+  if (!looksHtml) return { text: s, struck: '' };
+  try {
+    const doc = new DOMParser().parseFromString(s, 'text/html');
+    if (!doc || !doc.body) return { text: s.replace(/<[^>]+>/g, ' '), struck: '' };
+    // Collect struck text before we flatten, then remove struck nodes from the
+    // tree so the "current" text reflects the non-struck value.
+    const struckParts = [];
+    doc.body.querySelectorAll('del, s, strike').forEach(el => {
+      const t = (el.textContent || '').trim();
+      if (t) struckParts.push(t);
+      el.remove();
+    });
+    // Insert newlines around block elements so `Label: value` rows don't run
+    // together once textContent flattens them.
+    doc.body.querySelectorAll('li, p, br, tr, div, h1, h2, h3, h4').forEach(el => {
+      el.appendChild(doc.createTextNode('\n'));
+    });
+    // Flatten, then normalize per-LINE so a paragraph whose SOURCE HTML wrapped
+    // across multiple physical lines (literal newlines inside a <p>) collapses
+    // back to one logical line — critical for the "Update M/D/YY … extended to
+    // DATE." recency paragraphs and multi-line glance rows. Split on runs of
+    // newlines, collapse inner whitespace per chunk, drop empties.
+    const flat = (doc.body.textContent || '').replace(/\u00a0/g, ' ');
+    const text = flat.split(/\n+/).map(function (part) { return part.replace(/[ \t\r]+/g, ' ').trim(); }).filter(Boolean).join('\n');
+    return { text, struck: struckParts.join(' \n ') };
+  } catch (e) {
+    // Degrade to a crude tag-strip rather than fail the import.
+    return { text: s.replace(/<[^>]+>/g, ' '), struck: '' };
+  }
+}
+
+// Trim a source snippet to ≤120 chars, collapsing whitespace, for the preview.
+function docSnippet(s) {
+  const t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  return t.length > 120 ? t.slice(0, 117) + '…' : t;
+}
+
+// Fuzzy label match (quirk 6): lowercase, strip non-alphanumerics, test that all
+// of the target's significant tokens appear in the candidate label. Tolerates
+// "Direct Deposit Required" vs "Direct deposit needed" etc.
+function docLabelMatches(label, tokens) {
+  const norm = String(label).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return tokens.every(t => norm.indexOf(t) !== -1);
+}
+
+// Pull the glance list into an ordered array of {label, value, raw}. A glance
+// row is a line of the form `Label: value` where the label side is short (≤6
+// words) — this excludes prose sentences that merely contain a colon. Also
+// tolerates the WordPress list markup already flattened to "Label value" on its
+// own line by splitting on the first colon only.
+function docExtractGlanceRows(text) {
+  const rows = [];
+  const lines = String(text).split(/\r?\n/);
+  for (const line of lines) {
+    const l = line.trim();
+    if (!l || l.indexOf(':') === -1) continue;
+    const ci = l.indexOf(':');
+    const label = l.slice(0, ci).trim();
+    const value = l.slice(ci + 1).trim();
+    if (!label || !value) continue;
+    // Label side must be short and not a full sentence (no trailing period-word
+    // count blow-up). ≤6 words keeps "Early account termination fee" but drops
+    // "Note that the bonus posts within 60 days: see below".
+    if (label.split(/\s+/).length > 6) continue;
+    // Drop an "Update M/D/YY" pseudo-label — those are handled separately.
+    if (/^update\b/i.test(label) && /\d/.test(label)) continue;
+    rows.push({ label, value, raw: l });
+  }
+  return rows;
+}
+
+// The value of the FIRST glance row whose label fuzzy-matches any token-set in
+// `tokenSets`. Returns {value, raw} or null.
+function docGlance(rows, tokenSets) {
+  for (const row of rows) {
+    for (const tokens of tokenSets) {
+      if (docLabelMatches(row.label, tokens)) return { value: row.value, raw: row.raw };
+    }
+  }
+  return null;
+}
+
+// Parse every US-format date in a string; return the MAX (latest) as ISO, plus
+// its verbatim match (quirk 7 — parse-all-dates-take-max). Accepts M/D/YY,
+// M/D/YYYY, M-D-YYYY, and "Month D, YYYY". Returns null if none.
+function docLatestDate(str) {
+  const s = String(str || '');
+  const found = [];
+  // Numeric M/D/YY or M/D/YYYY (slash or hyphen).
+  let re = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/g, m;
+  while ((m = re.exec(s))) {
+    let y = Number(m[3]); if (y < 100) y += 2000;
+    const iso = _isoFromYMD(y, Number(m[1]), Number(m[2]));
+    if (iso) found.push({ iso, text: m[0] });
+  }
+  // "Month D, YYYY" / "Month D YYYY".
+  const MONTHS = { january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,jan:1,feb:2,mar:3,apr:4,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12 };
+  re = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/g;
+  while ((m = re.exec(s))) {
+    const mo = MONTHS[m[1].toLowerCase()];
+    if (!mo) continue;
+    const iso = _isoFromYMD(Number(m[3]), mo, Number(m[2]));
+    if (iso) found.push({ iso, text: m[0] });
+  }
+  if (!found.length) return null;
+  found.sort((a, b) => a.iso < b.iso ? 1 : a.iso > b.iso ? -1 : 0);
+  return found[0];
+}
+
+// The leading "Update M/D/YY:" paragraphs carry the freshest facts (quirk 5).
+// Returns the text of the update paragraph with the LATEST date (so a later
+// extension of the expiration/amount wins over the stale glance value), or ''.
+function docLatestUpdateBlock(text) {
+  const lines = String(text).split(/\r?\n/).map(l => l.trim());
+  let best = null;
+  const isNewUpdate = (l) => /^update\s*[:\-]?\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/i.test(l);
+  const isGlanceish = (l) => /offer at a glance/i.test(l) || (l.indexOf(':') > 0 && l.slice(0, l.indexOf(':')).split(/\s+/).length <= 6);
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const m = l.match(/^update\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+    if (!m) continue;
+    const d = docLatestDate(m[1]);
+    if (!d) continue;
+    // Gather continuation lines: an "Update …" paragraph can wrap across several
+    // physical lines (source HTML line breaks inside the <p> survive flattening),
+    // so a later "extended to 8/31/2026" clause may sit on the NEXT line. Absorb
+    // following lines until the next Update or a glance row / heading boundary.
+    let para = l;
+    for (let j = i + 1; j < lines.length && j < i + 5; j++) {
+      const nxt = lines[j];
+      if (!nxt || isNewUpdate(nxt) || isGlanceish(nxt)) break;
+      para += ' ' + nxt;
+    }
+    if (!best || d.iso > best.iso) best = { iso: d.iso, text: para };
+  }
+  return best ? best.text : '';
+}
+
+// Extract a money amount from a string, honoring quirks 1–3:
+//  • points-not-dollars (quirk 1): "50,000 membership rewards"/"points"/"miles"
+//    → returns {points:N, snippet} with NO dollar value (caller routes to a note).
+//  • range (quirk 2): "$50 – $300" → returns the HIGH end as the amount + a
+//    rangeLow so the preview can note the spread.
+//  • combined dual-bonus (quirk 3): "$560 total for two accounts" → returns the
+//    number + combined:true so the preview flags it.
+// Returns null if no numeric found. Never assumes a leading `$` (quirk 8).
+// Convert a captured dollar numeric (possibly with a `k`/`K` thousands suffix)
+// to a Number: "1.5k"→1500, "2k"→2000, "1.25k"→1250, "25,000"→25000,
+// "300"→300. Strips commas. Returns null for non-numeric. Centralizes k-
+// shorthand so bonus + fee + funding + spend scans all agree (P2-2).
+function docDollarToNumber(raw) {
+  if (raw == null) return null;
+  let s = String(raw).replace(/,/g, '').trim();
+  const k = /[kK]$/.test(s);
+  if (k) s = s.slice(0, -1);
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  return k ? n * 1000 : n;
+}
+
+// Convert a (number, unit) day/week pair to a day count: weeks ×7 (P3). Used by
+// every window scan that could plausibly be phrased in weeks (posting window,
+// hold period, DD/deposit timeframe). Returns null for a non-numeric count.
+function docDaysFrom(n, unit) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return null;
+  return /week/i.test(String(unit || '')) ? v * 7 : v;
+}
+
+function docParseBonusValue(str) {
+  const s = String(str || '');
+  // Points / miles / membership rewards — no dollar sign in play.
+  const ptsRe = /([\d][\d,]*)\s*(membership\s+rewards|reward\s+points|points|miles|mr\b|thankyou\s+points|ultimate\s+rewards)/i;
+  const pm = s.match(ptsRe);
+  if (pm && !/\$/.test(s.slice(0, pm.index))) {
+    const n = Number(pm[1].replace(/,/g, ''));
+    if (Number.isFinite(n)) return { points: n, unit: pm[2].replace(/\s+/g, ' ').trim(), snippet: s };
+  }
+  // Collect dollar amounts. Accepts an optional `k`/`K` thousands suffix
+  // ("$1.5k" → 1500) so a shorthand headline isn't read 1000× too small (P2-2).
+  const dollarRe = /\$\s?([\d][\d,]*(?:\.\d+)?[kK]?)/g;
+  const nums = [];
+  let m;
+  while ((m = dollarRe.exec(s))) {
+    const n = docDollarToNumber(m[1]);
+    if (n != null) nums.push(n);
+  }
+  if (!nums.length) {
+    // No `$` at all — try a bare number only if the context clearly says bonus
+    // (avoid grabbing an unrelated integer). This stays conservative.
+    const bare = s.match(/\b([\d][\d,]{2,})\b/);
+    if (bare && /bonus|receive|earn/i.test(s)) {
+      const n = Number(bare[1].replace(/,/g, ''));
+      if (Number.isFinite(n)) return { value: n, lowConfidence: true, snippet: s };
+    }
+    return null;
+  }
+  const isRange = /[-–—]|\bto\b|\bup to\b/i.test(s) && nums.length >= 2;
+  const combined = /\btotal\b|\bcombined\b|\bboth\b|\btwo (accounts|bonuses)\b/i.test(s);
+  const hi = Math.max.apply(null, nums);
+  const lo = Math.min.apply(null, nums);
+  const out = { value: hi, snippet: s };
+  if (isRange && hi !== lo) out.rangeLow = lo;
+  if (combined) out.combined = true;
+  return out;
+}
+
+// Pull the first integer that appears near one of the keyword patterns.
+function docIntNear(str, re) {
+  const m = String(str || '').match(re);
+  if (!m) return null;
+  for (let i = 1; i < m.length; i++) { if (m[i] != null && m[i] !== '') { const n = Number(String(m[i]).replace(/,/g, '')); if (Number.isFinite(n)) return n; } }
+  return null;
+}
+
+// The FIRST dollar amount in a string (or null). Used for fee/ETF values, where
+// "$10, waived with $500 in DDs" must read the fee ($10), NOT the max ($500)
+// that docParseBonusValue would return. Honors `k`/`K` shorthand ($1.5k→1500).
+function docFirstDollar(str) {
+  const m = String(str || '').match(/\$\s?([\d][\d,]*(?:\.\d+)?[kK]?)/);
+  return m ? docDollarToNumber(m[1]) : null;
+}
+
+// ---- Churn-eligibility language scan (design Phase 6 "churn hints") ----------
+// Maps phrases like "once every 12 months", "one bonus per household every 2
+// years", "not eligible if you received a bonus in the last 24 months" into
+// churnable/churn_wait_months/churn_anchor(+confidence) + a verbatim churn_notes.
+function docScanChurn(text) {
+  const s = String(text || '');
+  // Split into sentence-ish windows and score EACH for churn language, then keep
+  // the richest hit (one that yields a wait window beats a bare "once per house-
+  // hold"). Scanning all candidates — not just the first — means an early stray
+  // line (e.g. a quoted phrase) can't shadow the real eligibility sentence.
+  const SIG = /\b(?:once|one bonus|1 bonus|eligible|per household|per customer|per person|24 months|12 months|every \d+\s*(?:months?|years?)|received .*bonus|new customers only|not (?:currently )?eligible)\b/i;
+  const windows = s.split(/(?<=[.\n])/).map(w => w.trim()).filter(w => w && SIG.test(w));
+  if (!windows.length) return null;
+  const deriveMonths = (phrase) => {
+    let mm = phrase.match(/every\s+(\d+)\s*(month|year)s?/i)
+      || phrase.match(/(?:last|past|within|in the last)\s+(\d+)\s*(month|year)s?/i)
+      || phrase.match(/(\d+)[\-\s]*(month|year)s?\b/i);
+    if (mm) return Number(mm[1]) * (/year/i.test(mm[2]) ? 12 : 1);
+    return null;
+  };
+  // Prefer a window with a derivable wait window; else the first restrictive one.
+  let phrase = windows.find(w => deriveMonths(w) != null) || windows[0];
+  const months = deriveMonths(phrase);
+  const out = { churn_notes: { value: docSnippet(phrase), confidence: 'medium', snippet: docSnippet(phrase) } };
+  if (months != null) {
+    out.churnable = { value: true, confidence: 'medium', snippet: docSnippet(phrase) };
+    out.churn_wait_months = { value: months, confidence: 'medium', snippet: docSnippet(phrase) };
+    // Anchor best-guess (default 'bonus_received' per prompt). The "counted from
+    // …" qualifier often lands in the NEXT clause/line, so widen the anchor scan
+    // to ~140 chars of context after the phrase's start. Confidence stays low —
+    // it's a best guess either way.
+    const at = s.indexOf(phrase);
+    const ctx = at >= 0 ? s.slice(at, at + phrase.length + 140) : phrase;
+    let anchor = 'bonus_received', aconf = 'low';
+    if (/clos(e|ing|ed)/i.test(ctx)) anchor = 'account_closed';
+    else if (/open(ed|ing)?\b/i.test(ctx)) anchor = 'account_opened';
+    out.churn_anchor = { value: anchor, confidence: aconf, snippet: docSnippet(phrase) };
+  } else if (/once|one bonus|1 bonus|per household|per customer|per person|new customers only/i.test(phrase)) {
+    // A hard household/lifetime limit with no re-run window: not churnable.
+    out.churnable = { value: false, confidence: 'low', snippet: docSnippet(phrase) };
+  }
+  return out;
+}
+
+// MAIN. Deterministic glance parse of a pasted DoC post. Returns
+// { fields:{key:{value,confidence,snippet,note?}}, unparsed:[strings] }.
+// Wrapped by callers in try/catch, but also internally guarded so a malformed
+// paste yields an empty fields object rather than throwing.
+function parseDocPost(raw) {
+  const fields = {};
+  const unparsed = [];
+  const norm = docNormalizeInput(raw);
+  const text = norm.text || '';
+  const rows = docExtractGlanceRows(text);
+  const put = (key, value, confidence, snippet, extra) => {
+    fields[key] = Object.assign({ value, confidence, snippet: docSnippet(snippet) }, extra || {});
+  };
+
+  // If there's essentially nothing to parse, bail early (callers show the
+  // "couldn't find a glance list" message on empty fields).
+  if (!text.trim()) return { fields, unparsed };
+
+  const updateBlock = docLatestUpdateBlock(text);
+
+  // ---- Bank / offer name -----------------------------------------------------
+  // Prefer an explicit glance row; else a heading-ish line "<Bank> $X…".
+  const bankRow = docGlance(rows, [['bank'], ['institution']]);
+  if (bankRow) put('bankName', bankRow.value.replace(/\s+(review|bonus)$/i, '').trim(), 'high', bankRow.raw);
+  // Title heuristic. Real pastes can carry breadcrumb/nav junk before the title,
+  // so don't blindly take line 1: prefer the line right before "Offer at a
+  // glance"; else the FIRST line that actually looks like a bonus title (has a
+  // "$N" or "N points/miles" token). Falls back to line 1 only if neither hits.
+  const allLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const glanceIdx = allLines.findIndex(l => /offer at a glance/i.test(l));
+  // A title is a HEADING with a bonus figure — not an "Update M/D/YY:" recency
+  // paragraph and not a "Label: value" glance row (both can carry a $ figure).
+  const looksTitle = (l) => /(\$[\d,]+|\d[\d,]*\s*(?:points|miles|membership rewards))/i.test(l)
+    && /bonus|checking|savings|account|card|review|points|miles/i.test(l)
+    && !/^update\s*[:\-]?\s*\d{1,2}[\/\-]\d{1,2}/i.test(l)
+    && !(l.indexOf(':') > 0 && l.slice(0, l.indexOf(':')).split(/\s+/).length <= 6);
+  let firstLine = '';
+  if (glanceIdx > 0) { for (let k = glanceIdx - 1; k >= 0; k--) { if (looksTitle(allLines[k])) { firstLine = allLines[k]; break; } } }
+  if (!firstLine) firstLine = allLines.find(looksTitle) || allLines[0] || '';
+  if (!fields.bankName && firstLine) {
+    const bm = firstLine.match(/^(.+?)\s+(?:\$|\d).*?(?:bonus|checking|savings|account|review)/i);
+    if (bm && bm[1].split(/\s+/).length <= 6) put('bankName', bm[1].trim(), 'medium', firstLine);
+  }
+  if (firstLine) {
+    // Offer name = the descriptive tail of the title (e.g. "Premier Checking").
+    const om = firstLine.match(/(?:\$[\d,]+|\d[\d,]*\s*(?:points|miles|membership rewards))\s+(.+?)(?:\s+bonus)?$/i);
+    if (om && om[1]) {
+      const name = om[1].replace(/\bbonus\b/i, '').replace(/\s+/g, ' ').trim();
+      if (name && name.split(/\s+/).length <= 6) put('offerName', name, 'medium', firstLine);
+    }
+  }
+
+  // ---- Bonus amount (quirks 1–3) + recency reconciliation (quirk 5) ----------
+  const bonusRow = docGlance(rows, [['maximum', 'bonus'], ['bonus', 'amount'], ['bonus']]);
+  let bonusSnippetSrc = bonusRow ? bonusRow.raw : '';
+  let bonusVal = bonusRow ? docParseBonusValue(bonusRow.value) : null;
+  // Recency: if a later Update paragraph names a different amount, prefer it.
+  if (updateBlock && /\$|\bbonus\b/i.test(updateBlock)) {
+    const upd = docParseBonusValue(updateBlock);
+    if (upd && upd.value != null && (!bonusVal || bonusVal.value == null || upd.value !== bonusVal.value)) {
+      bonusVal = upd; bonusSnippetSrc = updateBlock;
+    }
+  }
+  if (bonusVal) {
+    if (bonusVal.points != null) {
+      // Quirk 1: points, not dollars — route to a note, no $ value.
+      put('bonusPointsNote', `${bonusVal.points.toLocaleString()} ${bonusVal.unit}`, 'medium', bonusVal.snippet || bonusSnippetSrc);
+    } else if (bonusVal.value != null) {
+      const extra = {};
+      if (bonusVal.rangeLow != null) extra.note = `Range $${bonusVal.rangeLow.toLocaleString()}–$${bonusVal.value.toLocaleString()} — using the high end`;
+      if (bonusVal.combined) extra.note = 'Combined total for two accounts — verify the split';
+      put('signupBonusAmount', bonusVal.value, bonusVal.lowConfidence ? 'low' : (bonusVal.rangeLow != null || bonusVal.combined ? 'medium' : 'high'), bonusVal.snippet || bonusSnippetSrc, extra);
+    }
+  }
+
+  // ---- Expiration (quirks 4,5,7) --------------------------------------------
+  const expRow = docGlance(rows, [['expiration'], ['expires'], ['expiration', 'date'], ['deadline']]);
+  let expSnippet = expRow ? expRow.raw : '';
+  let expDate = expRow ? docLatestDate(expRow.value) : null;
+  // Recency: an Update that "extended" the offer supersedes the glance date.
+  if (updateBlock && /(expir|extend|end|deadline|through)/i.test(updateBlock)) {
+    const ud = docLatestDate(updateBlock);
+    if (ud && (!expDate || ud.iso > expDate.iso)) { expDate = ud; expSnippet = updateBlock; }
+  }
+  if (expDate) {
+    const reconciled = expRow && docLatestDate(expRow.value) && expSnippet === updateBlock;
+    put('offerExpirationDate', expDate.iso, reconciled ? 'medium' : 'high', expSnippet,
+      reconciled ? { note: 'Reconciled from a later "Update" — supersedes the glance date' } : null);
+  }
+
+  // ---- Direct deposit required ----------------------------------------------
+  const ddRow = docGlance(rows, [['direct', 'deposit', 'required'], ['direct', 'deposit', 'needed'], ['direct', 'deposit']]);
+  if (ddRow) {
+    const v = ddRow.value.toLowerCase();
+    const required = /\byes\b|\brequired\b|\bneeded\b/.test(v) && !/\bno\b|not required/.test(v);
+    put('ddRequired', required, required ? 'high' : 'high', ddRow.raw);
+    // DD amount / count / timeframe often live in the same value or nearby body.
+    const amt = docParseBonusValue(ddRow.value);
+    if (required && amt && amt.value != null) put('ddAmount', amt.value, 'medium', ddRow.raw);
+    const cnt = docIntNear(ddRow.value, /(\d+)\s*(?:direct deposits|dds|qualifying)/i);
+    if (required && cnt != null) put('ddCount', cnt, 'medium', ddRow.raw);
+  }
+  // Body scan for DD count / window when not in the glance row. For a DD offer
+  // the "within X days" window IS the deposit-completion window the form stores
+  // in daysAfterSignupAllowedBeforeDeposit (that field is labeled "Complete DDs
+  // within X days" for DD offers), so surface it under that key directly.
+  // NOTE: every body-scan below BOUNDS its `[^.\n]` gaps ({0,160}) so a giant
+  // unterminated line can't trigger quadratic backtracking (P2-1). 160 chars is
+  // comfortably longer than any real glance-row / sentence clause.
+  if (fields.ddRequired && fields.ddRequired.value) {
+    if (!fields.ddCount) {
+      const cm2 = text.match(/([^.\n]{0,160}?\b(\d+)\s+(?:qualifying\s+)?(?:direct deposits?|dds)\b[^.\n]{0,160})/i);
+      if (cm2) put('ddCount', Number(cm2[2]), 'medium', cm2[1]);
+    }
+    const wm = text.match(/([^.\n]{0,160}\bdirect deposit\b[^.\n]{0,160}?\bwithin\s+(\d+)\s+(days?|weeks?)\b[^.\n]{0,160}|[^.\n]{0,160}\bwithin\s+(\d+)\s+(days?|weeks?)\b[^.\n]{0,160}\bdirect deposit\b[^.\n]{0,160})/i);
+    if (wm) {
+      const wnum = wm[2] || wm[4], wunit = wm[3] || wm[5];
+      const d = docDaysFrom(wnum, wunit);
+      if (d != null) put('daysAfterSignupAllowedBeforeDeposit', d, 'medium', wm[1] || wm[0]);
+    }
+  }
+
+  // ---- Funding amount + window / hold ---------------------------------------
+  const fundRow = docGlance(rows, [['minimum', 'deposit'], ['funding'], ['deposit', 'requirement'], ['opening', 'deposit']]);
+  if (fundRow) {
+    const fv = docParseBonusValue(fundRow.value);
+    if (fv && fv.value != null) put('requiredFundingAmount', fv.value, 'high', fundRow.raw);
+  }
+  // Body: "deposit $X within Y days/weeks", "keep/maintain for Z days/weeks".
+  const holdM = text.match(/([^.\n]{0,160}\b(?:keep|maintain|hold|remain|leave)\b[^.\n]{0,160}?(\d+)\s+(days?|weeks?)[^.\n]{0,160})/i);
+  if (holdM) { const d = docDaysFrom(holdM[2], holdM[3]); if (d != null) put('daysFundsMustRemain', d, 'medium', holdM[1]); }
+  if (!fields.daysAfterSignupAllowedBeforeDeposit) {
+    const depWinM = text.match(/([^.\n]{0,160}\bwithin\s+(\d+)\s+(days?|weeks?)\b[^.\n]{0,160}\b(?:deposit|funding|open)[^.\n]{0,160}|[^.\n]{0,160}\bdeposit[^.\n]{0,160}\bwithin\s+(\d+)\s+(days?|weeks?)\b[^.\n]{0,160})/i);
+    if (depWinM) {
+      const dn = depWinM[2] || depWinM[4], du = depWinM[3] || depWinM[5];
+      const d = docDaysFrom(dn, du);
+      if (d != null) put('daysAfterSignupAllowedBeforeDeposit', d, 'medium', depWinM[1] || depWinM[0]);
+    }
+  }
+
+  // ---- Debit transactions ----------------------------------------------------
+  // Allow qualifier words between the count and the noun ("5 qualifying debit
+  // card purchases"). Anchor on a debit/purchase/transaction noun within a short
+  // window of the number so an unrelated "3 months" can't masquerade as a count.
+  const debitM = text.match(/([^.\n]{0,160}?\b(\d+)\s+(?:\w+\s+){0,3}?(?:debit|purchases?|transactions?)\b[^.\n]{0,160})/i);
+  if (debitM && /\bdebit|purchase|transaction/i.test(debitM[1])) {
+    put('debitCount', Number(debitM[2]), 'medium', debitM[1]);
+    const dw = debitM[1].match(/within\s+(\d+)\s+days/i);
+    if (dw) put('debitWithinDays', Number(dw[1]), 'medium', debitM[1]);
+  }
+
+  // ---- Spend / transactions (no legacy field → become user requirement rows) -
+  // Spend: "spend $2,000 in the first 3 months". Emit the amount only; the row
+  // type (spend) has no legacy equivalent so DocImport routes it to #f-user-reqs.
+  const spendM = text.match(/([^.\n]{0,160}\bspend(?:ing)?\b[^.\n]{0,160}?\$\s?([\d][\d,]*(?:\.\d+)?[kK]?)[^.\n]{0,160})/i);
+  if (spendM) { const sv = docDollarToNumber(spendM[2]); if (sv != null) put('spendAmount', sv, 'medium', spendM[1]); }
+  // Transactions / trades that are NOT debit-card purchases (e.g. "3 qualifying
+  // trades", "5 transactions"). Guard on the NOUN PHRASE around the count (not
+  // the whole line — a later "debit card" mention elsewhere in the sentence must
+  // not veto a genuine "3 trades"). Skip if the count already read as debit.
+  const txM = text.match(/\b(\d+)\s+((?:qualifying\s+)?(?:trades?|transactions?))\b/i);
+  if (txM && !/debit|purchase/i.test(txM[2])) {
+    const n = Number(txM[1]);
+    if (!fields.debitCount || fields.debitCount.value !== n) {
+      // Snippet: the sentence the count sits in.
+      const sent = (text.split(/(?<=[.\n])/).find(w => w.indexOf(txM[0]) !== -1) || txM[0]).trim();
+      put('transactionsCount', n, 'medium', sent);
+    }
+  }
+
+  // ---- Monthly fee + waiver --------------------------------------------------
+  const feeRow = docGlance(rows, [['monthly', 'fee'], ['monthly', 'fees'], ['maintenance', 'fee']]);
+  if (feeRow) {
+    const v = feeRow.value.toLowerCase();
+    if (/\bnone\b|\bno\b|\$0\b|waived|free/.test(v) && !/\$[1-9]/.test(v)) {
+      put('monthly_fee', 0, 'high', feeRow.raw);
+    } else {
+      // The FIRST dollar amount is the fee ("$10, waived with $500 in DDs" → 10),
+      // not the max — docParseBonusValue would wrongly grab the waiver figure.
+      const fee = docFirstDollar(feeRow.value);
+      if (fee != null) put('monthly_fee', fee, 'high', feeRow.raw);
+    }
+    // Waiver condition, if the value spells one out.
+    const wv = feeRow.value.match(/waiv\w*\s+(?:with|if|by|for)\s+([^.;]+)/i) || feeRow.value.match(/(?:with|if)\s+([^.;]*direct deposit[^.;]*)/i);
+    if (wv) put('fee_waiver_condition', wv[1].trim(), 'medium', feeRow.raw);
+  }
+  // Body waiver scan when the fee row didn't carry one. Bounded gaps (P2-1).
+  if (!fields.fee_waiver_condition) {
+    const wvb = text.match(/([^.\n]{0,160}\bfee\b[^.\n]{0,160}\bwaiv\w*[^.\n]{0,160})/i);
+    if (wvb) {
+      const cond = wvb[1].match(/waiv\w*\s+(?:with|if|by|for|when)\s+([^.;\n]+)/i);
+      if (cond) put('fee_waiver_condition', cond[1].trim(), 'medium', wvb[1]);
+    }
+  }
+
+  // ---- Early termination fee + window ---------------------------------------
+  const etfRow = docGlance(rows, [['early', 'termination'], ['early', 'account', 'closure'], ['closure', 'fee']]);
+  if (etfRow) {
+    const v = etfRow.value.toLowerCase();
+    if (/\bnone\b|\bno\b|\$0\b/.test(v) && !/\$[1-9]/.test(v)) {
+      put('early_termination_fee', 0, 'high', etfRow.raw);
+    } else {
+      const ev = docFirstDollar(etfRow.value);
+      if (ev != null) put('early_termination_fee', ev, 'high', etfRow.raw);
+      const win = docIntNear(etfRow.value, /within\s+(\d+)\s+days|(\d+)\s+days/i);
+      if (win != null) put('etf_window_days', win, 'medium', etfRow.raw);
+    }
+  }
+
+  // ---- Promo code ------------------------------------------------------------
+  const promoRow = docGlance(rows, [['promo', 'code'], ['promotion', 'code'], ['bonus', 'code'], ['offer', 'code']]);
+  if (promoRow) {
+    const code = (promoRow.value.match(/\b([A-Z0-9]{3,})\b/) || [])[1];
+    if (code) put('promo_code', code, 'high', promoRow.raw);
+  } else {
+    const pm2 = text.match(/\b(?:promo(?:tion)?|bonus|offer)\s+code[:\s]+([A-Z0-9]{3,})\b/);
+    if (pm2) put('promo_code', pm2[1], 'medium', pm2[0]);
+  }
+
+  // ---- Bonus posting window (min/max days) ----------------------------------
+  // Verb set covers post/pay/paid/credit/deposit ("bonus will be PAID within 20
+  // days"). Range form first ("posts within 45 – 60 days" / "6-8 weeks"), then
+  // single-bound. UNIT accepts days OR weeks (weeks ×7). Every gap quantifier is
+  // BOUNDED ({0,160}) so no pathological line can drive quadratic backtracking
+  // (a `bonus` + verb line that never terminates with a period). See docP2 note.
+  const POSTVERB = '(?:post|posts|posted|pay|paid|credit|credited|deposit|deposited)';
+  const UNIT = '(days?|weeks?)';
+  const G = '[^.\\n]{0,160}';
+  const postM = text.match(new RegExp('(' + G + 'bonus' + G + POSTVERB + G + '?(\\d+)\\s*(?:-|–|—|to)\\s*(\\d+)\\s+' + UNIT + ')', 'i'));
+  if (postM) {
+    const unit = postM[4];
+    put('bonus_post_min_days', docDaysFrom(postM[2], unit), 'medium', postM[1]);
+    put('bonus_post_max_days', docDaysFrom(postM[3], unit), 'medium', postM[1]);
+  } else {
+    const postSingle = text.match(new RegExp('(' + G + 'bonus' + G + POSTVERB + G + '?within\\s+(\\d+)\\s+' + UNIT + '|' + G + 'within\\s+(\\d+)\\s+' + UNIT + G + 'bonus' + G + POSTVERB + G + ')', 'i'));
+    if (postSingle) {
+      const n = postSingle[2] || postSingle[4];
+      const unit = postSingle[3] || postSingle[5];
+      put('bonus_post_max_days', docDaysFrom(n, unit), 'medium', postSingle[1]);
+    }
+  }
+
+  // ---- Churn hints -----------------------------------------------------------
+  const churn = docScanChurn(text);
+  if (churn) { for (const k in churn) fields[k] = churn[k]; }
+
+  // ---- Leftovers ("Not auto-filled") ----------------------------------------
+  // Glance rows whose label we didn't map become manual-reference leftovers, so
+  // the user can eyeball state-eligibility, ChexSystems, hard-pull, etc.
+  const CLAIMED = /bank|institution|bonus|expir|expires|deadline|direct deposit|minimum deposit|funding|deposit requirement|opening deposit|monthly fee|maintenance fee|termination|closure|promo|promotion code|offer code/i;
+  for (const row of rows) {
+    if (!CLAIMED.test(row.label)) unparsed.push(docSnippet(row.raw));
+  }
+
+  return { fields, unparsed };
+}
+
+/* ============================================================
+   DoC IMPORT: preview/confirm panel + apply-to-form
+   ============================================================
+   Bridges parseDocPost() output → the offer-form inputs. NOTHING here saves
+   state — Apply only fills FORM inputs (legacy inputs for mappable fields, so
+   the existing write-through/derivation refresh fires; #f-user-reqs additions
+   for row-only types; scalars for Fees & terms / Churnability / expiration /
+   names). The user still presses the normal Save. All parsed strings + snippets
+   are escaped before reaching innerHTML (paste is untrusted). */
+
+// Field-mapping metadata. Order here is the preview render order. Each entry:
+//   key       parseDocPost field key
+//   label     preview display label (0.02em uppercase via CSS)
+//   format(v) → human display string for the parsed value
+//   apply(v)  → writes into the form; may be a scalar-input write or bespoke
+//   current() → the CURRENT non-empty form value as a display string (for the
+//               overwrite strike-through), or '' when the field is empty
+// The Dom helpers (`_docSetInput`, etc.) dispatch input+change so the modal's
+// existing reverse-write-through / derived-row refresh recomputes.
+function _docForm() { return document.getElementById('offer-form'); }
+function _docEl(sel) { const f = _docForm(); return f ? f.querySelector(sel) : null; }
+// Set a scalar input's value and fire input+change so dependent logic runs.
+function _docSetInput(sel, value, kind) {
+  const el = _docEl(sel);
+  if (!el) return;
+  if (kind === 'money') el.value = (value == null || value === '') ? '' : formatMoneyInput(value);
+  else if (kind === 'date') el.value = value ? formatDateDisplay(value) : '';
+  else el.value = (value == null) ? '' : String(value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function _docCurrentInput(sel, kind) {
+  const el = _docEl(sel);
+  if (!el || el.value == null || String(el.value).trim() === '') return '';
+  if (kind === 'money') { const n = parseMoneyInput(el.value); return n == null ? '' : '$' + formatMoneyInput(n); }
+  return String(el.value).trim();
+}
+// Add (or update) a user requirement row of `type` with amount/count into the
+// hidden #f-user-reqs payload, then refresh the requirements section. Reuses the
+// same mechanism the modal's "+ Add requirement" uses so the row survives Save.
+function _docAddUserReq(type, over) {
+  const rows = (typeof readUserReqsFromForm === 'function') ? readUserReqsFromForm() : [];
+  // De-dupe on type + NORMALIZED LABEL, not type alone: re-importing the same
+  // post updates the matching import-row in place, but two genuinely different
+  // rows of the same type (e.g. two distinct "Spend" requirements with different
+  // labels) no longer collapse into one on re-apply.
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/\s+/g, ' ').trim();
+  const wantLabel = norm((over || {}).label);
+  let row = rows.find(r => r && r._fromImport && r.type === type && norm(r.label) === wantLabel);
+  if (!row) { row = makeRequirementRow(Object.assign({ id: uid('req'), type, source: 'user', _fromImport: true }, over || {})); rows.push(row); }
+  else { Object.assign(row, over || {}); }
+  if (typeof writeUserReqsToForm === 'function') writeUserReqsToForm(rows);
+  if (typeof refreshRequirementsSection === 'function') refreshRequirementsSection();
+}
+
+const DOC_FIELD_MAP = [
+  { key: 'bankName', label: 'Bank name', format: v => v, current: () => _docCurrentInput('#f-bank'), apply: v => _docSetInput('#f-bank', v) },
+  { key: 'offerName', label: 'Offer name', format: v => v, current: () => _docCurrentInput('#f-offer'), apply: v => _docSetInput('#f-offer', v) },
+  { key: 'signupBonusAmount', label: 'Bonus amount', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-bonus', 'money'), apply: v => _docSetInput('#f-bonus', v, 'money') },
+  { key: 'offerExpirationDate', label: 'Expiration date', format: v => formatDateDisplay(v), current: () => _docCurrentInput('#f-expires'), apply: v => _docSetInput('#f-expires', v, 'date') },
+  { key: 'ddRequired', label: 'Direct deposit required', format: v => v ? 'Yes' : 'No',
+    current: () => { const t = (( _docForm() || {}).querySelector ? _docForm().querySelector('[name="offerType"]:checked') : null); return t ? ({ 'new-funds-held': 'New funds held', 'direct-deposit': 'Direct deposit', 'held-and-dd': 'Held + DD' }[t.value] || '') : ''; },
+    apply: v => {
+      // Only switch offer type when DD is required and the form is still on the
+      // default new-funds-held — never clobber a user's explicit Held+DD choice.
+      if (!v) return;
+      const cur = (_docEl('[name="offerType"]:checked') || {}).value;
+      if (cur === 'new-funds-held') { const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }
+    } },
+  { key: 'requiredFundingAmount', label: 'Funding amount', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-funding', 'money'), apply: v => _docSetInput('#f-funding', v, 'money') },
+  { key: 'daysAfterSignupAllowedBeforeDeposit', label: 'Deposit/DD window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-deposit'), apply: v => _docSetInput('#f-days-deposit', v) },
+  { key: 'daysFundsMustRemain', label: 'Hold period (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-remain'), apply: v => _docSetInput('#f-days-remain', v) },
+  { key: 'debitCount', label: 'Debit transactions', format: v => v + '×',
+    current: () => { const y = _docEl('#debit-yes'); return (y && y.checked) ? _docCurrentInput('#f-debit-count') : ''; },
+    apply: v => { const y = _docEl('#debit-yes'); if (y) { y.checked = true; y.dispatchEvent(new Event('change', { bubbles: true })); } _docSetInput('#f-debit-count', v); } },
+  { key: 'debitWithinDays', label: 'Debit window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-debit-within'), apply: v => _docSetInput('#f-debit-within', v) },
+  { key: 'monthly_fee', label: 'Monthly fee', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-monthly-fee', 'money'), apply: v => _docSetInput('#f-monthly-fee', v, 'money') },
+  { key: 'fee_waiver_condition', label: 'Fee waiver condition', format: v => v, current: () => _docCurrentInput('#f-fee-waiver'), apply: v => _docSetInput('#f-fee-waiver', v) },
+  { key: 'early_termination_fee', label: 'Early termination fee', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-etf', 'money'), apply: v => _docSetInput('#f-etf', v, 'money') },
+  { key: 'etf_window_days', label: 'ETF window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-etf-window'), apply: v => _docSetInput('#f-etf-window', v) },
+  { key: 'promo_code', label: 'Promo code', format: v => v, current: () => _docCurrentInput('#f-promo-code'), apply: v => _docSetInput('#f-promo-code', v) },
+  { key: 'bonus_post_min_days', label: 'Bonus posting min (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-bonus-post-min'), apply: v => _docSetInput('#f-bonus-post-min', v) },
+  { key: 'bonus_post_max_days', label: 'Bonus posting max (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-bonus-post-max'), apply: v => _docSetInput('#f-bonus-post-max', v) },
+  { key: 'churnable', label: 'Can be churned', format: v => v ? 'Yes' : 'No',
+    current: () => { const el = _docEl('#f-churnable'); return (el && el.value) ? ({ 'true': 'Yes', 'false': 'No' }[el.value] || '') : ''; },
+    apply: v => _docSetInput('#f-churnable', v ? 'true' : 'false') },
+  { key: 'churn_wait_months', label: 'Churn wait (months)', format: v => v + ' months', current: () => _docCurrentInput('#f-churn-wait'), apply: v => _docSetInput('#f-churn-wait', v) },
+  { key: 'churn_anchor', label: 'Churn counted from', format: v => ({ bonus_received: 'Bonus received', account_closed: 'Account closed', account_opened: 'Account opened' }[v] || v),
+    current: () => { const el = _docEl('#f-churn-anchor'); return (el && el.value) ? ({ bonus_received: 'Bonus received', account_closed: 'Account closed', account_opened: 'Account opened' }[el.value] || '') : ''; },
+    apply: v => _docSetInput('#f-churn-anchor', v) },
+  { key: 'churn_notes', label: 'Churn notes', format: v => v, current: () => _docCurrentInput('#f-churn-notes'), apply: v => _docSetInput('#f-churn-notes', v) },
+  // Row-only requirement types (no legacy field): land in #f-user-reqs.
+  { key: 'spendAmount', label: 'Spend requirement', format: v => '$' + formatMoneyInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
+  { key: 'transactionsCount', label: 'Transactions requirement', format: v => v + '×', current: () => '', apply: v => _docAddUserReq('transactions', { count: v, label: 'Transactions' }) },
+  // Notes-only (points bonus, quirk 1): appended to the Notes textarea.
+  { key: 'bonusPointsNote', label: 'Points bonus (→ notes)', format: v => v, current: () => '',
+    apply: v => { const el = _docEl('#f-notes'); if (el) { const add = 'Bonus: ' + v; el.value = el.value && el.value.trim() ? (el.value.replace(/\s+$/, '') + '\n' + add) : add; el.dispatchEvent(new Event('input', { bubbles: true })); } } },
+];
+const DOC_FIELD_BY_KEY = DOC_FIELD_MAP.reduce((m, e) => { m[e.key] = e; return m; }, {});
+
+// Confidence → dot color class + label.
+function _docConfDot(conf) {
+  const c = conf === 'high' ? 'high' : conf === 'medium' ? 'medium' : 'low';
+  return `<span class="doc-conf doc-conf-${c}" title="${c} confidence"></span>`;
+}
+
+// Render the preview list from a parse result into #doc-import-preview. Every
+// parsed value + snippet is escaped. Checkbox defaults: checked for high/medium,
+// unchecked for low. Overwrite visibility: if the target form field already has
+// a non-empty value that differs, show it struck-through beside the new value.
+function renderDocPreview(result) {
+  const host = document.getElementById('doc-import-preview');
+  if (!host) return;
+  const fields = (result && result.fields) || {};
+  const keys = DOC_FIELD_MAP.map(e => e.key).filter(k => fields[k] && fields[k].value != null && fields[k].value !== '');
+  if (!keys.length) {
+    host.innerHTML = `<div class="doc-import-empty">No fields could be read from that paste. Fill the form manually.</div>`;
+    return;
+  }
+  const rows = keys.map(key => {
+    const meta = DOC_FIELD_BY_KEY[key];
+    const f = fields[key];
+    let display = '';
+    try { display = meta.format(f.value); } catch (e) { display = String(f.value); }
+    const conf = f.confidence || 'low';
+    const checked = (conf === 'high' || conf === 'medium') ? 'checked' : '';
+    let curr = '';
+    try { curr = meta.current(); } catch (e) { curr = ''; }
+    const overwrite = curr && curr !== display
+      ? `<span class="doc-overwrite"><span class="doc-old">${escapeHtml(curr)}</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>`
+      : '';
+    const noteLine = f.note ? `<div class="doc-note">${escapeHtml(f.note)}</div>` : '';
+    return `
+      <label class="doc-field" data-doc-key="${escapeAttr(key)}">
+        <input type="checkbox" class="doc-check" ${checked} />
+        <span class="doc-field-main">
+          <span class="doc-field-head">
+            <span class="doc-field-label">${escapeHtml(meta.label)}</span>
+            ${_docConfDot(conf)}
+          </span>
+          <span class="doc-field-val">${overwrite}<span class="doc-new">${escapeHtml(display)}</span></span>
+          ${noteLine}
+          <span class="doc-snippet">"${escapeHtml(f.snippet || '')}"</span>
+        </span>
+      </label>`;
+  }).join('');
+  const leftovers = Array.isArray(result.unparsed) && result.unparsed.length
+    ? `<div class="doc-leftovers"><div class="doc-leftovers-head">Not auto-filled (manual reference)</div>${result.unparsed.map(s => `<div class="doc-leftover">${escapeHtml(s)}</div>`).join('')}</div>`
+    : '';
+  const applyCount = keys.filter(k => { const c = fields[k].confidence; return c === 'high' || c === 'medium'; }).length;
+  host.innerHTML = `
+    <div class="doc-preview-head">Review ${keys.length} field${keys.length === 1 ? '' : 's'} — uncheck anything you don't want. Values only fill the form; nothing saves until you press Save.</div>
+    <div class="doc-fields">${rows}</div>
+    ${leftovers}
+    <div class="doc-apply-row">
+      <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-apply">Apply <span id="doc-apply-count">${applyCount}</span> selected</button>
+      <span class="doc-apply-hint">Fills the form for your review — then Save as usual.</span>
+    </div>`;
+}
+
+// Live-update the "Apply N selected" count as checkboxes toggle.
+function docImportUpdateApplyCount() {
+  const host = document.getElementById('doc-import-preview');
+  const out = document.getElementById('doc-apply-count');
+  if (!host || !out) return;
+  out.textContent = String(host.querySelectorAll('.doc-check:checked').length);
+}
+
+// Cache of the last parse result for Apply (avoids re-parsing / re-escaping).
+let _docLastParse = null;
+
+// Parse handler — reads the textarea, runs parseDocPost inside try/catch so a
+// throw can never break the modal, and renders the preview (or a graceful
+// error). Empty/garbage paste → inline muted message, form untouched.
+function docImportParse() {
+  const ta = document.getElementById('doc-import-paste');
+  const status = document.getElementById('doc-import-status');
+  const preview = document.getElementById('doc-import-preview');
+  if (!ta) return;
+  let raw = ta.value || '';
+  if (!raw.trim()) {
+    if (status) { status.textContent = 'Paste a post first.'; status.className = 'doc-import-status muted'; }
+    if (preview) preview.innerHTML = '';
+    _docLastParse = null;
+    return;
+  }
+  // Hard cap the input before the synchronous parse. A real DoC post is a few
+  // KB; anything past 200KB is either a mis-paste or a deliberate pathological
+  // input. Capping keeps the parse bounded (defense-in-depth alongside the
+  // bounded regexes) and never freezes the modal (P2-1). Truncation is surfaced.
+  const DOC_MAX_CHARS = 200000;
+  let truncated = false;
+  if (raw.length > DOC_MAX_CHARS) { raw = raw.slice(0, DOC_MAX_CHARS); truncated = true; }
+  const truncNote = truncated ? ' (large paste truncated to 200KB)' : '';
+  let result;
+  try {
+    result = parseDocPost(raw);
+  } catch (e) {
+    if (typeof logError === 'function') logError(ErrCode.PARSE, e, 'docImportParse');
+    if (status) { status.textContent = "Couldn't parse that paste — fill the form manually."; status.className = 'doc-import-status danger'; }
+    if (preview) preview.innerHTML = '';
+    _docLastParse = null;
+    return;
+  }
+  _docLastParse = result;
+  const nFields = Object.keys((result && result.fields) || {}).filter(k => result.fields[k] && result.fields[k].value != null && result.fields[k].value !== '' && DOC_FIELD_BY_KEY[k]).length;
+  if (nFields === 0) {
+    if (status) { status.textContent = "Couldn't find a glance list — fill manually." + truncNote; status.className = 'doc-import-status muted'; }
+    if (typeof logError === 'function') logError(ErrCode.PARSE, new Error('no fields parsed from paste'), 'docImportParse: empty');
+    if (preview) preview.innerHTML = '';
+    return;
+  }
+  if (status) { status.textContent = `Found ${nFields} field${nFields === 1 ? '' : 's'} — review below.` + truncNote; status.className = 'doc-import-status success'; }
+  renderDocPreview(result);
+}
+
+// Apply handler — writes every CHECKED field into the form via its map entry.
+// Wrapped per-field so one bad apply can't abort the rest. Reports a toast.
+function docImportApply() {
+  const host = document.getElementById('doc-import-preview');
+  if (!host || !_docLastParse) return;
+  let applied = 0;
+  host.querySelectorAll('.doc-field').forEach(row => {
+    const cb = row.querySelector('.doc-check');
+    if (!cb || !cb.checked) return;
+    const key = row.getAttribute('data-doc-key');
+    const meta = DOC_FIELD_BY_KEY[key];
+    const f = _docLastParse.fields[key];
+    if (!meta || !f) return;
+    try { meta.apply(f.value); applied++; }
+    catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: ' + key); }
+  });
+  // Refresh the requirements section once more so any user rows + derived rows
+  // reflect the freshly-applied legacy values (funding/debit → derived rows).
+  if (typeof refreshRequirementsSection === 'function') refreshRequirementsSection();
+  if (typeof refreshLifecycleStrip === 'function') refreshLifecycleStrip();
+  const status = document.getElementById('doc-import-status');
+  if (status) { status.textContent = `Applied ${applied} field${applied === 1 ? '' : 's'} to the form — review, then Save.`; status.className = 'doc-import-status success'; }
+  if (typeof toast === 'function') toast(`Applied ${applied} field${applied === 1 ? '' : 's'} — review and Save`);
+}
+
+// Clear handler — collapses the preview + empties the paste area. Form untouched.
+function docImportClear() {
+  const ta = document.getElementById('doc-import-paste');
+  const preview = document.getElementById('doc-import-preview');
+  const status = document.getElementById('doc-import-status');
+  if (ta) ta.value = '';
+  if (preview) preview.innerHTML = '';
+  if (status) { status.textContent = ''; status.className = 'doc-import-status'; }
+  _docLastParse = null;
+}
+
+// Toggle the import body open/closed.
+function docImportToggle(btn) {
+  const body = document.getElementById('doc-import-body');
+  if (!btn || !body) return;
+  const open = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!open));
+  body.hidden = open;
+  if (!open) { const ta = document.getElementById('doc-import-paste'); if (ta) setTimeout(() => ta.focus(), 30); }
+}
+
+// ---- Dev-only self-test hook (step-11 regression; NOT auto-run) -------------
+// testDocParser(rawText, fixtureKey) parses `rawText` and asserts it against a
+// compact embedded expected-value map for the given fixture. No network/file IO
+// — paste the fixture text in the console. Returns {pass,fail,failures}. Call
+// with no args to see the available fixture keys + usage.
+const DOC_TEST_EXPECT = {
+  '01': { bankName: 'Meridian Trust Bank', signupBonusAmount: 300, offerExpirationDate: '2026-09-30', ddRequired: true, monthly_fee: 0, early_termination_fee: 25, etf_window_days: 90, promo_code: 'PREMIER300', daysAfterSignupAllowedBeforeDeposit: 60, bonus_post_max_days: 30 },
+  '02': { bonusPointsNote: '@present', signupBonusAmount: '@absent', offerExpirationDate: '2026-12-31', ddRequired: false, monthly_fee: 95, early_termination_fee: 0, churn_wait_months: 12 },
+  '03': { signupBonusAmount: 560, offerExpirationDate: '2026-08-31', ddRequired: true, churn_wait_months: 24, bonus_post_min_days: 45, bonus_post_max_days: 60 },
+  '04': { signupBonusAmount: 400, ddRequired: true, monthly_fee: 10, early_termination_fee: 50, etf_window_days: 120, promo_code: 'RELAY400', debitCount: 5, debitWithinDays: 60, bonus_post_max_days: 20, offerExpirationDate: '2026-10-15' },
+  // 05 also covers "$50k" shorthand → 50000 (P2-2) and "6 to 8 weeks" → 42/56 (P3).
+  '05': { bankName: 'Summit Brokerage', signupBonusAmount: 1000, requiredFundingAmount: 50000, ddRequired: false, offerExpirationDate: '2026-11-30', daysFundsMustRemain: 90, churnable: true, churn_wait_months: 24, churn_anchor: 'account_closed', bonus_post_min_days: 42, bonus_post_max_days: 56 },
+};
+function testDocParser(rawText, fixtureKey) {
+  const keys = Object.keys(DOC_TEST_EXPECT);
+  if (rawText == null || fixtureKey == null) {
+    console.log('Usage: testDocParser(rawText, fixtureKey) — fixtureKey ∈ ' + JSON.stringify(keys));
+    console.log('Paste a fixture from docs/fixtures/doc-samples/ (key = leading number, e.g. "01").');
+    return { pass: 0, fail: 0, failures: ['no args'] };
+  }
+  const exp = DOC_TEST_EXPECT[String(fixtureKey)];
+  if (!exp) { console.warn('Unknown fixtureKey', fixtureKey, '— expected one of', keys); return { pass: 0, fail: 0, failures: ['unknown key'] }; }
+  let res;
+  try { res = parseDocPost(rawText); } catch (e) { console.error('parseDocPost threw', e); return { pass: 0, fail: 1, failures: ['threw: ' + e.message] }; }
+  let pass = 0, fail = 0; const failures = [];
+  Object.keys(exp).forEach(k => {
+    const want = exp[k];
+    const got = res.fields[k];
+    if (want === '@present') { if (got && got.value != null && got.value !== '') pass++; else { fail++; failures.push(k + ' expected present'); } return; }
+    if (want === '@absent') { if (!got) pass++; else { fail++; failures.push(k + ' expected absent, got ' + JSON.stringify(got.value)); } return; }
+    if (!got) { fail++; failures.push(k + ' MISSING (want ' + JSON.stringify(want) + ')'); return; }
+    if (got.value !== want) { fail++; failures.push(k + ' = ' + JSON.stringify(got.value) + ' want ' + JSON.stringify(want)); return; }
+    pass++;
+  });
+  const line = `testDocParser[${fixtureKey}]: PASS ${pass}  FAIL ${fail}`;
+  if (fail) { console.warn(line); failures.forEach(f => console.warn('  ✗ ' + f)); }
+  else console.log('%c' + line, 'color:#10b981');
+  return { pass, fail, failures };
+}
+
+/* ============================================================
    MODAL: ADD/EDIT OFFER
    ============================================================ */
 function showOfferModal(offerId = null) {
@@ -9105,6 +10033,24 @@ function showOfferModal(offerId = null) {
         <div class="advanced-fields" id="advanced-fields">
           <div class="form-grid">
             <div class="field"><div class="field-box"><label for="f-doc">DoC / source URL</label><input id="f-doc" class="input" type="url" placeholder="https://doctorofcredit.com/..." value="${escapeAttr(o.docUrl)}" name="docUrl" /></div></div>
+            <div class="field" style="grid-column: 1 / -1;">
+              <div class="doc-import" id="doc-import">
+                <button type="button" class="doc-import-toggle" data-action="doc-import-toggle" aria-expanded="false" aria-controls="doc-import-body">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Import from Doctor of Credit</span>
+                </button>
+                <div class="doc-import-body" id="doc-import-body" hidden>
+                  <p class="doc-import-help">Paste the full Doctor of Credit post text or HTML below, then Parse. Nothing is saved — parsed values fill the form for you to review and confirm.</p>
+                  <textarea id="doc-import-paste" class="textarea doc-import-paste" rows="5" placeholder="Paste the Doctor of Credit post here…" autocomplete="off" spellcheck="false"></textarea>
+                  <div class="doc-import-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-parse">Parse</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-action="doc-import-clear">Clear</button>
+                    <span class="doc-import-status" id="doc-import-status" role="status" aria-live="polite"></span>
+                  </div>
+                  <div class="doc-import-preview" id="doc-import-preview"></div>
+                </div>
+              </div>
+            </div>
             <div class="field">
               <div class="field-box">
                 <label for="f-entity">Entity used</label>
@@ -9304,6 +10250,8 @@ function showOfferModal(offerId = null) {
     };
     form.addEventListener('change', (ev) => {
       if (!ev.target) return;
+      // DoC-import preview checkbox toggled → live-update the "Apply N" count.
+      if (ev.target.classList && ev.target.classList.contains('doc-check')) { docImportUpdateApplyCount(); return; }
       if (ev.target.name === 'offerType') syncDdSectionUI();
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
@@ -10558,6 +11506,10 @@ function onClick(e) {
     case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { deleteOffer(id); closeModal(); } break;
     case 'save-offer': saveOfferFromForm(id, target.dataset.isedit === '1'); break;
     case 'toggle-advanced-form': toggleAdvancedForm(target); break;
+    case 'doc-import-toggle': docImportToggle(target.closest('.doc-import-toggle') || target); break;
+    case 'doc-import-parse': docImportParse(); break;
+    case 'doc-import-apply': docImportApply(); break;
+    case 'doc-import-clear': docImportClear(); break;
     case 'add-dd-row': addDdRow(); break;
     case 'remove-dd-row': removeDdRow(target.closest('.dd-row')); break;
     case 'add-req-row': addRequirementRow(); break;

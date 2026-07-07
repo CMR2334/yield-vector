@@ -1,0 +1,27 @@
+SYNTHETIC fixture. Structure modeled on doctorofcredit.com glance lists.
+Fictional broker "Summit Brokerage". PLAIN TEXT (no HTML) to exercise the
+text path. Exercises a re-run eligibility window with an account-closed anchor,
+trade-count and card-spend obligations that map to user rows, a "$k" thousands-
+shorthand funding amount (P2-2), and a WEEKS bonus-posting window (P3, ×7).
+Expected values are tabulated in README.md. Not copied from any real DoC post.
+
+Summit Brokerage $1,000 New Account Bonus
+
+Offer at a glance
+Maximum bonus amount: $1,000
+Availability: Nationwide
+Direct deposit required: No
+Hard/soft pull: Soft pull
+Minimum deposit: $50k
+Monthly fees: None
+Early account termination fee: None
+Expiration date: 11/30/2026
+
+Deposit $50k in new money within 45 days of opening a Summit Brokerage
+account and maintain the balance for 90 days to earn the $1,000 bonus. You must
+also complete 3 qualifying trades and spend $2,000 on the linked Summit debit
+card within 90 days.
+
+The bonus posts within 6 to 8 weeks after all requirements are met. You are not
+eligible for this bonus if you received a Summit bonus in the last 24 months,
+counted from the date your previous account was closed.
