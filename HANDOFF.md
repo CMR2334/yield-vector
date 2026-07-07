@@ -17,16 +17,17 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 63)
+## Current state (as of 2026-07-07, Round 64)
 
-- `index.html` ≈ 9,000 lines, single-file PWA. `APP_VERSION` = `2026.07.07`
+- `index.html` ≈ 9,300 lines, single-file PWA. `APP_VERSION` = `2026.07.07a`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
   the per-round "DO NOT COMMIT" notes meant "coordinator commits after
-  verification," not that work stays uncommitted). No stable- tag yet — owner
-  hasn't confirmed-good. Sync guard is bilateral once both devices run
-  ≥ 2026.07.05 (confirmed on the owner's phone via diagnostics).
+  verification," not that work stays uncommitted). R62/R63/R64 are working-tree
+  changes pending review before commit. No stable- tag yet — owner hasn't
+  confirmed-good. Sync guard is bilateral once both devices run ≥ 2026.07.05
+  (confirmed on the owner's phone via diagnostics).
 - **Field-box vertical rhythm (R61):** `.field-box` `gap` 6px (was 2px),
   vertical padding 10px (was 12px) — box height is unchanged for single-line
   fields, but the label now visibly separates from its value instead of
@@ -78,8 +79,27 @@ grows past ~8 entries, keeping the newest 3–4 live.
 - **Offer types:** `new-funds-held`, `direct-deposit`, `held-and-dd` ("Other"
   removed, R37). Held+DD models the held lump sum AND the DDs (R53); planned
   funding date is *required* for Held+DD, optional for new-funds-held.
+- **Sign-up date (R64):** `plannedSignupDate` is REQUIRED only when
+  `accountStatus === 'open'` (`isOfferComplete`/`offerIssues`). A prospect/
+  applied (closed) offer saves as a full non-draft offer WITHOUT a date — it
+  emits no dated work items and ties up no projected capital (all date
+  consumers are null-safe; no "Invalid Date"/"NaN"), but its expiry still
+  shows. Don't re-add an unconditional signup-date requirement.
 - **Status model:** `accountStatus` (open/closed) + 9-value `subStatus`;
   legacy `offer.status` survives as a derived shadow — don't remove (R38).
+  User-facing label is **"Offer status"** (R64; identifiers stay `subStatus`).
+  subStatus auto-drives accountStatus BOTH ways via `defaultAccountForSub`
+  (R64): approved/on-track/met-waiting/earned/didnt-track → open;
+  prospect/applied/denied/archived → closed. Wired in the modal `change`
+  handler AND the inline change-status handler.
+- **Debit requirement (R64):** `debitRequirement` = `{ required, count,
+  withinDays, byDate, byDateLegacy }`. The deadline is a day-count from sign-up
+  (`withinDays`), NOT an absolute date; derive via `debitDeadlineISO(offer)` =
+  sign-up + withinDays (emits nothing when underivable). `byDate` is retired
+  (kept `''` for payload shape); legacy absolute deadlines migrate on load
+  (`migrateDebitRequirement`/`reconcileDebitWithinDays`) to `withinDays`,
+  preserving the original in `byDateLegacy`. Feed/list/card all derive via
+  `debitDeadlineISO`.
 - **Cloud sync:** GitHub Gist; restore-from-history modal + a compare-and-swap
   `Sync.push` (lineage field `_baseRevision` = last-synced `history[0].version`;
   R56) protect against last-writer-wins overwrites — the auto-push path now
@@ -131,6 +151,95 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor)
+**Round 64 — Status-model & form changes: sign-up-date-when-open, subStatus auto-revert, "Offer status" rename, debit day-count, "sign up" wording (Phase 1b)**
+
+Owner batch of five app changes + a docs refresh, kept coherent with Phase 1a
+(shared `buildReminderItems`, feed v2, subStatus-keyed gates). Scope: `index.html`
++ `docs/SHORTCUT_BUILD_GUIDE.md`. No chart/tooltip/legend changes; Gist payload
+additive. `APP_VERSION` 2026.07.07 → 2026.07.07a.
+
+- **[1] Sign-up date required only when account is OPEN.** `isOfferComplete`/
+  `offerIssues` (~line 4457/4485) now require `plannedSignupDate` iff
+  `accountStatus === 'open'`. A prospect/applied (closed) offer is a full
+  non-draft offer WITHOUT a date — it emits no dated work items and ties up no
+  projected capital (projection loop already `continue`s on empty
+  `lockStartDate`; swept every date consumer — projection, suggested-funding,
+  chart markers, timeline, table, ROI, feed builder, upcoming list — all
+  null-safe → no "Invalid Date"/"NaN"), but its expiry still surfaces. Other
+  missing required fields still draft the offer.
+- **[2] accountStatus auto-reverts to Closed** (mirror of the existing
+  auto-open). Both the modal `change` handler (~line 7757) and the inline
+  change-status handler (~line 8700) now set `accountStatus` via the shared
+  `defaultAccountForSub(subStatus)` — open for the 5 in `SUBSTATUS_FLIPS_OPEN`
+  (approved/on-track/met-waiting/earned/didnt-track), closed for the other 4
+  (prospect/applied/denied/archived). Modal hint describes both directions.
+- **[3] "Sub status" → "Offer status"** (modal label + hint, offers-table
+  header, inline-select `title`). Identifiers (`subStatus`, ids) unchanged. The
+  commitments-table "Status" column is a DIFFERENT field — left alone.
+- **[4] Debit "Complete by" date → day-count.** `debitRequirement.byDate` date
+  picker replaced by "Complete debits within X days of sign up"
+  (`name="debitWithinDays"`, id `f-debit-within`), with a derived-deadline hint
+  (`f-debit-deadline`) beneath once a sign-up date exists. New `debitDeadlineISO`
+  (~line 4321, after `depositDeadline`) = sign-up + `withinDays`, literal
+  calendar date. Migration on load: `migrateDebitRequirement` +
+  `reconcileDebitWithinDays` (~line 2606, called next to `migrateDdIds` in
+  `App.init` ~line 4162) convert legacy `byDate` → `withinDays =
+  max(1, round(byDate − signup))`, stashing the original in `byDateLegacy`
+  (never lost); no signup date → preserve `byDateLegacy`, derive `withinDays`
+  lazily when a date appears. Feed/list/card debit-deadline derivation switched
+  to `debitDeadlineISO` (emits nothing when underivable). `readOfferForm` reads
+  `withinDays`, carries `byDateLegacy` forward on edit, retires `byDate` to `''`.
+  US-Bank-style (count, no byDate) → new field empty, no deadline until filled.
+- **[5] "signup" → "sign up"** in user-facing text ("Planned sign up date *",
+  "Sign up date *", "Days after sign up to deposit", "Complete DDs within X days
+  of sign up", "Complete debits within X days of sign up", "Sign up date
+  required"). Code identifiers (`plannedSignupDate`, `f-signup`, etc.) unchanged.
+  Comments left with prose "sign-up" (not user-facing).
+- **[6] Docs — `docs/SHORTCUT_BUILD_GUIDE.md`.** Compatibility note rewritten:
+  schema 2 is the LIVE feed (v2026.07.07), Section F tombstone deletes are live,
+  only `risk` remains absent (skip steps 23/25 until it ships). Section F
+  reworked: RECOMMENDED unattended path marks tombstoned reminders COMPLETE
+  ("Edit Reminder" → Is Completed = true, no prompt, completed items leave the
+  default view); actual "Remove Reminders" deletion demoted to optional manual
+  **F′** cleanup (steps renumbered 44→57; Finding 5 + corrections table updated).
+- **Follow-up fix + display-value sweep (coordinator-requested).** Fixed a
+  latent R62 bug: `refreshFundingSuggest` (~line 7893) passed `#f-signup`'s
+  M-D-YYYY DISPLAY value straight to `suggestedFundingDate` (expects ISO), so
+  the "Latest safe funding" hint silently stopped live-updating after R62 added
+  display formatting — now wrapped in `parseDateInput(...)`, null-safe, exactly
+  like `refreshDebitDeadline`. SWEPT every `.value` read in the file for the
+  same class (yv-date display → ISO-expecting fn, or money display → Number-
+  expecting fn without `parseDateInput`/`parseMoneyInput`): line 7893 was the
+  ONLY remaining offender. All other live/handler read sites already route
+  correctly — `generateDdDatesFromRequirement` (`parseDate(parseDateInput(...))`
+  + `parseMoneyInput`), `readDdRowsFromForm`, settings `onChange` (money →
+  `parseMoneyInput`, else `type=number`), the event-modal live sign-flip
+  (`parseMoneyInput`), the blur normalizer, and `reformatMoneyFieldLive` (pure
+  display) — plus the two inline `onchange`s just set static label text. The
+  `#f-days-deposit`/`#f-debit-within` fields are `type=number`, so their raw
+  `.value` is correctly consumed as a number. [3] The `DatePicker.setValue`
+  commit path (~line 3917) ALREADY dispatches `input`+`change` on the input, so
+  picker selection drives both hints with no code change — verified live rather
+  than assumed.
+- **Verified:** `node --check` passes; locked hex counts identical to HEAD
+  (9/4/9/9/1/4/1/1/1). Node VM harness on the real extracted functions: 36/36
+  (9-value classification; undated-prospect complete-but-dateless vs undated-open
+  incomplete; undated offer emits expiry-only, no malformed dates;
+  `debitDeadlineISO` 7-13-2026 + 45 → 8-27-2026; feed debit-deadline 2026-08-27;
+  byDate→withinDays migration incl. min-1 floor + idempotency + US-Bank empty).
+  Live (Preview `yield-vector-static`, port 4173): "Offer status" label + both-
+  directions hint; modal subStatus drives accountStatus live BOTH ways with the
+  sign-up label following; debit day-count field present (old date field gone),
+  derived hint "Complete by: Aug 27"; real create→save persists a dateless
+  prospect as a full non-draft card (expiry shows, no NaN) contributing 0 to
+  "Actions required" but present in the Upcoming list; edit→Approved + 8-1-2026
+  stores ISO. Follow-up-fix re-verify: with signup TYPED as 7-13-2026 + 30 days
+  the funding hint now shows "Latest safe funding: Aug 11" (was silently blank
+  pre-fix); selecting 7-13-2026 via the DATE PICKER refreshes BOTH the funding
+  ("Aug 11") and debit ("Complete by: Aug 27") hints. Zero console errors; owner
+  state (7 offers, original `_lastModified`/`_dirtySince`) restored byte-for-byte.
 
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor)
 **Round 63 — Reminder-feed contract v2: one shared item-builder, coverage + gate fixes, tombstones (Phase 1a)**

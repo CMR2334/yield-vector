@@ -2398,7 +2398,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.07';
+const APP_VERSION = '2026.07.07a';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -2600,6 +2600,50 @@ function migrateDdIds(o) {
   for (const dd of o.directDeposits) {
     if (dd && !dd.id) dd.id = uid('dd');
   }
+  return o;
+}
+
+// Migrate the debit requirement from the legacy absolute `byDate` (a fixed
+// calendar deadline) to the new relative `withinDays` (days after the
+// planned sign-up date), the same shape as daysAfterSignupAllowedBeforeDeposit.
+// Idempotent + additive (never drops the user's constraint):
+//   • Already has withinDays → leave it.
+//   • Has byDate + a sign-up date → withinDays = round(byDate − signup),
+//     floored at 1; byDate is stashed in `byDateLegacy` (not lost, but no
+//     longer authoritative) so a re-derivation is possible if the user
+//     later changes the sign-up date.
+//   • Has byDate but NO sign-up date yet → can't derive days now; preserve
+//     byDate in `byDateLegacy` and derive withinDays lazily once a sign-up
+//     date exists (see reconcileDebitWithinDays).
+function migrateDebitRequirement(o) {
+  const dr = o && o.debitRequirement;
+  if (!dr) return o;
+  if (dr.withinDays != null && dr.withinDays !== '') return o; // already migrated
+  const legacyByDate = dr.byDate || dr.byDateLegacy || '';
+  if (!legacyByDate) return o; // nothing to convert (new/empty requirement)
+  const signup = parseDate(o.plannedSignupDate);
+  const by = parseDate(legacyByDate);
+  if (signup && by) {
+    dr.withinDays = Math.max(1, Math.round(daysBetween(signup, by)));
+  }
+  // Preserve the original absolute deadline so nothing is lost and a later
+  // sign-up-date change can re-derive; clear the now-non-authoritative byDate.
+  dr.byDateLegacy = legacyByDate;
+  dr.byDate = '';
+  return o;
+}
+
+// Lazily derive withinDays from a preserved legacy absolute deadline once a
+// sign-up date becomes available (the migration deferred it when the offer
+// had no sign-up date). Safe to call on every load after migrateDebitRequirement.
+function reconcileDebitWithinDays(o) {
+  const dr = o && o.debitRequirement;
+  if (!dr || !dr.required) return o;
+  if (dr.withinDays != null && dr.withinDays !== '') return o;
+  if (!dr.byDateLegacy) return o;
+  const signup = parseDate(o.plannedSignupDate);
+  const by = parseDate(dr.byDateLegacy);
+  if (signup && by) dr.withinDays = Math.max(1, Math.round(daysBetween(signup, by)));
   return o;
 }
 
@@ -4158,8 +4202,12 @@ const App = {
         this.save({ system: true });
       }
       // Migrate offers to the two-field status model + sync legacy status,
-      // and mint stable per-DD ids for feed item keys (never array index).
-      (this.state.offers || []).forEach(o => { normalizeOfferStatus(o); migrateDdIds(o); });
+      // mint stable per-DD ids for feed item keys (never array index), and
+      // convert the debit requirement's absolute byDate → relative withinDays.
+      (this.state.offers || []).forEach(o => {
+        normalizeOfferStatus(o); migrateDdIds(o);
+        migrateDebitRequirement(o); reconcileDebitWithinDays(o);
+      });
       // Seed the manifestVersion high-water mark from the loaded state so the
       // feed version never regresses below what a prior session already shipped.
       _manifestHwm = Number(this.state._manifestVersion) || 0;
@@ -4318,6 +4366,21 @@ function depositDeadline(offer) {
   return isoDate(addDays(parseDate(offer.plannedSignupDate), Number(offer.daysAfterSignupAllowedBeforeDeposit)));
 }
 
+// Derived debit-completion deadline (literal calendar date, same no-shift
+// convention as depositDeadline): the qualifying debit purchases must be
+// done within `debitRequirement.withinDays` of the planned sign-up date.
+// Returns an ISO string, or '' when it can't be derived (no requirement,
+// no day-count, or no sign-up date yet — an undated offer emits nothing).
+function debitDeadlineISO(offer) {
+  const dr = offer && offer.debitRequirement;
+  if (!dr || !dr.required) return '';
+  const days = Number(dr.withinDays);
+  if (!Number.isFinite(days) || days <= 0) return '';
+  const signup = parseDate(offer.plannedSignupDate);
+  if (!signup) return '';
+  return isoDate(addDays(signup, days));
+}
+
 function withdrawalEligibleDate(offer) {
   // STANDARD direct deposit: no bank-imposed hold. Each DD just needs to
   // hit the account; the money is "tied up" only for its transfer round
@@ -4458,12 +4521,19 @@ function isOfferComplete(offer) {
   // Standard direct deposit has NO bank-imposed hold, so it does not
   // require daysFundsMustRemain. Every other type does.
   const isStandardDD = offer.offerType === 'direct-deposit';
+  // Planned sign-up date is REQUIRED only once the account is OPEN (a
+  // committed offer must be dated). A prospect/applied offer (account
+  // closed) is a full non-draft offer WITHOUT a sign-up date — it simply
+  // emits no dated work items and ties up no projected capital until a
+  // date is added. The sign-up date alone therefore no longer forces
+  // draft status; other missing required fields still draft the offer.
+  const signupDateOk = offer.accountStatus !== 'open'
+    || Boolean(offer.plannedSignupDate && parseDate(offer.plannedSignupDate));
   const baseOk = Boolean(
     offer.bankName &&
     offer.requiredFundingAmount > 0 &&
     offer.signupBonusAmount >= 0 &&
-    offer.plannedSignupDate &&
-    parseDate(offer.plannedSignupDate) &&
+    signupDateOk &&
     (isStandardDD || (offer.daysFundsMustRemain != null && offer.daysFundsMustRemain >= 0))
   );
   if (!baseOk) return false;
@@ -4488,7 +4558,9 @@ function offerIssues(offer) {
   if (!offer.bankName) issues.push('Bank name is required');
   if (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0) issues.push('Required funding amount must be > 0');
   if (offer.signupBonusAmount == null || offer.signupBonusAmount < 0) issues.push('Bonus amount required');
-  if (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate)) issues.push(offer.accountStatus === 'open' ? 'Signup date required' : 'Planned signup date required');
+  // Sign up date only required when the account is open (committed offers
+  // must be dated); prospects/applied may be full offers without a date.
+  if (offer.accountStatus === 'open' && (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate))) issues.push('Sign up date required');
   if (!isStandardDD && (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0)) issues.push('Hold-through day is required');
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
     if (!Array.isArray(offer.directDeposits) || offer.directDeposits.length === 0) {
@@ -5400,10 +5472,12 @@ function buildReminderItems(state) {
     }
 
     // debit-deadline (WORK) — qualifying debit-card purchases by a date.
-    // Counts as debitRequirement.count work items; the dated item carries
-    // the byDate when present.
-    if (committed && o.debitRequirement && o.debitRequirement.required && o.debitRequirement.byDate) {
-      const due = String(o.debitRequirement.byDate).slice(0, 10);
+    // Counts as debitRequirement.count work items. The deadline is now
+    // DERIVED from sign-up + debitRequirement.withinDays (debitDeadlineISO),
+    // so it emits nothing until a sign-up date AND a day-count both exist.
+    const debitDue = committed ? debitDeadlineISO(o) : '';
+    if (debitDue) {
+      const due = String(debitDue).slice(0, 10);
       if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
         const cnt = Number(o.debitRequirement.count) || 0;
         items.push({
@@ -5998,7 +6072,7 @@ function renderOfferCard(o) {
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
-        ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${o.debitRequirement.byDate ? ' by ' + formatDateMedium(o.debitRequirement.byDate) : ''}">${o.debitRequirement.count} debit txns</span>` : ''}
+        ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
     </div>
   `;
@@ -6222,7 +6296,7 @@ function renderOfferCardWithActions(o) {
     <div class="offer-actions" style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);">
       <button class="btn btn-ghost btn-sm" data-action="duplicate-offer" data-id="${o.id}">Duplicate</button>
       <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}" title="Lock this offer in as a commitment on your timeline">Commit</button>
-      <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}" title="Sub status">
+      <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}" title="Offer status">
         ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
       </select>
       <button class="btn btn-ghost btn-sm btn-danger" data-action="delete-offer" data-id="${o.id}" aria-label="Delete">Delete</button>
@@ -6246,7 +6320,7 @@ function renderOffersTable(offers) {
             <th>Fund date</th>
             <th>Withdrawal date</th>
             <th class="num">APY</th>
-            <th>Status</th>
+            <th>Offer status</th>
             <th>Entity</th>
             <th></th>
           </tr>
@@ -7391,7 +7465,7 @@ function showOfferModal(offerId = null) {
     color: autoColor,
     offerType: 'new-funds-held',
     directDeposits: [],
-    debitRequirement: { required: false, count: null, byDate: '' },
+    debitRequirement: { required: false, count: null, withinDays: null, byDate: '', byDateLegacy: '' },
     requiredFundingAmount: null,
     signupBonusAmount: null,
     offerExpirationDate: '',
@@ -7414,7 +7488,7 @@ function showOfferModal(offerId = null) {
   if (!o.offerType || o.offerType === 'other') o.offerType = 'new-funds-held';
   if (!Array.isArray(o.directDeposits)) o.directDeposits = [];
   if (!o.ddRequirement) o.ddRequirement = { mode: 'count', count: o.directDeposits.length || 1, freqEvery: 'month', freqPeriods: 3 };
-  if (!o.debitRequirement) o.debitRequirement = { required: false, count: null, byDate: '' };
+  if (!o.debitRequirement) o.debitRequirement = { required: false, count: null, withinDays: null, byDate: '', byDateLegacy: '' };
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -7541,12 +7615,19 @@ function showOfferModal(offerId = null) {
               </div>
               <div class="field">
                 <div class="field-box">
-                  <label for="f-debit-by">Complete by (optional)</label>
-                  <input id="f-debit-by" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.debitRequirement.byDate || ''))}" name="debitByDate" data-picker-mode="plain" />
+                  <label for="f-debit-within">Complete debits within X days of sign up</label>
+                  <div class="input-group with-suffix">
+                    <input id="f-debit-within" class="input" type="number" min="1" step="1" value="${o.debitRequirement.withinDays ?? ''}" name="debitWithinDays" />
+                    <span class="input-suffix">days</span>
+                  </div>
                 </div>
+                <span class="field-hint" id="f-debit-deadline">${(() => {
+                  const dl = debitDeadlineISO(o);
+                  return dl ? `Complete by: <strong style="color:var(--text-secondary);">${formatDateMedium(dl)}</strong>` : '';
+                })()}</span>
               </div>
             </div>
-            <span class="field-hint">Some SUBs require N qualifying debit-card purchases. Counts toward "Actions required" on the Overview.</span>
+            <span class="field-hint">Some SUBs require N qualifying debit-card purchases within a set number of days of signing up. Counts toward "Actions required" on the Overview.</span>
           </div>
           <div class="field">
             <div class="field-box">
@@ -7564,13 +7645,13 @@ function showOfferModal(offerId = null) {
           </div>
           <div class="field">
             <div class="field-box">
-              <label for="f-signup">${o.accountStatus === 'open' ? 'Signup date *' : 'Planned signup date *'}</label>
+              <label for="f-signup">${o.accountStatus === 'open' ? 'Sign up date *' : 'Planned sign up date *'}</label>
               <input id="f-signup" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" required placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.plannedSignupDate))}" name="plannedSignupDate" data-picker-mode="plain" />
             </div>
           </div>
           <div class="field">
             <div class="field-box">
-              <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of signup' : 'Days after signup to deposit'}</label>
+              <label for="f-days-deposit" id="days-deposit-label">${o.offerType === 'direct-deposit' ? 'Complete DDs within X days of sign up' : 'Days after sign up to deposit'}</label>
               <div class="input-group with-suffix">
                 <input id="f-days-deposit" class="input" type="number" min="0" step="1" value="${o.daysAfterSignupAllowedBeforeDeposit ?? ''}" name="daysAfterSignupAllowedBeforeDeposit" />
                 <span class="input-suffix">days</span>
@@ -7610,12 +7691,12 @@ function showOfferModal(offerId = null) {
           </div>
           <div class="field">
             <div class="field-box">
-              <label for="f-substatus">Sub status</label>
+              <label for="f-substatus">Offer status</label>
               <select id="f-substatus" class="select" name="subStatus">
                 ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
               </select>
             </div>
-            <span class="field-hint">Where this offer is in its lifecycle. Selecting Approved, On-Track, Met (Waiting), Earned, or Didn't Track auto-sets the account to Open.</span>
+            <span class="field-hint">Where this offer is in its lifecycle. Selecting Approved, On-Track, Met (Waiting), Earned, or Didn't Track auto-sets the account to Open; Prospect, Applied, Denied, or Archived auto-sets it back to Closed.</span>
           </div>
           <div class="field">
             <div class="field-box">
@@ -7715,7 +7796,7 @@ function showOfferModal(offerId = null) {
       if (lockFromField) lockFromField.style.display = stdDD ? 'none' : '';
       // The deposit-deadline field is a DD-completion deadline for DD
       // offers, a deposit deadline otherwise.
-      if (daysLabel) daysLabel.textContent = stdDD ? 'Complete DDs within X days of signup' : 'Days after signup to deposit';
+      if (daysLabel) daysLabel.textContent = stdDD ? 'Complete DDs within X days of sign up' : 'Days after sign up to deposit';
       const hint = form.querySelector('#dd-section-hint');
       if (hint) {
         hint.innerHTML = (type === 'held-and-dd')
@@ -7747,17 +7828,22 @@ function showOfferModal(offerId = null) {
     const syncSignupLabel = () => {
       const acct = form.querySelector('#f-accountstatus');
       const lbl = form.querySelector('label[for="f-signup"]');
-      if (acct && lbl) lbl.textContent = acct.value === 'open' ? 'Signup date *' : 'Planned signup date *';
+      if (acct && lbl) lbl.textContent = acct.value === 'open' ? 'Sign up date *' : 'Planned sign up date *';
     };
     form.addEventListener('change', (ev) => {
       if (!ev.target) return;
       if (ev.target.name === 'offerType') syncDdSectionUI();
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
-      // Auto-flip account → Open when sub status implies the account exists.
-      if (ev.target.id === 'f-substatus' && SUBSTATUS_FLIPS_OPEN.has(ev.target.value)) {
+      // Auto-set account status from the offer status, BOTH directions:
+      // an auto-open status (approved/on-track/met-waiting/earned/didnt-track)
+      // flips the account Open; any other status (prospect/applied/denied/
+      // archived) reverts it Closed — via defaultAccountForSub, the single
+      // source of the open/closed classification. Updates the dependent
+      // control live, same UX as before.
+      if (ev.target.id === 'f-substatus') {
         const acct = form.querySelector('#f-accountstatus');
-        if (acct) acct.value = 'open';
+        if (acct) acct.value = defaultAccountForSub(ev.target.value);
       }
       if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') syncSignupLabel();
       // Debit-requirement Yes/No → show or hide the count/deadline fields.
@@ -7803,20 +7889,46 @@ function showOfferModal(offerId = null) {
       form.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s === sw));
     });
     // Live "latest safe funding date" hint — recompute whenever the
-    // planned signup date or the days-after-signup window changes.
+    // planned sign-up date or the days-after-sign-up window changes.
+    // #f-signup holds a M-D-YYYY DISPLAY string (R62), so parse it back to
+    // ISO via parseDateInput before handing it to suggestedFundingDate
+    // (which expects ISO) — without this the hint silently stopped updating
+    // on a typed date. #f-days-deposit is a type=number field, so its raw
+    // value is already a plain number string.
     const refreshFundingSuggest = () => {
       const sEl = form.querySelector('#f-signup');
       const dEl = form.querySelector('#f-days-deposit');
       const out = form.querySelector('#f-funded-suggest');
       if (!out) return;
-      const sug = suggestedFundingDate(sEl && sEl.value, dEl && dEl.value);
+      const sug = suggestedFundingDate(parseDateInput((sEl && sEl.value) || ''), dEl && dEl.value);
       out.innerHTML = sug
         ? `Latest safe funding: <strong style="color:var(--text-secondary);">${formatDateMedium(sug)}</strong> (1-day buffer before the deposit deadline, on a business day)`
+        : '';
+    };
+    // Live derived debit-completion deadline — recompute whenever the
+    // planned sign-up date or the debit day-count changes. Nothing shown
+    // until a sign-up date exists (matches debitDeadlineISO's underivable
+    // → '' rule). Parse the sign-up field via parseDateInput because it
+    // holds a M-D-YYYY display string, not raw ISO.
+    const refreshDebitDeadline = () => {
+      const out = form.querySelector('#f-debit-deadline');
+      if (!out) return;
+      const sEl = form.querySelector('#f-signup');
+      const dEl = form.querySelector('#f-debit-within');
+      const dl = debitDeadlineISO({
+        plannedSignupDate: parseDateInput((sEl && sEl.value) || ''),
+        debitRequirement: { required: true, withinDays: dEl && dEl.value }
+      });
+      out.innerHTML = dl
+        ? `Complete by: <strong style="color:var(--text-secondary);">${formatDateMedium(dl)}</strong>`
         : '';
     };
     form.addEventListener('input', (ev) => {
       if (ev.target && (ev.target.id === 'f-signup' || ev.target.id === 'f-days-deposit')) {
         refreshFundingSuggest();
+      }
+      if (ev.target && (ev.target.id === 'f-signup' || ev.target.id === 'f-debit-within')) {
+        refreshDebitDeadline();
       }
     });
     // Run the section sync once at open. This shows/hides the DD section
@@ -7973,10 +8085,19 @@ function readOfferForm(idArg, isEdit) {
   // Standard DD has no bank hold — null out daysFundsMustRemain so the
   // round-trip model governs and validation doesn't demand it.
   const daysRemain = offerType === 'direct-deposit' ? null : num(data.daysFundsMustRemain);
+  // Debit deadline is now a day-count from sign-up (withinDays), not an
+  // absolute date. Carry forward any preserved legacy absolute deadline
+  // (byDateLegacy) from the offer being edited so a constraint saved before
+  // this offer had a sign-up date is never lost on re-save; byDate itself is
+  // retired (kept as '' for backward-compatible payload shape).
+  const prior = isEdit ? (App.state.offers || []).find(x => x.id === idArg) : null;
+  const priorLegacy = (prior && prior.debitRequirement && prior.debitRequirement.byDateLegacy) || '';
   const debitRequirement = {
     required: data.debitRequired === 'yes',
     count: data.debitRequired === 'yes' ? (num(data.debitCount) || null) : null,
-    byDate: data.debitRequired === 'yes' ? dateIso(data.debitByDate) : ''
+    withinDays: data.debitRequired === 'yes' ? num(data.debitWithinDays) : null,
+    byDate: '',
+    byDateLegacy: data.debitRequired === 'yes' ? priorLegacy : ''
   };
 
   const offer = {
@@ -8682,8 +8803,11 @@ function onChange(e) {
       const o = s.offers.find(x => x.id === id);
       if (o) {
         o.subStatus = newSub;
-        // Auto-flip account → Open when the sub status implies it exists.
-        if (SUBSTATUS_FLIPS_OPEN.has(newSub)) o.accountStatus = 'open';
+        // Auto-set account status from the offer status, BOTH directions
+        // (open for approved/on-track/met-waiting/earned/didnt-track;
+        // closed for prospect/applied/denied/archived) via the shared
+        // classifier, matching the modal's live auto-open/auto-close.
+        o.accountStatus = defaultAccountForSub(newSub);
         normalizeOfferStatus(o);
       }
     });

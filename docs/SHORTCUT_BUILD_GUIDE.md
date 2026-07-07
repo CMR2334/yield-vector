@@ -2,7 +2,7 @@
 
 Every action name in this guide is the **exact name as it appears in the iOS Shortcuts app**, verified against Apple's Shortcuts User Guide and Matthew Cassinelli's action directory (source URLs in Part 3). No invented or approximately-named actions. Supersedes SHORTCUT_SETUP.md.
 
-> **Compatibility note (read first):** this guide targets **feed contract v2** (`schema: 2`, with `removed[]` tombstones and `risk` states) from the 2026-07-05 Reminders redesign (docs/assessments/2026-07-05/step6-reminders-redesign.md). The app currently emits **schema 1**. To build against today's feed instead: in Step 7 check `Schema` **is not** `1`; skip Section F (deletes — schema 1 has no tombstones; do NOT improvise delete-by-absence) and Step 25's risk-prefix block (schema 1 items have no `risk` key). Everything else works unchanged, and upgrading later means editing two spots, not rebuilding.
+> **Compatibility note (read first):** build this guide **as written** against **feed contract v2** — `schema: 2` shipped in app **v2026.07.07** and is what the app emits today (docs/assessments/2026-07-05/step6-reminders-redesign.md). **Section F (tombstone deletes) is now live**: the feed carries a real `removed[]` array, so the delete/mark-complete loop has actual ids to act on — do NOT skip it and do NOT improvise delete-by-absence. The **only** field still absent from the payload is **`risk`** (computed risk is a later phase). Until it ships, skip **Step 23** (reading `risk`) and **Step 25** (the ⚠️ risk-title prefix): set `DisplayTitle` = `ItemTitle` directly. When `risk` later lands, add those two steps back — no rebuild. Everything else in this guide matches the live feed exactly.
 
 ---
 
@@ -21,7 +21,7 @@ The action is named **"Find Reminders"** (not "Find Reminders Where"). Verified 
 Its settable parameters: title, **List, Alert, Priority, Flag, URL, Images, Notes**. The due date/time is established via the **Alert** parameter set to a **time** — feed it a **"Format Date"** value at `MM/dd/yyyy 09:00`. That single timed alert IS the due date and the 9 AM notification. (On update, **"Edit Reminder"** has a real **Due Date** field — use it directly.)
 
 ### Finding 5 — "Remove Reminders" always prompts for confirmation.
-Documented as destructive with a mandatory confirm. In an unattended 6 AM automation the dialog can't be answered, so **the delete loop reliably completes only on manual/foreground runs**. This is safe by design: tombstoned items are never lost, deletes just apply late. (Some iOS versions may allow pre-authorizing destructive Reminders actions — check on-device; do not assume.)
+Documented as destructive with a mandatory confirm. In an unattended 6 AM automation the dialog can't be answered, so a true **delete** loop reliably completes only on manual/foreground runs. **Resolution (see Section F):** retire tombstoned reminders by **marking them complete** via "Edit Reminder" (Is Completed = true) — that has **no prompt** and runs unattended, and a completed reminder drops out of the default list. Actual deletion is demoted to the optional manual **F′** cleanup. This is safe by design: tombstoned items are never lost, and the purge just applies late. (Some iOS versions may allow pre-authorizing destructive Reminders actions — check on-device; do not assume.)
 
 ### Finding 6 — HTTP heartbeat fully supported.
 **"Get Contents of URL"**: Method GET/POST/PUT/PATCH/DELETE, custom **Headers**, **Request Body** (JSON or file) under **Show More**. Gist heartbeat: `PATCH https://api.github.com/gists/<gist-id>` with body `{"files":{"consumer-shortcut.json":{"content":"<stringified json>"}}}`, PAT with **`gist`** scope. The heartbeat lives in its own file so it never races the app's writes to capital-planner.json.
@@ -37,7 +37,7 @@ Documented as destructive with a mandatory confirm. In an unattended 6 AM automa
 |---|---|
 | "Filter Reminders where URL is ExpectedURL" | URL is not a filter field — filter by List, iterate, compare |
 | Create branch sets a "Due Date" field + separate Alert | No Due Date field on Add New Reminder — timed **Alert** sets both |
-| Deletes run silently in background | **Remove Reminders always prompts** — deletes are foreground-reliable only |
+| Deletes run silently in background | **Remove Reminders always prompts** — retire items unattended by marking them **complete** (Edit Reminder → Is Completed), demote real deletion to manual F′ |
 | Update path uncertain / may require remove+re-add | **"Edit Reminder" exists** — clean in-place update |
 
 ---
@@ -62,7 +62,7 @@ Open **Shortcuts** → **+** → name it **Yield Vector Sync**. Add actions in o
 6. **"Get Dictionary Value"** → Value for `removed` → rename `RemovedItems`.
 
 ### B. Guard: unknown schema
-7. **"If"** → `Schema` **is not** `2` *(see Compatibility note: `1` for today's feed)*.
+7. **"If"** → `Schema` **is not** `2` *(the live feed is schema 2 — see Compatibility note)*.
 8. — inside — **"Show Notification"** → Title `Yield Vector`, body `Feed schema unrecognized — update the Yield Vector shortcut.`
 9. — inside — **"Stop This Shortcut"**.
 10. End If.
@@ -84,7 +84,7 @@ Open **Shortcuts** → **+** → name it **Yield Vector Sync**. Add actions in o
 20. **"Get Dictionary Value"** → `title` → rename `ItemTitle`.
 21. **"Get Dictionary Value"** → `dueDate` → rename `ItemDueRaw`.
 22. **"Get Dictionary Value"** → `notes` → rename `ItemNotes`.
-23. **"Get Dictionary Value"** → `risk` → rename `ItemRisk`. *(Skip 23 & 25 on schema 1.)*
+23. **"Get Dictionary Value"** → `risk` → rename `ItemRisk`. *(SKIP for now — `risk` is not yet in the feed; add 23 & 25 when it ships.)*
 24. **"Text"** → `https://yieldvector.local/id/` immediately followed by the `ItemID` variable → rename `ExpectedURL`.
 25. **"If"** → `ItemRisk` **is** `at-risk` → inside: **"Text"** `⚠️ ` + `ItemTitle`, then **"Set Variable"** `DisplayTitle` = that Text. **Otherwise** → nested **"If"** `ItemRisk` **is** `overdue` → same ⚠️ Text + Set Variable; **Otherwise** → **"Set Variable"** `DisplayTitle` = `ItemTitle`. End both Ifs.
 26. **"Format Date"** → Date: `ItemDueRaw` → Format **Custom**: `MM/dd/yyyy 09:00` → rename `DueAt9`.
@@ -98,31 +98,42 @@ Open **Shortcuts** → **+** → name it **Yield Vector Sync**. Add actions in o
 34. **"If"** → `MatchFound` **is** `0` → inside: **"Add New Reminder"** → title `DisplayTitle`; **List** `Yield Vector`; **Alert** → Time = `DueAt9`; **Show More** → **URL** = `ExpectedURL`, **Notes** = `ItemNotes`. End If.
 35. End the outer Repeat (from 18).
 
-### F. Delete loop (tombstoned ids only — schema 2; skip on schema 1)
-> Per Finding 5, this section completes reliably only on manual/foreground runs. Late deletes are safe.
+### F. Retire tombstoned reminders (RECOMMENDED: mark complete, not delete)
+> **Why mark-complete instead of delete.** Per Finding 5, **"Remove Reminders" always prompts for confirmation**, so a true delete can't run unattended at 6 AM — the dialog blocks the loop. **"Edit Reminder" setting Is Completed = true has NO confirmation prompt** (it's an ordinary field edit — see Finding 1's field list, which includes **Is Completed**), so it runs fully unattended. A completed reminder drops out of the Reminders default view (it moves to "Completed"), so marking-complete gives the same "it's gone from my list" result as a delete, but reliably and automatically. Actual deletion is demoted to the optional manual cleanup in **F′** below. The feed's tombstone TTL (90 days) is comfortably long enough that a late manual purge never loses an id.
 36. **"Repeat with Each"** → input `RemovedItems`. Steps 37–42 inside.
 37. **"Get Dictionary Value"** → `id` of Repeat Item → rename `RemID`.
 38. **"Text"** → `https://yieldvector.local/id/` + `RemID` → rename `RemURL`.
 39. **"Repeat with Each"** → input `Managed`. Steps 40–42 inside.
 40. **"Get Details of Reminders"** → **URL** of Repeat Item → rename `DelCheckURL`.
 41. **"If"** → `DelCheckURL` **is** `RemURL`.
-42. — inside — **"Remove Reminders"** → Reminders: Repeat Item. *(This prompts for confirmation.)*
+42. — inside — **"Edit Reminder"** → Reminder: Repeat Item → set **Is Completed** = `true`. *(No confirmation prompt; runs unattended. Do NOT set any other field — title/notes/alarms are preserved.)*
 43. End inner If + both Repeats.
 
+### F′. Optional manual cleanup — actually delete completed tombstones (foreground only)
+> Run this occasionally BY HAND to purge the completed reminders F left behind. It uses **"Remove Reminders"**, which prompts for confirmation (Finding 5) — fine when you're watching, unusable in the 6 AM automation, which is exactly why it's separated out. Skipping it forever is harmless: completed items are already out of your default view.
+44. **"Repeat with Each"** → input `RemovedItems`. Steps 45–50 inside.
+45. **"Get Dictionary Value"** → `id` of Repeat Item → rename `PurgeID`.
+46. **"Text"** → `https://yieldvector.local/id/` + `PurgeID` → rename `PurgeURL`.
+47. **"Repeat with Each"** → input `Managed`. Steps 48–50 inside.
+48. **"Get Details of Reminders"** → **URL** of Repeat Item → rename `PurgeCheckURL`.
+49. **"If"** → `PurgeCheckURL` **is** `PurgeURL`.
+50. — inside — **"Remove Reminders"** → Reminders: Repeat Item. *(This prompts for confirmation — expected on a manual run.)*
+51. End inner If + both Repeats.
+
 ### G. Heartbeat PATCH
-44. **"Get Current Date"** → rename `Now`.
-45. **"Get Dictionary Value"** → `manifestVersion` from the Step-3 Dictionary → rename `ManifestVersion`.
-46. **"Text"** → exactly:
+52. **"Get Current Date"** → rename `Now`.
+53. **"Get Dictionary Value"** → `manifestVersion` from the Step-3 Dictionary → rename `ManifestVersion`.
+54. **"Text"** → exactly:
     `{"files":{"consumer-shortcut.json":{"content":"{\"lastRunAt\":\"[Now]\",\"itemsApplied\":[ItemCount],\"manifestVersion\":[ManifestVersion]}"}}}`
     inserting the `Now`, `ItemCount`, `ManifestVersion` variables at the bracketed spots → rename `HeartbeatBody`.
-47. **"Get Contents of URL"** → URL `https://api.github.com/gists/<your-gist-id>` → **Show More** → Method **PATCH** → Headers: `Authorization` = `token <YOUR_PAT>`, `Accept` = `application/vnd.github+json` → **Request Body: File** → `HeartbeatBody`. *(Alternative: build the body with nested **"Dictionary"** actions and Request Body: JSON — more steps, no escaping; note GitHub requires `content` to be a string, so the inner object must be stringified.)*
+55. **"Get Contents of URL"** → URL `https://api.github.com/gists/<your-gist-id>` → **Show More** → Method **PATCH** → Headers: `Authorization` = `token <YOUR_PAT>`, `Accept` = `application/vnd.github+json` → **Request Body: File** → `HeartbeatBody`. *(Alternative: build the body with nested **"Dictionary"** actions and Request Body: JSON — more steps, no escaping; note GitHub requires `content` to be a string, so the inner object must be stringified.)*
 
 ### H. Failure-only notification
-48. **"Get Dictionary from Input"** on Step 47's output → **"Get Dictionary Value"** for `id` → **"Count"** Items → **"If"** count **is** `0` → inside: **"Show Notification"** → Title `Yield Vector`, body `Heartbeat PATCH failed — check PAT/Gist.` End If.
-49. **Done.**
+56. **"Get Dictionary from Input"** on Step 55's output → **"Get Dictionary Value"** for `id` → **"Count"** Items → **"If"** count **is** `0` → inside: **"Show Notification"** → Title `Yield Vector`, body `Heartbeat PATCH failed — check PAT/Gist.` End If.
+57. **Done.**
 
 ### First manual run
-Run it once by hand. Grant when prompted: Reminders access; network access to `gist.githubusercontent.com` and `api.github.com`. Confirm reminders appear in the Yield Vector list. A delete-confirmation prompt is expected behavior.
+Run it once by hand. Grant when prompted: Reminders access; network access to `gist.githubusercontent.com` and `api.github.com`. Confirm reminders appear in the Yield Vector list. Section F now marks retired items **complete** (no prompt); a delete-confirmation prompt appears only if you run the optional **F′** manual cleanup.
 
 ## The two Personal Automations
 1. Shortcuts → **Automation** → **+** → **Create Personal Automation** → **Time of Day** → **6:00 AM**, Repeat **Daily** → Next → action **"Run Shortcut"** → **Yield Vector Sync** → Next → **Run Immediately: ON**, **Notify When Run: OFF** → Done.
@@ -154,4 +165,4 @@ Run it once by hand. Grant when prompted: Reminders access; network access to `g
 1. Whether your iOS version lets you pre-authorize "Remove Reminders" (unattended deletes) — otherwise deletes are foreground-only.
 2. "Edit Reminder" leaving unset fields (notes/alarms/completion) untouched — test with a reminder carrying all three.
 3. "Format Date" parsing the feed's `YYYY-MM-DD` string directly — may need a "Date" action round-trip.
-4. Whether "Get Contents of URL" surfaces an HTTP status code on your build — Step 48's `id`-presence check is the fallback.
+4. Whether "Get Contents of URL" surfaces an HTTP status code on your build — Step 56's `id`-presence check is the fallback.
