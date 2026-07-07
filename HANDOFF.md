@@ -152,6 +152,10 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ## Log (newest first)
 
+### 2026-07-06 — Session J continued (claude-fable-5, planner direct fix)
+**Round 65 — Uppercase-label letterspacing normalized app-wide (owner re-report)**
+- R62's tightening only hit `.hero-label` + `.timeline-row-label.axis`; the owner still saw wide labels because the rest of the uppercase micro-label family (`.stat-label`, `.offer-stat-label`, `.snapshot-title`, `.card-title`, optimizer/about/DD labels — 15 rules at 0.04–0.06em) kept their old spacing. All letter-spacing 0.04/0.05/0.06em → 0.02em (18 rules now uniform; negative heading spacings and `.diag-code` untouched; chart text is SVG-internal, unaffected). Verified at desktop width on Overview + Timeline. `APP_VERSION` → `2026.07.07b`.
+
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor)
 **Round 64 — Status-model & form changes: sign-up-date-when-open, subStatus auto-revert, "Offer status" rename, debit day-count, "sign up" wording (Phase 1b)**
 
