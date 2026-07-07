@@ -839,6 +839,40 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+/* Upcoming churn dates (F6) — bottom-of-Overview section. Full-width card that
+   spans the overview grid; rows reuse the offer-color stripe + tap-to-edit
+   idiom from .action-row but with a simpler two-line body. */
+.churn-section { grid-column: 1 / -1; margin-top: var(--space-4); }
+.churn-list { display: flex; flex-direction: column; gap: 2px; }
+.churn-group-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--text-tertiary); margin: var(--space-3) 0 2px;
+}
+.churn-group-label:first-child { margin-top: 0; }
+.churn-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: var(--space-3); padding: var(--space-3) var(--space-4);
+  padding-left: calc(var(--space-4) + 2px);
+  border-radius: var(--radius-md); position: relative; transition: background 0.1s;
+}
+.churn-row:hover { background: var(--bg); }
+.churn-row.clickable { cursor: pointer; }
+.churn-row.clickable:active { transform: translateY(0.5px); }
+.churn-row.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.churn-row[style*="--offer-color"]::before {
+  content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 2px; background: var(--offer-color);
+}
+.churn-row-main { min-width: 0; }
+.churn-row-name {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.churn-row-date { font-size: 12px; color: var(--text-secondary); font-feature-settings: 'tnum' 1; }
+.churn-row-date.success { color: #047857; font-weight: 600; }
+.churn-wait-chip { flex: 0 0 auto; white-space: nowrap; }
+.churn-empty { padding: var(--space-4); color: var(--text-tertiary); font-size: 13px; }
+
 /* iOS calendar-icon-style date block: bright red month, large dark day */
 .action-day {
   text-align: center;
@@ -1371,6 +1405,7 @@ a { color: inherit; text-decoration: none; }
 .yv-life-v { flex: 1 1 auto; color: var(--text); font-feature-settings: 'tnum' 1; }
 .yv-life-v.success { color: #047857; font-weight: 600; }
 .yv-life-v.warn { color: #b45309; font-weight: 600; }
+.yv-life-v.muted { color: var(--text-tertiary); }
 .yv-life-tag {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--text-tertiary); background: var(--bg); padding: 1px 5px;
@@ -4571,6 +4606,21 @@ function addDays(d, n) {
   return dt;
 }
 
+// Add `n` calendar months to a Date, CLAMPING the day to the target month's
+// last day rather than rolling over (Jan 31 + 1mo → Feb 28/29, never Mar 3).
+// Uses the same local-midnight constructor idiom as parseDate (no UTC/string
+// parsing), so it composes with isoDate() safely. `n` may be negative.
+function addMonthsClamped(d, n) {
+  const dt = d instanceof Date ? d : parseDate(d);
+  if (!dt) return null;
+  const y = dt.getFullYear();
+  const m = dt.getMonth() + n;      // may be <0 or >11; Date normalizes the year
+  const day = dt.getDate();
+  // Last day of the target month: day 0 of the *following* month.
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(day, lastDay));
+}
+
 function daysBetween(a, b) {
   const ms = startOfDay(b) - startOfDay(a);
   return Math.round(ms / 86400000);
@@ -5193,6 +5243,63 @@ function safeToCloseDate(offer) {
   let maxISO = candidates[0];
   for (const c of candidates) { if (c > maxISO) maxISO = c; }
   return maxISO;
+}
+
+/* ============================================================
+   CHURNABILITY (F6)
+   ============================================================
+   An offer marked churnable can be re-run after a cooling-off period.
+   churnEligibleDate() resolves the anchor date per churn_anchor, adds
+   churn_wait_months (calendar-month-safe, clamped), and returns the ISO
+   date the account can be opened again. The card, the Overview "Upcoming
+   churn dates" section, and the `churn-eligible` feed kind all read this. */
+// How far ahead the Overview churn section looks for "Upcoming" eligibility.
+const CHURN_HORIZON_DAYS = 90;
+// Feed emit window: emit `churn-eligible` when the eligible date is at most this
+// many days AHEAD (upcoming) ...
+const CHURN_FEED_LOOKAHEAD_DAYS = 60;
+// ... OR already past but within this many days behind (still actionable — you
+// can churn now — without resurrecting ancient history).
+const CHURN_FEED_PAST_GRACE_DAYS = 180;
+
+// Human label for each anchor, reused by the modal, card, overview, and feed.
+const CHURN_ANCHOR_LABELS = {
+  bonus_received: 'bonus received',
+  account_closed: 'account closed',
+  account_opened: 'account opened'
+};
+
+// The ISO anchor date churn eligibility counts from, per churn_anchor:
+//   • bonus_received → bonus_received_date
+//   • account_closed → closed_date
+//   • account_opened → plannedSignupDate (the SAME open-date source the
+//     lifecycle/deadline math uses — no separate "opened" field exists)
+// Returns an ISO string or '' when the relevant date isn't set. Defaults to the
+// bonus_received anchor for an unknown/missing churn_anchor.
+function churnAnchorDate(offer) {
+  if (!offer) return '';
+  switch (offer.churn_anchor) {
+    case 'account_closed': return offer.closed_date || '';
+    case 'account_opened': return offer.plannedSignupDate || '';
+    case 'bonus_received':
+    default: return offer.bonus_received_date || '';
+  }
+}
+
+// The ISO date an offer becomes churn-eligible again, or null. Returns null when
+// the offer isn't churnable (churnable !== true), the wait-months is missing/
+// non-positive, or the anchor date for its churn_anchor isn't set yet. Pure;
+// never throws (all date access is guarded, month-add is clamp-safe).
+function churnEligibleDate(offer) {
+  if (!offer || offer.churnable !== true) return null;
+  const months = Number(offer.churn_wait_months);
+  if (!Number.isFinite(months) || months <= 0) return null;
+  const anchorISO = churnAnchorDate(offer);
+  const anchor = parseDate(anchorISO);
+  if (!anchor) return null;
+  const eligible = addMonthsClamped(anchor, months);
+  if (!eligible) return null;
+  return isoDate(eligible);
 }
 
 function simpleReturn(offer) {
@@ -6027,6 +6134,76 @@ function renderOverview() {
         </div>
       </aside>
     </div>
+    ${renderOverviewChurnSection()}
+  `;
+}
+
+// "Upcoming churn dates" (F6) — a bottom-of-Overview section listing offers that
+// can be re-run, split into "Eligible now" and "Upcoming" (within
+// CHURN_HORIZON_DAYS). Renders NOTHING at all unless at least one offer is
+// marked churnable (churnable===true) — no dead chrome for users who never set
+// churnability. Each row taps through to that offer's edit modal via the shared
+// open-action-target routing (targetKind:'offer').
+function renderOverviewChurnSection() {
+  const offers = App.state.offers || [];
+  // Gate: only render the section when churnability is actually in use.
+  if (!offers.some(o => o.churnable === true)) return '';
+
+  const horizon = addDays(TODAY, CHURN_HORIZON_DAYS);
+  const eligibleNow = [];
+  const upcoming = [];
+  for (const o of offers) {
+    if (o.churnable !== true) continue;
+    const elig = churnEligibleDate(o);
+    if (!elig) continue;                       // not computable (missing anchor/wait)
+    const d = parseDate(elig);
+    if (!d) continue;
+    if (d.getTime() <= TODAY.getTime()) eligibleNow.push({ o, elig, d });
+    else if (d.getTime() <= horizon.getTime()) upcoming.push({ o, elig, d });
+    // Beyond the horizon → not shown (but the section still renders because at
+    // least one churnable offer exists — the empty-bucket copy covers it).
+  }
+  eligibleNow.sort((a, b) => a.d - b.d);       // soonest first (oldest-eligible first)
+  upcoming.sort((a, b) => a.d - b.d);
+
+  const row = (r, isNow) => {
+    const name = `${r.o.bankName}${r.o.offerName ? ' — ' + r.o.offerName : ''}`;
+    const months = Number(r.o.churn_wait_months);
+    const waitChip = Number.isFinite(months) && months > 0
+      ? `<span class="chip chip-muted churn-wait-chip">${months} mo wait</span>` : '';
+    const dateText = isNow ? 'Eligible now' : formatDateDisplay(r.elig);
+    return `<div class="churn-row clickable" data-action="open-action-target" data-target-kind="offer" data-target-id="${escapeAttr(r.o.id)}" role="button" tabindex="0"${offerColorHex(r.o) ? ` style="--offer-color:${offerColorHex(r.o)};"` : ''}>
+      <div class="churn-row-main">
+        <div class="churn-row-name">${escapeHtml(name)}</div>
+        <div class="churn-row-date ${isNow ? 'success' : ''}">${escapeHtml(dateText)}</div>
+      </div>
+      ${waitChip}
+    </div>`;
+  };
+
+  const bodyParts = [];
+  if (eligibleNow.length) {
+    bodyParts.push(`<div class="churn-group-label">Eligible now</div>`);
+    bodyParts.push(eligibleNow.map(r => row(r, true)).join(''));
+  }
+  if (upcoming.length) {
+    bodyParts.push(`<div class="churn-group-label">Upcoming (next ${CHURN_HORIZON_DAYS} days)</div>`);
+    bodyParts.push(upcoming.map(r => row(r, false)).join(''));
+  }
+  const body = bodyParts.length
+    ? bodyParts.join('')
+    : `<div class="churn-empty">No churn dates on the horizon.</div>`;
+
+  return `
+    <section class="card churn-section">
+      <div class="section-header">
+        <div>
+          <h2>Upcoming churn dates</h2>
+          <p>Offers you can earn again once their cooling-off period passes.</p>
+        </div>
+      </div>
+      <div class="churn-list">${body}</div>
+    </section>
   `;
 }
 
@@ -6345,6 +6522,39 @@ function buildReminderItems(state) {
     }
   }
 
+  // churn-eligible (F6, informational) — the date a churnable offer can be
+  // re-run. Its OWN loop over ALL offers (not the committed-offer loop above)
+  // BECAUSE the natural churn case is an account you already closed: that offer
+  // is terminal (deriveLegacyStatus → 'completed') and the loop above skips it,
+  // yet its re-eligibility is exactly what you want reminded of. Emit only when
+  // churnable===true AND churnEligibleDate is computable AND that date is within
+  // CHURN_FEED_LOOKAHEAD_DAYS ahead OR at most CHURN_FEED_PAST_GRACE_DAYS behind
+  // (so a freshly-eligible offer surfaces, but ancient history isn't resurrected).
+  // Binds to the STABLE offer id so the tombstone mechanism retires it when the
+  // conditions lapse (churnable unset, anchor cleared, or the window passes).
+  for (const o of state.offers || []) {
+    if (!o.id) continue;
+    if (o.churnable !== true) continue;
+    const elig = churnEligibleDate(o);
+    if (!elig) continue;
+    const daysOut = daysBetween(TODAY, parseDate(elig));
+    if (daysOut > CHURN_FEED_LOOKAHEAD_DAYS || daysOut < -CHURN_FEED_PAST_GRACE_DAYS) continue;
+    const due = elig.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+    const name = nm(o);
+    const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
+    const months = Number(o.churn_wait_months);
+    const waitTxt = Number.isFinite(months) && months > 0 ? `${months}-month wait` : 'wait';
+    items.push({
+      id: `yv-offer-${o.id}-churn`,
+      ownerId: o.id, kind: 'churn-eligible', dueDate: due, isWork: false,
+      title: `${name} — churn eligible`,
+      notes: `${waitTxt} from ${anchorLabel}; can be earned again on/after this date.`,
+      listLabel: 'Churn eligible', tag: 'success', name,
+      sub: 'Re-run offer', color: offerColorHex(o), targetKind: 'offer', targetId: o.id
+    });
+  }
+
   for (const c of state.commitments || []) {
     if (!c.id) continue;
     if (c.status === 'cancelled' || c.status === 'completed') continue;
@@ -6433,6 +6643,20 @@ function buildReminderItems(state) {
        in {earned, met-waiting}. Both bind to the STABLE offer id, so they
        participate in the _feedEmitted/_feedRemoved tombstone mechanism (a
        status change out of the emitting state tombstones them automatically).
+
+   (step 5, churnability — informational, isWork:false):
+     • `churn-eligible` (id `yv-offer-<offerId>-churn`) — the date a churnable
+       offer can be re-run. dueDate = churnEligibleDate() (anchor per
+       churn_anchor + churn_wait_months, calendar-month clamped). Emitted from
+       its OWN loop over ALL offers (NOT the committed-offer loop) so a
+       closed-and-done offer — the typical churn case, terminal per
+       deriveLegacyStatus — still surfaces its re-eligibility. Gated to
+       churnable===true AND computable AND the eligible date within
+       CHURN_FEED_LOOKAHEAD_DAYS (60) ahead OR at most
+       CHURN_FEED_PAST_GRACE_DAYS (180) behind (past-
+       but-recent stays actionable; ancient history isn't resurrected). Binds to
+       the STABLE offer id, so unsetting churnable / clearing the anchor / the
+       window passing tombstones it automatically.
 
    NOTE: this function MUTATES state (manifestVersion, _feedEmitted,
    _feedRemoved) — call it only on the push/persist path (Sync.push /
@@ -6944,6 +7168,25 @@ function renderLifecycleInfo(o) {
       const past = parseDate(stc) && parseDate(stc).getTime() <= TODAY.getTime();
       parts.push(`<div class="yv-life-line"><span class="yv-life-k">Safe to close</span><span class="yv-life-v ${past ? 'success' : ''}">${past ? '' : 'after '}${escapeHtml(formatDateDisplay(stc))}</span></div>`);
     }
+  }
+
+  // Churnability (F6) — when the offer can be re-run again. Only churnable===true
+  // offers get a positive line; churnable===false shows a subtle "Not churnable"
+  // (but only alongside other lifecycle context or an explicit note, so a bare
+  // prospect never carries a lone negative line); churnable===null stays silent
+  // (unknown = no line).
+  if (o.churnable === true) {
+    const elig = churnEligibleDate(o);
+    if (elig) {
+      const past = parseDate(elig) && parseDate(elig).getTime() <= TODAY.getTime();
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v ${past ? 'success' : ''}">${past ? 'eligible now' : 'eligible ' + escapeHtml(formatDateDisplay(elig))}</span></div>`);
+    } else if (Number(o.churn_wait_months) > 0) {
+      // Churnable with a wait set but the anchor date isn't recorded yet.
+      const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">needs ${escapeHtml(anchorLabel)} date</span></div>`);
+    }
+  } else if (o.churnable === false && (parts.length > 0 || o.churn_notes)) {
+    parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">not churnable</span></div>`);
   }
 
   if (parts.length === 0) return '';
@@ -8769,8 +9012,46 @@ function showOfferModal(offerId = null) {
                 <label for="f-bonus-received">Bonus received date</label>
                 <input id="f-bonus-received" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.bonus_received_date))}" name="bonus_received_date" data-picker-mode="plain" />
               </div>
-              <span class="field-hint">When the sign-up bonus actually posted. Set it once you're marked Earned — it anchors the safe-to-close date and (later) churn eligibility.</span>
+              <span class="field-hint">When the sign-up bonus actually posted. Set it once you're marked Earned — it anchors the safe-to-close date and, when the anchor below is "bonus received", churn eligibility.</span>
             </div>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Churnability</label>
+            <div class="form-grid" style="margin-top: var(--space-2);">
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-churnable">Can be churned</label>
+                  <select id="f-churnable" class="select" name="churnable">
+                    <option value="" ${o.churnable == null ? 'selected' : ''}>Unknown</option>
+                    <option value="true" ${o.churnable === true ? 'selected' : ''}>Yes</option>
+                    <option value="false" ${o.churnable === false ? 'selected' : ''}>No</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-churn-wait">Wait before re-run (months)</label>
+                  <input id="f-churn-wait" class="input" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="e.g. 12" value="${o.churn_wait_months == null ? '' : escapeAttr(o.churn_wait_months)}" name="churn_wait_months" />
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-churn-anchor">Counted from</label>
+                  <select id="f-churn-anchor" class="select" name="churn_anchor">
+                    <option value="bonus_received" ${o.churn_anchor === 'bonus_received' || !o.churn_anchor ? 'selected' : ''}>From bonus received</option>
+                    <option value="account_closed" ${o.churn_anchor === 'account_closed' ? 'selected' : ''}>From account closed</option>
+                    <option value="account_opened" ${o.churn_anchor === 'account_opened' ? 'selected' : ''}>From account opened</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-churn-notes">Churn notes</label>
+                  <input id="f-churn-notes" class="input" type="text" autocomplete="off" placeholder="e.g. once per 12 months" value="${escapeAttr(o.churn_notes || '')}" name="churn_notes" />
+                </div>
+              </div>
+            </div>
+            <span class="field-hint">Mark whether this bonus can be earned again later. The eligible-again date (wait months added to the chosen anchor date) shows on the card and in "Upcoming churn dates" on the Overview.</span>
           </div>
           <div class="field"><div class="field-box"><label for="f-notes">Notes</label><textarea id="f-notes" class="textarea" name="notes">${escapeHtml(o.notes || '')}</textarea></div></div>
         </div>
@@ -9512,6 +9793,15 @@ function readOfferForm(idArg, isEdit) {
     // field. dateIso → '' when empty; store null (not '') so the "no date"
     // consumers (expectedBonusWindow, safeToCloseDate) treat it uniformly.
     bonus_received_date: dateIso(data.bonus_received_date) || null,
+    // Churnability (F6): read the Advanced churn sub-group. churnable is a
+    // tri-state select ('' → null unknown, 'true' → true, 'false' → false), NOT
+    // a money/number field. Wait-months is a plain null-safe number; anchor
+    // defaults to bonus_received; notes is trimmed text. These overwrite the
+    // spread-in defaults/prior so the inputs are authoritative on every save.
+    churnable: data.churnable === 'true' ? true : (data.churnable === 'false' ? false : null),
+    churn_wait_months: num(data.churn_wait_months),
+    churn_anchor: data.churn_anchor || 'bonus_received',
+    churn_notes: (data.churn_notes || '').trim(),
     // Schema v2: stamp the edit time on every save (overwrites any spread-in
     // prior value). Migrated offers carry last_edited:null until first edited.
     last_edited: new Date().toISOString()
