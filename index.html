@@ -1308,6 +1308,87 @@ a { color: inherit; text-decoration: none; }
 .offer-req-item.done .offer-req-date { color: var(--text-tertiary); }
 .offer-req-count { font-weight: 500; color: var(--text-tertiary); }
 
+/* ============================================================
+   ACCOUNT LIFECYCLE PIPELINE (F3) — derived-view strip on the offer
+   card + modal. 4 equal segments joined by a progress rail; filled
+   segments (done/current) tint with --accent, idle stay neutral.
+   Mobile: labels shrink and the track stays a single row that
+   compresses (no horizontal scroll) down to ~320px.
+   ============================================================ */
+.yv-pipeline { margin: var(--space-3) 0; }
+.yv-pipeline.slim { margin: var(--space-2) 0 0; }
+.yv-pl-track { display: flex; align-items: flex-start; gap: 0; }
+.yv-pl-seg {
+  flex: 1 1 0; min-width: 0; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  text-align: center;
+}
+/* Connecting rail: a line to the LEFT of every segment except the first,
+   drawn from the dot leftwards to meet the previous dot. */
+.yv-pl-seg::before {
+  content: ''; position: absolute; top: 6px; left: -50%; width: 100%; height: 2px;
+  background: var(--border-strong); z-index: 0;
+}
+.yv-pl-seg:first-child::before { display: none; }
+/* A filled segment (done/current) tints its incoming rail too. */
+.yv-pl-seg.done::before, .yv-pl-seg.current::before { background: var(--accent-mid); }
+.yv-pl-dot {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  width: 13px; height: 13px; border-radius: var(--radius-pill);
+  background: var(--bg-elevated); border: 2px solid var(--border-strong);
+}
+.yv-pl-seg.done .yv-pl-dot { background: var(--accent); border-color: var(--accent); }
+.yv-pl-seg.current .yv-pl-dot {
+  background: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.yv-pl-label {
+  font-size: 10px; line-height: 1.2; letter-spacing: 0.02em;
+  color: var(--text-tertiary); max-width: 100%; overflow-wrap: anywhere;
+}
+.yv-pl-seg.done .yv-pl-label { color: var(--text-secondary); }
+.yv-pl-seg.current .yv-pl-label { color: var(--accent-strong); font-weight: 600; }
+.yv-pipeline.inactive .yv-pl-label { color: var(--text-tertiary); opacity: 0.7; }
+.yv-pl-caption {
+  margin-top: 7px; font-size: 11px; color: var(--text-secondary);
+  text-align: center;
+}
+.yv-pipeline.slim .yv-pl-label { font-size: 9px; }
+.yv-pipeline.slim .yv-pl-dot { width: 11px; height: 11px; }
+.yv-pipeline.slim .yv-pl-seg::before { top: 5px; }
+
+/* Expected-bonus + safe-to-close info lines. */
+.yv-life-info {
+  display: flex; flex-direction: column; gap: 3px;
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+}
+.yv-life-line { display: flex; align-items: baseline; gap: 8px; }
+.yv-life-k {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.02em; color: var(--text-tertiary); min-width: 96px;
+}
+.yv-life-v { flex: 1 1 auto; color: var(--text); font-feature-settings: 'tnum' 1; }
+.yv-life-v.success { color: #047857; font-weight: 600; }
+.yv-life-v.warn { color: #b45309; font-weight: 600; }
+.yv-life-tag {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--text-tertiary); background: var(--bg); padding: 1px 5px;
+  border-radius: var(--radius-pill); margin-left: 2px;
+}
+
+/* Auto-suggest transition banner (subtle, dismissable). */
+.yv-life-suggest {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  margin: var(--space-2) 0 0; padding: 7px 8px 7px 11px;
+  background: var(--accent-soft); border: 1px solid var(--accent-mid);
+  border-radius: var(--radius-md);
+}
+.yv-life-suggest-text { font-size: 12px; color: var(--accent-strong); min-width: 0; }
+.yv-life-suggest-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+.yv-life-suggest-x { width: 24px; height: 24px; color: var(--text-tertiary); }
+.btn-xs { padding: 4px 10px; font-size: 12px; border-radius: var(--radius-sm); }
+
 /* DD transfer-timing row (Settings → "Direct-deposit transfer timing"):
    the three mini inputs ("in"/"season"/"back") previously sized by a
    per-item max-width guess (130/150/140px) tuned to roughly fit each
@@ -4924,12 +5005,194 @@ function lockStartDate(offer) {
   return bizDayISO(effectiveFundingDate(offer));
 }
 
+/* ============================================================
+   ACCOUNT LIFECYCLE (F3) — a DERIVED VIEW over the existing status
+   model (accountStatus/subStatus). Nothing here forks or stores new
+   lifecycle state; every function reads the same fields the chips,
+   selects, and projection already use. The 4-stage pipeline, the
+   expected-bonus window, and safeToCloseDate are all pure projections.
+   ============================================================ */
+
+// When an offer has no bonus_post_min/max_days, the expected-bonus window
+// falls back to this "typical" span (labeled as such in the UI so the user
+// knows it's a heuristic, not a bank-stated figure). ~3–3.5 months is the
+// common posting lag DoC reports for checking bonuses.
+const DEFAULT_BONUS_POST_MIN_DAYS = 90;
+const DEFAULT_BONUS_POST_MAX_DAYS = 105;
+
+// The four pipeline stages, in order. 'inactive' is a fifth pseudo-stage for
+// offers whose subStatus isn't on the earn path (prospect/applied/denied/
+// didnt-track/archived) — the strip renders neutral and the chip carries the
+// specifics. Closed always wins (a closed account is terminal regardless of sub).
+const LIFECYCLE_STAGES = ['meeting', 'waiting', 'earned', 'closed'];
+const LIFECYCLE_STAGE_LABELS = {
+  meeting: 'Meeting Requirements',
+  waiting: 'Waiting for Bonus',
+  earned: 'Bonus Earned',
+  closed: 'Closed'
+};
+
+// Map the (accountStatus, subStatus) pair onto a pipeline stage. DERIVED — never
+// stored. Closed account → 'closed' (terminal). Otherwise by subStatus:
+//   approved/on-track → meeting; met-waiting → waiting; earned → earned.
+// Everything else (prospect/applied/denied/didnt-track/archived on an open or
+// closed-pre-account state) → 'inactive' (neutral strip + chip carries detail).
+function lifecycleStage(offer) {
+  if (!offer) return 'inactive';
+  if (offer.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(offer.subStatus)) return 'closed';
+  switch (offer.subStatus) {
+    case 'approved':
+    case 'on-track': return 'meeting';
+    case 'met-waiting': return 'waiting';
+    case 'earned': return 'earned';
+    default: return 'inactive';
+  }
+}
+
+// Human caption mirroring the current lifecycle context, shown under the strip.
+// Returns '' for inactive so no nonsense caption appears for prospect/denied/etc.
+function lifecycleCaption(offer) {
+  const stage = lifecycleStage(offer);
+  switch (stage) {
+    case 'meeting': return 'Working toward the bonus — completing requirements.';
+    case 'waiting': return 'Requirements met — waiting for the bonus to post.';
+    case 'earned':
+      return offer.bonus_received_date
+        ? `Bonus received ${formatDateDisplay(offer.bonus_received_date)}.`
+        : 'Bonus earned — safe to close once funds release.';
+    case 'closed':
+      return offer.closed_date
+        ? `Account closed ${formatDateDisplay(offer.closed_date)}.`
+        : 'Account closed.';
+    default: return '';
+  }
+}
+
+// True when EVERY requirement row (derived + user) on the offer is done. Drives
+// the auto-suggest ("all requirements met — mark as Waiting?"). An offer with no
+// requirement rows returns false — there's nothing to have completed, so we
+// never nudge an offer that has no tracked obligations.
+function allRequirementsDone(offer) {
+  const reqs = Array.isArray(offer && offer.requirements) ? offer.requirements : [];
+  if (reqs.length === 0) return false;
+  return reqs.every(r => r && r.done);
+}
+
+// Should the "mark as Waiting for Bonus?" suggestion show for this offer?
+// Gate: the account is OPEN (a closed offer can't advance to met-waiting — the
+// one-tap would land on stage 'closed', not 'waiting'), subStatus is still
+// approved/on-track, ALL requirements are done, and the user hasn't dismissed it
+// for this offer. No automatic status change — the tap does that. Kept as its
+// own predicate so the card and modal agree.
+function shouldSuggestWaiting(offer) {
+  if (!offer) return false;
+  if (offer.lifecycle_suggest_dismissed) return false;
+  if (offer.accountStatus !== 'open') return false;
+  if (offer.subStatus !== 'approved' && offer.subStatus !== 'on-track') return false;
+  return allRequirementsDone(offer);
+}
+
+// The anchor date the expected-bonus window counts from: the LATEST done_date
+// across requirement rows (the last obligation you completed is when the clock
+// really starts). Returns { iso, estimated }:
+//   • estimated:false when at least one row has a real done_date.
+//   • estimated:true  when no row carries a done_date — we fall back to today so
+//     a window still shows, flagged "estimated" in the UI.
+// Returns null only when there are no requirement rows at all.
+function bonusWindowAnchor(offer) {
+  const reqs = Array.isArray(offer && offer.requirements) ? offer.requirements : [];
+  if (reqs.length === 0) return { iso: isoDate(TODAY), estimated: true };
+  let latest = null;
+  for (const r of reqs) {
+    const d = r && r.done_date ? parseDate(r.done_date) : null;
+    if (d && (!latest || d.getTime() > latest.getTime())) latest = d;
+  }
+  if (latest) return { iso: isoDate(latest), estimated: false };
+  return { iso: isoDate(TODAY), estimated: true };
+}
+
+// Expected-bonus posting window for an offer that has met its requirements.
+// Returns { startISO, endISO, estimated, typical } or null when it doesn't
+// apply (subStatus not met-waiting/earned) or can't be computed. `typical` flags
+// the default-days fallback; `estimated` flags the today-anchor fallback.
+//   window = [anchor + min, anchor + max], where anchor = latest done_date
+//   (fallback today), min/max = bonus_post_min/max_days (fallback DEFAULT_*).
+function expectedBonusWindow(offer) {
+  if (!offer) return null;
+  const stage = lifecycleStage(offer);
+  if (stage !== 'waiting' && stage !== 'earned') return null;
+  const anchor = bonusWindowAnchor(offer);
+  if (!anchor) return null;
+  const anchorDate = parseDate(anchor.iso);
+  if (!anchorDate) return null;
+  const hasMin = offer.bonus_post_min_days != null && offer.bonus_post_min_days !== '';
+  const hasMax = offer.bonus_post_max_days != null && offer.bonus_post_max_days !== '';
+  const typical = !hasMin && !hasMax;
+  let min = hasMin ? Number(offer.bonus_post_min_days) : DEFAULT_BONUS_POST_MIN_DAYS;
+  let max = hasMax ? Number(offer.bonus_post_max_days) : DEFAULT_BONUS_POST_MAX_DAYS;
+  if (!Number.isFinite(min)) min = DEFAULT_BONUS_POST_MIN_DAYS;
+  if (!Number.isFinite(max)) max = DEFAULT_BONUS_POST_MAX_DAYS;
+  if (max < min) { const t = min; min = max; max = t; } // tolerate reversed input
+  return {
+    startISO: isoDate(addDays(anchorDate, min)),
+    endISO: isoDate(addDays(anchorDate, max)),
+    estimated: anchor.estimated,
+    typical
+  };
+}
+
+// Latest of all applicable "you can safely close the account" constraints, as an
+// ISO date, or null when insufficient data. Each term is null-safe; the result
+// is the MAX (close only when EVERY constraint has passed). Terms:
+//   (a) withdrawal-eligible date — funds are physically released (the legacy
+//       `we` the stub already computed; models the hold/round-trip).
+//   (b) bonus timing — if the bonus is already received (bonus_received_date),
+//       that date; otherwise the expected-bonus window END (don't close before
+//       the bonus is expected to post, or a late-posting bonus can be clawed).
+//   (c) open-anchor + etf_window_days — an early-termination-fee avoidance
+//       window measured from the account open date (plannedSignupDate).
+//   (d) every UNMET requirement row's resolved deadline — don't call it safe
+//       before an outstanding obligation's own deadline has passed. DONE rows are
+//       excluded: a completed obligation's deadline is irrelevant to close-safety
+//       (its date has served its purpose), and counting it would push safe-to-
+//       close months past a real bonus_received_date for a long-deadline row.
+// Returns ISO or null (never throws). Feed + card read this.
 function safeToCloseDate(offer) {
-  // Approximation: withdrawalEligible + a small grace period; or use explicit field if present
+  if (!offer) return null;
+  const candidates = [];
+
+  // (a) withdrawal-eligible (funds released).
   const we = withdrawalEligibleDate(offer);
-  if (!we) return null;
-  // Keep separate as concept; actual safe-to-close varies by bank policy
-  return null;
+  if (we) candidates.push(we);
+
+  // (b) bonus timing.
+  if (offer.bonus_received_date) {
+    candidates.push(offer.bonus_received_date);
+  } else {
+    const win = expectedBonusWindow(offer);
+    if (win && win.endISO) candidates.push(win.endISO);
+  }
+
+  // (c) ETF-avoidance window from the account open date.
+  if (offer.etf_window_days != null && offer.etf_window_days !== '') {
+    const days = Number(offer.etf_window_days);
+    const open = parseDate(offer.plannedSignupDate);
+    if (Number.isFinite(days) && open) candidates.push(isoDate(addDays(open, days)));
+  }
+
+  // (d) every UNMET requirement deadline (done rows don't constrain close-safety).
+  const reqs = Array.isArray(offer.requirements) ? offer.requirements : [];
+  for (const r of reqs) {
+    if (!r || r.done) continue;
+    const dlISO = requirementDeadlineISO(offer, r);
+    if (dlISO) candidates.push(dlISO);
+  }
+
+  if (candidates.length === 0) return null;
+  // MAX by ISO date (YYYY-MM-DD sorts lexicographically == chronologically).
+  let maxISO = candidates[0];
+  for (const c of candidates) { if (c > maxISO) maxISO = c; }
+  return maxISO;
 }
 
 function simpleReturn(offer) {
@@ -6037,6 +6300,49 @@ function buildReminderItems(state) {
         color, targetKind: 'offer', targetId: o.id
       });
     }
+
+    // expected-bonus-window (F3, informational) — the window in which the
+    // sign-up bonus should post, once requirements are met. Emitted ONLY in
+    // met-waiting (the "requirements done, watching for the deposit" state);
+    // dueDate = window END so a consumer's reminder fires if it hasn't posted
+    // by the late edge. lifecycleStage=='waiting' iff subStatus=='met-waiting'.
+    if (lifecycleStage(o) === 'waiting') {
+      const win = expectedBonusWindow(o);
+      if (win && win.endISO) {
+        const due = win.endISO.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+          id: `yv-offer-${o.id}-bonuswindow`,
+          ownerId: o.id, kind: 'expected-bonus-window', dueDate: due, isWork: false,
+          title: `${name} — bonus expected by`,
+          notes: `Window ${formatDateDisplay(win.startISO)} – ${formatDateDisplay(win.endISO)}`,
+          listLabel: 'Bonus expected', tag: 'success', name,
+          sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`,
+          color, targetKind: 'offer', targetId: o.id
+        });
+      }
+    }
+
+    // safe-to-close (F3, informational) — the date after which closing the
+    // account is safe (funds released, bonus posted/expected, ETF + deadlines
+    // cleared). Emitted when computable AND the account is still open AND the
+    // offer is at or past requirements-met (earned or met-waiting) — before
+    // that, closing isn't yet on the table. earned+open → legacy 'funded'
+    // (survives the terminal skip at loop top); earned+closed is already
+    // terminal and excluded.
+    if (o.accountStatus === 'open' && (o.subStatus === 'earned' || o.subStatus === 'met-waiting')) {
+      const stc = safeToCloseDate(o);
+      if (stc) {
+        const due = stc.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+          id: `yv-offer-${o.id}-safeclose`,
+          ownerId: o.id, kind: 'safe-to-close', dueDate: due, isWork: false,
+          title: `${name} — safe to close`,
+          notes: `Account can be closed on/after this date (funds released and bonus posted).`,
+          listLabel: 'Safe to close', tag: 'success', name,
+          sub: 'Close account', color, targetKind: 'offer', targetId: o.id
+        });
+      }
+    }
   }
 
   for (const c of state.commitments || []) {
@@ -6115,6 +6421,18 @@ function buildReminderItems(state) {
    the legacy funding/DD/debit fields the deposit-deadline / dd-initiate /
    debit-deadline items already cover, so emitting from them too would
    double-book. Done rows emit nothing (obligation met).
+
+   (step 4, lifecycle — both informational, isWork:false):
+     • `expected-bonus-window` (id `yv-offer-<offerId>-bonuswindow`) — the
+       expected bonus-posting window. dueDate = window END; notes =
+       "Window <start> – <end>". Emitted ONLY while subStatus=='met-waiting'
+       (requirements met, watching for the deposit).
+     • `safe-to-close` (id `yv-offer-<offerId>-safeclose`) — the date after
+       which closing the account is safe. dueDate = safeToCloseDate(). Emitted
+       only when that date is computable AND accountStatus=='open' AND subStatus
+       in {earned, met-waiting}. Both bind to the STABLE offer id, so they
+       participate in the _feedEmitted/_feedRemoved tombstone mechanism (a
+       status change out of the emitting state tombstones them automatically).
 
    NOTE: this function MUTATES state (manifestVersion, _feedEmitted,
    _feedRemoved) — call it only on the push/persist path (Sync.push /
@@ -6562,6 +6880,93 @@ function renderRequirementChecklist(o) {
     </div>`;
 }
 
+// Compact 4-stage pipeline strip (F3) — a DERIVED VIEW of the status model
+// (lifecycleStage), styled after BonusFlow's filled-progress-segment pattern
+// adapted to YV tokens. `slim` is a denser variant for the modal. For an
+// 'inactive' subStatus (prospect/denied/etc.) the whole strip renders neutral
+// and carries no active fill — the offer's status chip states the specifics.
+function renderPipelineStrip(o, opts) {
+  const slim = !!(opts && opts.slim);
+  const stage = lifecycleStage(o);
+  const inactive = stage === 'inactive';
+  const activeIdx = inactive ? -1 : LIFECYCLE_STAGES.indexOf(stage);
+  const segs = LIFECYCLE_STAGES.map((st, i) => {
+    // A stage is "filled" (past/current) when its index <= the active index.
+    const state = inactive ? 'idle' : (i < activeIdx ? 'done' : (i === activeIdx ? 'current' : 'idle'));
+    return `<div class="yv-pl-seg ${state}">
+      <span class="yv-pl-dot"></span>
+      <span class="yv-pl-label">${LIFECYCLE_STAGE_LABELS[st]}</span>
+    </div>`;
+  }).join('');
+  const cap = slim ? '' : (() => {
+    const c = lifecycleCaption(o);
+    return c ? `<div class="yv-pl-caption">${escapeHtml(c)}</div>` : '';
+  })();
+  return `<div class="yv-pipeline ${slim ? 'slim' : ''} ${inactive ? 'inactive' : ''}" role="img" aria-label="Lifecycle stage: ${inactive ? 'not started' : LIFECYCLE_STAGE_LABELS[stage]}">
+    <div class="yv-pl-track">${segs}</div>
+    ${cap}
+  </div>`;
+}
+
+// Expected-bonus window + safe-to-close lines for the card/modal. Shows only
+// what's computable for the offer's current lifecycle stage; returns '' when
+// neither applies (so no empty box appears for a prospect).
+function renderLifecycleInfo(o) {
+  const parts = [];
+  const stage = lifecycleStage(o);
+
+  // Bonus received (earned + a stored date) OR expected window (waiting/earned).
+  if (stage === 'earned' && o.bonus_received_date) {
+    parts.push(`<div class="yv-life-line"><span class="yv-life-k">Bonus received</span><span class="yv-life-v success">${escapeHtml(formatDateDisplay(o.bonus_received_date))}</span></div>`);
+  } else {
+    const win = expectedBonusWindow(o);
+    if (win) {
+      // Overdue (P3-1): still met-waiting but the window's late edge has passed —
+      // a stale future-looking range would mislead, so switch to overdue copy +
+      // warning styling. (Feed semantics unchanged — no past-date filter there.)
+      const endPast = win.endISO && parseDate(win.endISO) && parseDate(win.endISO).getTime() < TODAY.getTime();
+      if (stage === 'waiting' && endPast) {
+        parts.push(`<div class="yv-life-line"><span class="yv-life-k">Bonus overdue</span><span class="yv-life-v warn">window ended ${escapeHtml(formatDateDisplay(win.endISO))}</span></div>`);
+      } else {
+        const flag = win.typical ? ' <span class="yv-life-tag">typical</span>' : (win.estimated ? ' <span class="yv-life-tag">estimated</span>' : '');
+        parts.push(`<div class="yv-life-line"><span class="yv-life-k">Expected bonus</span><span class="yv-life-v">${escapeHtml(formatDateDisplay(win.startISO))} ~ ${escapeHtml(formatDateDisplay(win.endISO))}${flag}</span></div>`);
+      }
+    }
+  }
+
+  // Safe-to-close — same gate as the safe-to-close FEED kind so the card and
+  // feed agree: account OPEN and at/past requirements-met (earned or met-waiting).
+  // Before that, closing isn't on the table, so no line for approved/on-track/
+  // denied. Success-styled once the date has passed.
+  if (o.accountStatus === 'open' && (o.subStatus === 'earned' || o.subStatus === 'met-waiting')) {
+    const stc = safeToCloseDate(o);
+    if (stc) {
+      const past = parseDate(stc) && parseDate(stc).getTime() <= TODAY.getTime();
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Safe to close</span><span class="yv-life-v ${past ? 'success' : ''}">${past ? '' : 'after '}${escapeHtml(formatDateDisplay(stc))}</span></div>`);
+    }
+  }
+
+  if (parts.length === 0) return '';
+  return `<div class="yv-life-info">${parts.join('')}</div>`;
+}
+
+// Non-intrusive inline suggestion to advance the lifecycle when all requirements
+// are done but the offer is still approved/on-track. One tap sets subStatus=
+// 'met-waiting' via the normal save path; a dismiss persists a per-offer flag so
+// it never nags again. Renders '' unless shouldSuggestWaiting(o).
+function renderLifecycleSuggest(o) {
+  if (!shouldSuggestWaiting(o)) return '';
+  return `<div class="yv-life-suggest">
+    <span class="yv-life-suggest-text">All requirements met — mark as Waiting for Bonus?</span>
+    <span class="yv-life-suggest-actions">
+      <button class="btn btn-primary btn-xs" data-action="lifecycle-mark-waiting" data-id="${o.id}">Mark waiting</button>
+      <button class="btn-icon yv-life-suggest-x" data-action="lifecycle-dismiss-suggest" data-id="${o.id}" aria-label="Dismiss suggestion" title="Dismiss">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
+    </span>
+  </div>`;
+}
+
 function renderOfferCard(o) {
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
@@ -6640,6 +7045,9 @@ function renderOfferCard(o) {
       ` : ''}
       ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? renderDdMethodPanel(o) : ''}
       ${renderRequirementChecklist(o)}
+      ${renderPipelineStrip(o)}
+      ${renderLifecycleSuggest(o)}
+      ${renderLifecycleInfo(o)}
       <div class="offer-chips">
         <span class="chip chip-offer-type-${(o.offerType && o.offerType !== 'other') ? o.offerType : 'new-funds-held'}" title="${
           o.offerType === 'direct-deposit' ? 'Direct deposit — no hold; money round-trips through the account' :
@@ -8281,6 +8689,7 @@ function showOfferModal(offerId = null) {
             </div>
             <span class="field-hint">Where the bank measures the hold from. <strong>Open date</strong> = e.g. US Bank "60 days from open" — funding later means a shorter actual lock. <strong>Funded date</strong> = e.g. Citi "keep $50k for 60 days from deposit". Money is always treated as tied up only from when you actually deposit.</span>
           </div>
+          <div class="field" style="grid-column: 1 / -1;" id="f-lifecycle-strip">${renderPipelineStrip(o, { slim: true })}${renderLifecycleInfo(o)}</div>
           <div class="field">
             <div class="field-box">
               <label for="f-substatus">Offer status</label>
@@ -8354,6 +8763,13 @@ function showOfferModal(offerId = null) {
                   ${o.emailUsed && !EMAIL_OPTIONS.includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
                 </select>
               </div>
+            </div>
+            <div class="field">
+              <div class="field-box">
+                <label for="f-bonus-received">Bonus received date</label>
+                <input id="f-bonus-received" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.bonus_received_date))}" name="bonus_received_date" data-picker-mode="plain" />
+              </div>
+              <span class="field-hint">When the sign-up bonus actually posted. Set it once you're marked Earned — it anchors the safe-to-close date and (later) churn eligibility.</span>
             </div>
           </div>
           <div class="field"><div class="field-box"><label for="f-notes">Notes</label><textarea id="f-notes" class="textarea" name="notes">${escapeHtml(o.notes || '')}</textarea></div></div>
@@ -8448,7 +8864,7 @@ function showOfferModal(offerId = null) {
         const acct = form.querySelector('#f-accountstatus');
         if (acct) acct.value = defaultAccountForSub(ev.target.value);
       }
-      if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') syncSignupLabel();
+      if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') { syncSignupLabel(); refreshLifecycleStrip(); }
       // Debit-requirement Yes/No → show or hide the count/deadline fields.
       if (ev.target.name === 'debitRequired') {
         const wrap = form.querySelector('#debit-fields-wrap');
@@ -8794,6 +9210,29 @@ function refreshRequirementsSection() {
   host.innerHTML = renderRequirementRows(offer);
 }
 
+// Live re-render of the modal's slim lifecycle strip + info block when the
+// status selects change, so the pipeline advances in place without reopening
+// the modal. Builds a status-aware live offer (the requirements offer extended
+// with the currently-selected accountStatus/subStatus + bonus-received field)
+// and feeds it through the same render path the card uses. The expected-bonus
+// anchor is approximate here (modal req rows aren't done-toggled), which is fine
+// for a live preview; the card recomputes authoritatively after save.
+function refreshLifecycleStrip() {
+  const host = document.getElementById('f-lifecycle-strip');
+  if (!host) return;
+  const form = document.getElementById('offer-form');
+  if (!form) return;
+  const sub = (form.querySelector('#f-substatus') || {}).value || 'prospect';
+  const acct = (form.querySelector('#f-accountstatus') || {}).value || 'closed';
+  const brEl = form.querySelector('#f-bonus-received');
+  const offer = Object.assign(buildLiveRequirementsOffer(), {
+    subStatus: sub,
+    accountStatus: acct,
+    bonus_received_date: brEl ? (parseDateInput(brEl.value) || null) : null
+  });
+  host.innerHTML = renderPipelineStrip(offer, { slim: true }) + renderLifecycleInfo(offer);
+}
+
 // Recompute ONLY the live deadline-date lines in the section (no re-render), so
 // changing the sign-up date re-dates every row without disturbing focus.
 function refreshRequirementDates() {
@@ -9069,11 +9508,28 @@ function readOfferForm(idArg, isEdit) {
     docUrl: data.docUrl || '',
     entityUsed: data.entityUsed || '',
     emailUsed: data.emailUsed || '',
+    // Lifecycle (F3): the bonus-received anchor date, read from the Advanced
+    // field. dateIso → '' when empty; store null (not '') so the "no date"
+    // consumers (expectedBonusWindow, safeToCloseDate) treat it uniformly.
+    bonus_received_date: dateIso(data.bonus_received_date) || null,
     // Schema v2: stamp the edit time on every save (overwrites any spread-in
     // prior value). Migrated offers carry last_edited:null until first edited.
     last_edited: new Date().toISOString()
   };
   normalizeOfferStatus(offer); // sync the legacy shadow status
+  // Lifecycle (F3): keep closed_date consistent with the account state on the
+  // save path (no migration needed — this fires on the status change itself).
+  //   • Reopen (prior closed → now open): the closure is void, so CLEAR any
+  //     stale closed_date. The churn step anchors on closed_date and must not
+  //     read a date from a closure that was undone.
+  //   • Close (now closed, non-pre-account): stamp closed_date if empty. Never
+  //     overwrites an existing date (a re-save of an already-closed offer keeps
+  //     the original close date).
+  if (prior && prior.accountStatus === 'closed' && offer.accountStatus === 'open') {
+    offer.closed_date = null;
+  } else if (offer.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(offer.subStatus) && !offer.closed_date) {
+    offer.closed_date = isoDate(TODAY);
+  }
   // Schema v2 (step 3): assemble requirements[] before the derived sync.
   //   • User rows come from the modal's hidden #f-user-reqs payload — that's
   //     the authoritative latest state of every user-added/edited row (their
@@ -9632,6 +10088,8 @@ function onClick(e) {
     case 'add-req-row': addRequirementRow(); break;
     case 'remove-req-row': removeRequirementRow(target.dataset.reqIndex); break;
     case 'toggle-req-done': toggleRequirementDone(id, target.dataset.reqId); break;
+    case 'lifecycle-mark-waiting': lifecycleMarkWaiting(id); break;
+    case 'lifecycle-dismiss-suggest': lifecycleDismissSuggest(id); break;
     case 'close-modal': closeModal(); break;
 
     case 'add-commitment': showCommitmentModal(); break;
@@ -9894,6 +10352,32 @@ function toggleRequirementDone(offerId, rowId) {
     if (!row) return;
     row.done = !row.done;
     row.done_date = row.done ? isoDate(TODAY) : null;
+  });
+}
+
+// Auto-suggest one-tap: advance an offer whose requirements are all met from
+// approved/on-track → met-waiting (via the same status field + normalize the
+// modal uses). No-op unless the suggestion actually applies (guards against a
+// stale click). Rides App.update so it persists + re-renders like any edit.
+function lifecycleMarkWaiting(offerId) {
+  if (!offerId) return;
+  App.update(s => {
+    const o = (s.offers || []).find(x => x.id === offerId);
+    if (!o || !shouldSuggestWaiting(o)) return;
+    o.subStatus = 'met-waiting';
+    normalizeOfferStatus(o); // keep accountStatus + legacy shadow in sync
+  });
+  toast('Marked as Waiting for Bonus');
+}
+
+// Dismiss the auto-suggest for an offer (persist a per-offer flag so it never
+// nags again). Purely a UI preference; no status change.
+function lifecycleDismissSuggest(offerId) {
+  if (!offerId) return;
+  App.update(s => {
+    const o = (s.offers || []).find(x => x.id === offerId);
+    if (!o) return;
+    o.lifecycle_suggest_dismissed = true;
   });
 }
 
@@ -10186,7 +10670,14 @@ function seedSampleData(state) {
       churnable: true,
       churn_wait_months: 12,
       churn_anchor: 'bonus_received',
-      churn_notes: 'US Bank Smartly — reopen allowed 12 months after prior bonus posts.'
+      churn_notes: 'US Bank Smartly — reopen allowed 12 months after prior bonus posts.',
+      // Lifecycle (F3) showcase: an EXPLICIT bonus-posting window (US Bank
+      // Smartly typically posts the bonus ~35–45 days after the qualifying
+      // period) so the expected-bonus window renders the stated range rather
+      // than the DEFAULT_BONUS_POST_* fallback. Other seeds omit these to
+      // exercise the fallback path.
+      bonus_post_min_days: 35,
+      bonus_post_max_days: 45
     },
     {
       id: uid('off'),
