@@ -1121,6 +1121,14 @@ a { color: inherit; text-decoration: none; }
 .offer-dates { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-3); display: flex; flex-direction: column; gap: 4px; }
 .offer-dates span { display: flex; align-items: center; gap: 4px; line-height: 1.4; }
 
+/* Muted "$N/mo" fee detail tucked under the Bonus stat — quiet supporting
+   info (BonusFlow parity), never a chip. */
+.offer-monthly-fee { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+
+/* Quiet freshness stamp — smallest tier, tertiary text, right-aligned so it
+   reads as a corner annotation rather than card content. */
+.offer-updated { margin-top: var(--space-2); font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-tertiary); text-align: right; }
+
 .offer-chips {
   display: flex;
   flex-wrap: wrap;
@@ -4793,6 +4801,7 @@ const App = {
     timelineShowCompleted: true,
     offersStatus: 'all',
     offersSearch: '',
+    offersSort: 'default',
     offersAdvanced: false
   },
   optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
@@ -7210,6 +7219,50 @@ function renderLifecycleSuggest(o) {
   </div>`;
 }
 
+// Expiration/freshness chip for an offer card (display only — the offer-expires
+// FEED item is computed separately and untouched). An offer's expiration date
+// only governs SIGNING UP, so the chip is shown ONLY for pre-confirmation
+// subStatuses — prospect/applied (PRE_ACCOUNT_SUB_STATUSES) — which is exactly
+// when the offer-expires feed item also fires (the feed gates on
+// !CONFIRMED_OFFER_STATUSES.has(status); prospect→'prospect', applied→'selected'
+// are the only non-confirmed, non-completed derived statuses). Reusing that
+// canonical set instead of a parallel exclusion list keeps chip and feed from
+// ever contradicting: once approved/on-track/met-waiting/earned/closed, the
+// expiry no longer matters and neither surface shows it.
+// Tone: neutral (muted) while > 14 days out; --warning once ≤ 14 days (incl.
+// today); --danger once past. N is calendar days until expiry (today = 0).
+function offerExpirationChip(o) {
+  if (!o || !o.offerExpirationDate) return '';
+  if (!PRE_ACCOUNT_SUB_STATUSES.has(o.subStatus)) return '';
+  const exp = parseDate(o.offerExpirationDate);
+  if (!exp) return '';
+  const n = daysBetween(TODAY, exp); // >0 future, 0 today, <0 past
+  const disp = formatDateDisplay(isoDate(exp)); // owner's M-D-YYYY
+  if (n < 0) {
+    return `<span class="chip chip-danger" title="This offer's advertised expiration date has passed.">Expired ${disp}</span>`;
+  }
+  if (n === 0) {
+    return `<span class="chip chip-warn" title="Offer expires today — act now.">Expires today</span>`;
+  }
+  const tone = n <= 14 ? 'chip-warn' : 'chip-muted';
+  const title = n <= 14
+    ? `Offer expires in ${n} day${n === 1 ? '' : 's'} — act soon.`
+    : `Offer expires in ${n} days.`;
+  return `<span class="chip ${tone}" title="${title}">Expires ${disp} (${n}d)</span>`;
+}
+
+// Quiet "Updated <date>" freshness stamp from last_edited. Smallest text tier,
+// --text-tertiary — never competes with the card's real content. Returns ''
+// when the offer has never been edited (last_edited null/absent — migrated
+// offers stay blank until their first save).
+function offerUpdatedStamp(o) {
+  if (!o || !o.last_edited) return '';
+  const d = parseDate(String(o.last_edited).slice(0, 10));
+  if (!d) return '';
+  const label = daysBetween(TODAY, d) === 0 ? 'Updated today' : `Updated ${formatDateDisplay(isoDate(d))}`;
+  return `<div class="offer-updated">${label}</div>`;
+}
+
 function renderOfferCard(o) {
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
@@ -7248,6 +7301,7 @@ function renderOfferCard(o) {
         <div class="offer-stat">
           <span class="offer-stat-label">Bonus</span>
           <span class="offer-stat-value success">${formatCompactCurrency(o.signupBonusAmount)}</span>
+          ${(o.monthly_fee != null && o.monthly_fee !== '' && Number(o.monthly_fee) > 0) ? `<span class="offer-monthly-fee" title="Monthly account fee${o.fee_waiver_condition ? ' — ' + escapeAttr(o.fee_waiver_condition) : ''}">$${formatMoneyInput(o.monthly_fee)}/mo</span>` : ''}
         </div>
         <div class="offer-stat">
           <span class="offer-stat-label">Days tied up</span>
@@ -7269,7 +7323,6 @@ function renderOfferCard(o) {
       <div class="offer-dates">
         ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
         ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
-        ${o.offerExpirationDate ? `<span style="color:var(--warning);"><strong>Offer expires:</strong> ${formatDateMedium(o.offerExpirationDate)}</span>` : ''}
       </div>
       ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && Array.isArray(o.directDeposits) && o.directDeposits.length > 0 ? `
         <div class="offer-dds">
@@ -7302,11 +7355,13 @@ function renderOfferCard(o) {
           'Held'
         }</span>
         <span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || o.subStatus || '—'}</span>
+        ${offerExpirationChip(o)}
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
         ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
+      ${offerUpdatedStamp(o)}
     </div>
   `;
 }
@@ -7474,6 +7529,65 @@ function renderTimeline() {
 /* ============================================================
    OFFERS VIEW
    ============================================================ */
+
+// Offers-list sort options. 'default' preserves the array's existing order
+// (insertion order — the same order the card grid and table showed before
+// this control existed). The other three are stable sorts with nulls always
+// last: a missing sort key never jumps ahead of a real value, and ties keep
+// their original relative order. Applies identically to the card grid and the
+// table view (both consume the same sorted array). Display-only — does not
+// touch state, the feed, or the projection.
+const OFFERS_SORT_OPTIONS = [
+  { value: 'default',  label: 'Sort: Default' },
+  { value: 'expiring', label: 'Expiring soon' },
+  { value: 'newest',   label: 'Newest first' },
+  { value: 'bonus',    label: 'Bonus value' }
+];
+function sortOffersList(list, mode) {
+  if (!mode || mode === 'default') return list;
+  // Decorate with original index so every comparator can fall back to it for a
+  // stable result (Array.prototype.sort isn't guaranteed stable across the key
+  // collisions we create by bucketing all nulls together).
+  const decorated = list.map((o, i) => ({ o, i }));
+  // nulls-last numeric compare: real values ascend/descend among themselves;
+  // any null/blank key sorts after all present keys regardless of direction.
+  const cmpNullsLast = (av, bv, dir) => {
+    const aNull = av == null, bNull = bv == null;
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;   // a after b
+    if (bNull) return -1;  // a before b
+    return dir === 'asc' ? (av - bv) : (bv - av);
+  };
+  let keyFn, cmp;
+  if (mode === 'expiring') {
+    // Soonest non-null offerExpirationDate first; nulls last. Compare as a
+    // day-number so it's a pure numeric ascending compare (ISO parsed once).
+    keyFn = (o) => { const d = parseDate(o.offerExpirationDate); return d ? startOfDay(d).getTime() : null; };
+    cmp = (a, b) => cmpNullsLast(keyFn(a.o), keyFn(b.o), 'asc') || (a.i - b.i);
+  } else if (mode === 'newest') {
+    // Most-recently edited first (last_edited desc); offers never edited
+    // (last_edited null) sort last.
+    keyFn = (o) => { const t = o.last_edited ? Date.parse(o.last_edited) : NaN; return Number.isFinite(t) ? t : null; };
+    cmp = (a, b) => cmpNullsLast(keyFn(a.o), keyFn(b.o), 'desc') || (a.i - b.i);
+  } else if (mode === 'bonus') {
+    // Largest signup bonus first; a MISSING amount (null/undefined/'') sorts
+    // last. Must map blank → null BEFORE Number() — Number(null) is 0, which
+    // would wrongly bucket a missing bonus with a genuine $0 (killing the
+    // nulls-last branch). A real 0 still sorts as 0 (among present values).
+    keyFn = (o) => {
+      const v = o.signupBonusAmount;
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    cmp = (a, b) => cmpNullsLast(keyFn(a.o), keyFn(b.o), 'desc') || (a.i - b.i);
+  } else {
+    return list;
+  }
+  decorated.sort(cmp);
+  return decorated.map(d => d.o);
+}
+
 function renderOffers() {
   const all = App.state.offers.slice();
   const filtered = all.filter(o => {
@@ -7493,6 +7607,7 @@ function renderOffers() {
     return true;
   });
 
+  const sorted = sortOffersList(filtered, App.filters.offersSort);
   const advanced = App.filters.offersAdvanced;
 
   return `
@@ -7514,11 +7629,14 @@ function renderOffers() {
         <option value="included" ${App.filters.offersStatus === 'included' ? 'selected' : ''}>Included in projection</option>
         ${SUB_STATUSES.map(s => `<option value="${s}" ${App.filters.offersStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
       </select>
+      <select class="select" style="max-width:180px;" data-action="offers-sort" aria-label="Sort offers">
+        ${OFFERS_SORT_OPTIONS.map(s => `<option value="${s.value}" ${App.filters.offersSort === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
+      </select>
     </div>
 
     ${filtered.length === 0
       ? renderEmptyState(all.length === 0 ? 'No offers yet' : 'No offers match', all.length === 0 ? 'Add your first bank bonus to start planning.' : 'Try changing the filter or search query.', all.length === 0 ? 'add-offer' : null, all.length === 0 ? 'Add an offer' : null)
-      : (advanced ? renderOffersTable(filtered) : `<div class="planner-grid">${filtered.map(renderOfferCardWithActions).join('')}</div>`)
+      : (advanced ? renderOffersTable(sorted) : `<div class="planner-grid">${sorted.map(renderOfferCardWithActions).join('')}</div>`)
     }
   `;
 }
@@ -9016,6 +9134,60 @@ function showOfferModal(offerId = null) {
             </div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
+            <label>Fees &amp; terms</label>
+            <div class="form-grid" style="margin-top: var(--space-2);">
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-monthly-fee">Monthly fee</label>
+                  <div class="input-group">
+                    <span class="input-prefix">$</span>
+                    <input id="f-monthly-fee" class="input" type="text" inputmode="decimal" data-money autocomplete="off" placeholder="0" value="${escapeAttr(formatMoneyInput(o.monthly_fee))}" name="monthly_fee" />
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-fee-waiver">Fee waiver condition</label>
+                  <input id="f-fee-waiver" class="input" type="text" autocomplete="off" placeholder="e.g. $500+ monthly direct deposits" value="${escapeAttr(o.fee_waiver_condition || '')}" name="fee_waiver_condition" />
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-promo-code">Promo code</label>
+                  <input id="f-promo-code" class="input" type="text" autocomplete="off" placeholder="e.g. BONUS400" value="${escapeAttr(o.promo_code || '')}" name="promo_code" />
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-etf">Early termination fee</label>
+                  <div class="input-group">
+                    <span class="input-prefix">$</span>
+                    <input id="f-etf" class="input" type="text" inputmode="decimal" data-money autocomplete="off" placeholder="0" value="${escapeAttr(formatMoneyInput(o.early_termination_fee))}" name="early_termination_fee" />
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label for="f-etf-window">ETF window (days)</label>
+                  <input id="f-etf-window" class="input" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="e.g. 180" value="${o.etf_window_days == null || o.etf_window_days === '' ? '' : escapeAttr(o.etf_window_days)}" name="etf_window_days" />
+                </div>
+                <span class="field-hint">Days from account open before closing avoids the early-termination fee. Extends the safe-to-close date.</span>
+              </div>
+              <div class="field">
+                <div class="field-box">
+                  <label>Bonus posting window (days after requirements)</label>
+                  <div class="dd-timing-row">
+                    <input id="f-bonus-post-min" class="input" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="min" aria-label="Bonus posting min days" value="${o.bonus_post_min_days == null || o.bonus_post_min_days === '' ? '' : escapeAttr(o.bonus_post_min_days)}" name="bonus_post_min_days" />
+                    <span style="color:var(--text-tertiary);font-size:13px;">to</span>
+                    <input id="f-bonus-post-max" class="input" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="max" aria-label="Bonus posting max days" value="${o.bonus_post_max_days == null || o.bonus_post_max_days === '' ? '' : escapeAttr(o.bonus_post_max_days)}" name="bonus_post_max_days" />
+                  </div>
+                </div>
+                <span class="field-hint">Typical range the bonus posts after you meet requirements. Drives the expected-bonus window and safe-to-close date.</span>
+              </div>
+            </div>
+            <span class="field-hint">Optional account economics — monthly fee (shows as $N/mo on the card), waiver condition, enrollment promo code, and the early-termination-fee window.</span>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
             <label>Churnability</label>
             <div class="form-grid" style="margin-top: var(--space-2);">
               <div class="field">
@@ -9802,6 +9974,19 @@ function readOfferForm(idArg, isEdit) {
     churn_wait_months: num(data.churn_wait_months),
     churn_anchor: data.churn_anchor || 'bonus_received',
     churn_notes: (data.churn_notes || '').trim(),
+    // Promoted scalars (F4): the Advanced "Fees & terms" group. Money fields go
+    // through parseMoneyInput (empty → null, comma-safe); day-counts through the
+    // null-safe num(); text fields trimmed to '' when blank. These overwrite the
+    // spread-in defaults/prior so the inputs are authoritative on every save. The
+    // lifecycle/close-safety code already consumes bonus_post_*_days and
+    // etf_window_days; monthly_fee/fee_waiver_condition/promo_code are display.
+    monthly_fee: money(data.monthly_fee),
+    fee_waiver_condition: (data.fee_waiver_condition || '').trim(),
+    promo_code: (data.promo_code || '').trim(),
+    early_termination_fee: money(data.early_termination_fee),
+    etf_window_days: num(data.etf_window_days),
+    bonus_post_min_days: num(data.bonus_post_min_days),
+    bonus_post_max_days: num(data.bonus_post_max_days),
     // Schema v2: stamp the edit time on every save (overwrites any spread-in
     // prior value). Migrated offers carry last_edited:null until first edited.
     last_edited: new Date().toISOString()
@@ -10533,6 +10718,9 @@ function onChange(e) {
 
   // Offers status filter
   if (el.dataset.action === 'offers-status') { App.filters.offersStatus = el.value; render(); return; }
+
+  // Offers sort order (display-only; session-scoped like the status filter)
+  if (el.dataset.action === 'offers-sort') { App.filters.offersSort = el.value; render(); return; }
 
   // Import JSON
   if (el.dataset.action === 'import-json') {
