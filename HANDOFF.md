@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-06, Round 61)
+## Current state (as of 2026-07-06, Round 62)
 
-- `index.html` ≈ 8,700 lines, single-file PWA. `APP_VERSION` = `2026.07.06d`
+- `index.html` ≈ 8,900 lines, single-file PWA. `APP_VERSION` = `2026.07.06e`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -40,6 +40,19 @@ grows past ~8 entries, keeping the newest 3–4 live.
   after the `#offer-form .field > .field-box { margin-top:auto; }`
   box-pinning rule). Don't reintroduce a `min-height`/`align-items:flex-end`
   on `.field-box label` without re-checking this interaction.
+- **Display ↔ storage boundary (R62):** dates and money now have a
+  DISPLAY form (dates `M-D-YYYY` no-leading-zero e.g. `7-6-2026`; money
+  comma-grouped e.g. `25,000`) that exists ONLY in input `value`s and
+  rendered strings. Storage/sync is unchanged — dates stay ISO
+  `YYYY-MM-DD`, money stays a plain Number, in state/localStorage/Gist
+  and every internal comparison. Four helpers (~line 4025) are the single
+  conversion point: `formatDateDisplay`/`parseDateInput` and
+  `formatMoneyInput`/`parseMoneyInput`. Every money read-site parses via
+  `parseMoneyInput` and every `yv-date` read-site via `parseDateInput` —
+  do NOT add a bare `Number(el.value)`/`parseFloat`/`dateEl.value` on a
+  `data-money` or `.yv-date` field (a `"5,000"`→NaN or `"8-1-2026"`→state
+  path is data corruption). Native `<input type="date">` fields
+  (commitment start/end) are already ISO and are left browser-formatted.
 - **Button-row layout (R60):** standalone multi-button action rows (Settings
   sync-actions row, Data row) use a new `.btn-grid` class
   (`grid-template-columns:repeat(auto-fit, minmax(140px,1fr))`) instead of
@@ -86,6 +99,78 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-06 — Session (claude-opus-4-8, /orchestrate executor)
+**Round 62 — Display formats for dates & money (M-D-YYYY + live thousands commas), tighter `$` prefix, un-abbreviated K in two spots, tightened uppercase-label letterspacing**
+
+Owner batch of five display/UX items. HARD CONSTRAINT throughout: storage/sync
+formats do NOT change — dates stay ISO `YYYY-MM-DD` and money stays a plain
+Number in state/localStorage/Gist and every internal comparison; this is
+display/input-UX only, funneled through shared helper pairs so a missed site
+can't corrupt an offer.
+
+- **New boundary helpers (~line 4025):** `formatDateDisplay(iso)` → `M-D-YYYY`
+  no-leading-zero (`2026-07-06`→`7-6-2026`); `parseDateInput(str)` accepts
+  `M-D-YYYY`, tolerates `M/D/YYYY` and a pasted ISO, and returns canonical ISO
+  or `null` (rejects overflow dates like `13-40-2026` via a real-calendar-date
+  check in `_isoFromYMD`); `formatMoneyInput(val)` → thousands-grouped display
+  preserving in-progress decimals/trailing dot/leading `-` and safe to re-run
+  on its own output; `parseMoneyInput(str)` strips `$`/commas/spaces → plain
+  Number (empty → `null`, matching the existing `num('')===null` contract).
+- **[1] Dates → `M-D-YYYY` everywhere a raw ISO was shown.** `yv-date` inputs
+  (offer modal `#f-debit-by`/`#f-expires`/`#f-signup`/`#f-funded`, DD-row
+  `plannedDate`) render via `formatDateDisplay`, placeholder `YYYY-MM-DD`→
+  `M-D-YYYY`; fields are no longer `readonly` (`inputmode="numeric"`) so the
+  picker still opens on tap AND typing/paste works. Added a capture-phase
+  `blur` handler in `bindGlobalEvents` that re-parses a typed/pasted value and
+  rewrites it in canonical `M-D-YYYY` (so `8/1/2026` or a pasted ISO become
+  `8-1-2026`); unparseable input is left visible and every reader re-parses so
+  state stays clean. `DatePicker.setValue`/`open`/`render` convert through the
+  helpers. Already-humanized renders (card/timeline "Aug 11", axis "Jul 6 →
+  Oct 11") and native `<input type="date">` are untouched; chart-internal date
+  rendering untouched.
+- **[2] Live thousands commas in ALL money inputs.** Every money field is now
+  `type="text" inputmode="decimal" data-money` and renders stored values via
+  `formatMoneyInput`. A single `onInput` branch (`reformatMoneyFieldLive`)
+  reformats on each keystroke and restores the caret by counting significant
+  digits (comma-insertion-stable). Swept EVERY read path to `parseMoneyInput`:
+  `readOfferForm` (`money()`), settings `onChange` (currentLiquidCapital/
+  minimumCashBuffer), `readDdRowsFromForm`, `generateDdDatesFromRequirement`
+  (the funding-split divisor), `readCommitmentForm` (amount + expectedBonus),
+  `readEventForm` (`applyCategorySign`), and the event-modal live sign-flip.
+  Verified sweep: the only remaining `Number(el.value)` is the non-money
+  branch of settings `onChange` (projectionHorizonDays / maxOptimizerCandidates,
+  still `type=number`) — correct, not a money site.
+- **[3] `$` prefix tie-to-value.** `.field-box .input-group .input-prefix` and
+  the `.dd-row` slimmed variant: color `--text-tertiary`→`--text-strong`
+  (`#374151`), gap kept snug at `margin-right:4px` (low end of the 4-6px
+  target) so the symbol reads as part of the amount, not the label.
+- **[4] Un-abbreviated K in exactly two spots.** Overview hero sub-line
+  "Lowest" (`formatCompactCurrency`→`formatCurrency`, now `$125,000`) and the
+  at-a-glance BONUS POOL card value (same swap). Card is NOT resized: a
+  render-time length check adds `.snap-v-sm` (19px→16px) when the formatted
+  string is ≥8 glyphs (6-digit dollar amounts and up) so a large value fits.
+  Chart axis labels (`ylab` 200K), offer-card stat abbreviations ($25K
+  FUNDING), timeline bar labels, and "Lowest projected" stat cards stay
+  ABBREVIATED (all still `formatCompactCurrency`).
+- **[5] Tightened uppercase-label letterspacing.** `.hero-label` ("AVAILABLE
+  CAPITAL TODAY") 0.06em→0.02em (mobile override 0.04em→0.02em) and the
+  Timeline `.timeline-row-label.axis` date-range row 0.05em→0.02em, so the
+  spaced-out uppercase labels read cohesively. No chart-internal text changed.
+- **Verified (Preview MCP `yield-vector-static`, port 4173, 375px + full
+  create→save→reopen cycle):** typing `5000` in offer funding shows `5,000`
+  live with correct caret; a full offer save stores `plannedSignupDate:
+  "2026-08-01"` / `requiredFundingAmount: 5000` (plain Number, no comma) and
+  reopens showing `8-1-2026` / `5,000`; typed `8/1/2026` and a pasted ISO both
+  normalize to `M-D-YYYY` on blur; settings + DD-row money round-trip to plain
+  Numbers; hero "Lowest $125,000 on Jul 13" and BONUS POOL full value fit at
+  375px; hero + Timeline letterspacing measure 0.0200em. Zero console errors
+  and zero diagnostics-ring entries across the whole cycle; test data cleaned
+  up (owner state restored: 7 offers, liquid 200000, buffer 20000). `node
+  --check` on the extracted inline script passes; locked chart/legend/tooltip
+  hex counts (AGENTS.md) unchanged vs HEAD. 24 isolated helper unit tests pass.
+  Also ran 24 standalone assertions on the four helpers (round-trips + overflow
+  rejection). `APP_VERSION` → `2026.07.06e`.
 
 ### 2026-07-06 — Session O (claude-sonnet-5, /orchestrate worker)
 **Round 61 — Field-box vertical rhythm: label/value gap + padding + a real modal label-height bug (owner-reported)**

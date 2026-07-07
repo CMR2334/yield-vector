@@ -302,6 +302,12 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.1;
 }
 .snap.snap-bonus .snap-v { color: var(--success); }
+/* R62: un-abbreviated money values (e.g. Bonus pool now shows the full
+   "$12,450" instead of "$12K") can run long in a half-width snap cell.
+   Step the font down one notch for long strings (≥8 glyphs, i.e. 6-digit
+   dollar amounts and up) so the full number fits without resizing the
+   card. Applied via a length-conditional class set at render time. */
+.snap-v.snap-v-sm { font-size: 16px; letter-spacing: -0.02em; }
 
 /* Sync indicator chip in the header — flatter & lighter than a pill:
    rounded-square radius, no shadow, very-light translucent background,
@@ -526,7 +532,11 @@ a { color: inherit; text-decoration: none; }
   font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  /* R62: tightened from 0.06em — the wide letterspacing pushed
+     "AVAILABLE CAPITAL TODAY" apart enough to read as loose/disjointed.
+     0.02em keeps it clearly an uppercase label while letting the words
+     hold together. Matched on .timeline-row-label.axis for consistency. */
+  letter-spacing: 0.02em;
   color: var(--text-tertiary);
   margin-bottom: var(--space-1);
   /* Allow the label to wrap so it never truncates mid-word on narrow
@@ -1205,7 +1215,10 @@ a { color: inherit; text-decoration: none; }
   position: static;
   flex: 0 0 auto;
   transform: none;
+  /* R62: same "$"-ties-to-value treatment as the field-box variant —
+     snug gap + value-tone color (overrides the base muted tertiary). */
   margin-right: 4px;
+  color: var(--text-strong);
 }
 .dd-row .input:focus,
 .dd-row .input-group:focus-within {
@@ -1326,7 +1339,9 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  /* R62: tightened from 0.05em to match the hero label — the uppercase
+     date-range row ("JUL 13 → AUG 22") read too spaced-apart. */
+  letter-spacing: 0.02em;
   justify-content: center;
   white-space: nowrap;
   overflow: hidden;
@@ -1640,9 +1655,12 @@ a { color: inherit; text-decoration: none; }
   position: static;
   flex: 0 0 auto;
   transform: none;
+  /* R62: tie the "$" to the value — snug gap (reads connected, low end of
+     the 4-6px target) and darkened from the muted label tone to the value
+     tone (--text-strong) so it parses as part of the amount, not the label. */
   margin-right: 4px;
   font-size: 16px;
-  color: var(--text-tertiary);
+  color: var(--text-strong);
 }
 .field-box .input-group .input {
   flex: 1 1 auto;
@@ -2199,7 +2217,7 @@ table.data-table {
   }
   .hero { padding: var(--space-4) var(--space-3); border-radius: var(--radius-lg); }
   .hero-amount { font-size: 36px; }
-  .hero-label { font-size: 13px; letter-spacing: 0.04em; }
+  .hero-label { font-size: 13px; letter-spacing: 0.02em; } /* R62: match tightened desktop value */
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
@@ -2380,7 +2398,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.06d';
+const APP_VERSION = '2026.07.06e';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -3718,7 +3736,9 @@ const DatePicker = {
     this.ensure();
     this.input = input;
     this.mode = input.dataset.pickerMode || 'plain';
-    const cur = parseDate(input.value) || TODAY;
+    // input.value holds the M-D-YYYY display string; parse back to ISO
+    // (parseDateInput also tolerates a pasted ISO) before seeding the grid.
+    const cur = parseDate(parseDateInput(input.value)) || TODAY;
     this.vY = cur.getFullYear(); this.vM = cur.getMonth();
     this.el.style.display = 'block';
     this.render();
@@ -3775,7 +3795,7 @@ const DatePicker = {
     const y = this.vY, m = this.vM;
     const stats = this.monthStats();
     const monthName = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const selected = parseDate(this.input && this.input.value);
+    const selected = parseDate(parseDateInput(this.input && this.input.value));
     const firstPad = new Date(y, m, 1).getDay();
     const dim = new Date(y, m + 1, 0).getDate();
     let cells = '';
@@ -3839,7 +3859,9 @@ const DatePicker = {
   },
   setValue(iso) {
     if (!this.input) return;
-    this.input.value = iso;
+    // Grid hands us canonical ISO (or '' for Clear); show the owner's
+    // M-D-YYYY display format. Every reader parses back via parseDateInput.
+    this.input.value = iso ? formatDateDisplay(iso) : '';
     this.input.dispatchEvent(new Event('input', { bubbles: true }));
     this.input.dispatchEvent(new Event('change', { bubbles: true }));
     this.close();
@@ -3988,6 +4010,92 @@ function formatCompactCurrency(n) {
 function formatPercent(n, digits = 1) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return (n * 100).toFixed(digits) + '%';
+}
+
+/* ============================================================
+   DISPLAY <-> STORAGE BOUNDARY HELPERS (R62)
+   ============================================================
+   Storage/sync formats NEVER change: dates stay ISO `YYYY-MM-DD`
+   strings in state/localStorage/Gist and in every internal
+   comparison; money stays a plain Number in state. These four
+   helpers are the SINGLE conversion point at the render/read
+   boundary — the display value (M-D-YYYY dates, comma-grouped
+   money) exists only inside input/render code, and is parsed
+   straight back to canonical ISO / Number before it ever reaches
+   state. Do not scatter ad-hoc toLocaleString/replace conversions;
+   route through these so a missed site can't corrupt an offer. */
+
+// ISO `YYYY-MM-DD` -> owner's display format `M-D-YYYY` (no leading
+// zeros). Empty -> ''. Anything not ISO-shaped is returned unchanged
+// so a stray already-humanized string never gets mangled.
+function formatDateDisplay(iso) {
+  if (!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(iso);
+  return `${Number(m[2])}-${Number(m[3])}-${m[1]}`;
+}
+
+// Accepts the display format `M-D-YYYY` (owner's), tolerates
+// `M/D/YYYY` and a pasted ISO `YYYY-MM-DD`, and returns canonical
+// ISO `YYYY-MM-DD` — or null if it can't be understood. This is the
+// ONLY thing that reads a yv-date field's typed/displayed value back
+// into state, so it must never hand a non-ISO string downstream.
+function parseDateInput(str) {
+  if (str == null) return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  // Pasted / stored ISO first (YYYY-MM-DD or YYYY/MM/DD).
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (m) return _isoFromYMD(+m[1], +m[2], +m[3]);
+  // Owner's M-D-YYYY (hyphen) or tolerated M/D/YYYY (slash).
+  m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) return _isoFromYMD(+m[3], +m[1], +m[2]);
+  return null;
+}
+// Build an ISO date only if the Y/M/D make a real calendar date;
+// reject overflow (e.g. 13-40-2026, 2-30-2026) so bad input becomes
+// null rather than a silently rolled-over date.
+function _isoFromYMD(y, mo, d) {
+  if (!(y >= 1000 && y <= 9999 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+// Number or numeric string -> thousands-grouped display string,
+// e.g. 25000 -> "25,000", -1234.5 -> "-1,234.5". Preserves a
+// trailing "." and in-progress decimals while typing, and a leading
+// "-". Non-numeric characters ($, spaces, stray commas) are stripped
+// first so it's safe to re-run on its own output.
+function formatMoneyInput(val) {
+  if (val === '' || val == null) return '';
+  let s = String(val).replace(/[^0-9.\-]/g, '');
+  if (s === '' || s === '-' || s === '.' || s === '-.') return s;
+  const neg = s.startsWith('-');
+  s = s.replace(/-/g, '');
+  // Keep only the first '.'; fold any extras into the fractional part.
+  const dot = s.indexOf('.');
+  let intPart, fracPart = null;
+  if (dot === -1) { intPart = s; }
+  else { intPart = s.slice(0, dot); fracPart = s.slice(dot + 1).replace(/\./g, ''); }
+  intPart = intPart.replace(/^0+(?=\d)/, ''); // drop leading zeros but keep a lone 0
+  if (intPart === '') intPart = fracPart === null && dot === -1 ? '' : '0';
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  let out = (neg ? '-' : '') + grouped;
+  if (dot !== -1) out += '.' + fracPart;
+  return out;
+}
+
+// Comma-grouped / $-prefixed money display string -> plain Number.
+// Strips $, spaces, commas. Returns null for empty (matching the
+// existing readOfferForm `num('')===null` contract); returns NaN for
+// genuinely non-numeric text so callers using `Number.isFinite`/`||`
+// behave exactly as they did with the old bare `Number(value)`.
+function parseMoneyInput(str) {
+  if (str === '' || str == null) return null;
+  const cleaned = String(str).replace(/[$,\s]/g, '');
+  if (cleaned === '' || cleaned === '-' || cleaned === '.' || cleaned === '-.') return null;
+  return Number(cleaned);
 }
 
 /* ============================================================
@@ -5021,7 +5129,7 @@ function renderOverview() {
         </div>
         <div class="hero-meta">
           ${lowestPill}
-          ${lowest && summary.lowestIdx > 0 ? `<span style="color:var(--text-tertiary);">Lowest <strong style="color:${heroLowestTone};">${formatCompactCurrency(heroLowest)}</strong> on ${formatDateMedium(lowest.date)}</span>` : ''}
+          ${lowest && summary.lowestIdx > 0 ? `<span style="color:var(--text-tertiary);">Lowest <strong style="color:${heroLowestTone};">${formatCurrency(heroLowest)}</strong> on ${formatDateMedium(lowest.date)}</span>` : ''}
         </div>
       </div>
       <div class="chart-wrap" id="hero-chart-wrap">
@@ -5069,7 +5177,7 @@ function renderOverview() {
           <div class="snap snap-actions"><span class="snap-v">${computeActionsRequired(App.state)}</span><span class="snap-l">Actions required</span></div>
           <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
           <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
-          <div class="snap snap-bonus"><span class="snap-v">${formatCompactCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
+          <div class="snap snap-bonus"><span class="snap-v${(() => { const t = formatCurrency(expectedBonusTotal); return t.length >= 8 ? ' snap-v-sm' : ''; })()}">${formatCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
         </div>
       </aside>
     </div>
@@ -5922,7 +6030,7 @@ function renderSettings() {
             <label for="s-liquid">Current liquid capital</label>
             <div class="input-group">
               <span class="input-prefix">$</span>
-              <input id="s-liquid" type="number" step="100" class="input" value="${s.currentLiquidCapital}" data-setting="currentLiquidCapital" />
+              <input id="s-liquid" type="text" inputmode="decimal" data-money class="input" value="${formatMoneyInput(s.currentLiquidCapital)}" data-setting="currentLiquidCapital" />
             </div>
           </div>
           <span class="field-hint">Cash available to deploy right now.</span>
@@ -5932,7 +6040,7 @@ function renderSettings() {
             <label for="s-buffer">Minimum cash buffer</label>
             <div class="input-group">
               <span class="input-prefix">$</span>
-              <input id="s-buffer" type="number" step="100" class="input" value="${s.minimumCashBuffer}" data-setting="minimumCashBuffer" />
+              <input id="s-buffer" type="text" inputmode="decimal" data-money class="input" value="${formatMoneyInput(s.minimumCashBuffer)}" data-setting="minimumCashBuffer" />
             </div>
           </div>
           <span class="field-hint">Days below this threshold are flagged but not breached.</span>
@@ -7084,7 +7192,7 @@ function showOfferModal(offerId = null) {
             <div class="field-box">
               <label for="f-bonus">Bonus amount *</label>
               <div class="input-group"><span class="input-prefix">$</span>
-                <input id="f-bonus" class="input" type="number" step="5" min="0" required value="${o.signupBonusAmount ?? ''}" name="signupBonusAmount" />
+                <input id="f-bonus" class="input" type="text" inputmode="decimal" data-money required value="${formatMoneyInput(o.signupBonusAmount ?? '')}" name="signupBonusAmount" />
               </div>
             </div>
           </div>
@@ -7156,7 +7264,7 @@ function showOfferModal(offerId = null) {
               <div class="field">
                 <div class="field-box">
                   <label for="f-debit-by">Complete by (optional)</label>
-                  <input id="f-debit-by" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.debitRequirement.byDate || '')}" name="debitByDate" data-picker-mode="plain" />
+                  <input id="f-debit-by" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.debitRequirement.byDate || ''))}" name="debitByDate" data-picker-mode="plain" />
                 </div>
               </div>
             </div>
@@ -7166,20 +7274,20 @@ function showOfferModal(offerId = null) {
             <div class="field-box">
               <label for="f-funding">Required funding *</label>
               <div class="input-group"><span class="input-prefix">$</span>
-                <input id="f-funding" class="input" type="number" step="100" min="0" required value="${o.requiredFundingAmount ?? ''}" name="requiredFundingAmount" />
+                <input id="f-funding" class="input" type="text" inputmode="decimal" data-money required value="${formatMoneyInput(o.requiredFundingAmount ?? '')}" name="requiredFundingAmount" />
               </div>
             </div>
           </div>
           <div class="field">
             <div class="field-box">
               <label for="f-expires">Offer expires</label>
-              <input id="f-expires" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.offerExpirationDate)}" name="offerExpirationDate" data-picker-mode="plain" />
+              <input id="f-expires" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.offerExpirationDate))}" name="offerExpirationDate" data-picker-mode="plain" />
             </div>
           </div>
           <div class="field">
             <div class="field-box">
               <label for="f-signup">${o.accountStatus === 'open' ? 'Signup date *' : 'Planned signup date *'}</label>
-              <input id="f-signup" class="input yv-date" type="text" readonly inputmode="none" required placeholder="YYYY-MM-DD" value="${escapeAttr(o.plannedSignupDate)}" name="plannedSignupDate" data-picker-mode="plain" />
+              <input id="f-signup" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" required placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.plannedSignupDate))}" name="plannedSignupDate" data-picker-mode="plain" />
             </div>
           </div>
           <div class="field">
@@ -7203,7 +7311,7 @@ function showOfferModal(offerId = null) {
           <div class="field" id="funding-date-field" style="${o.offerType === 'direct-deposit' ? 'display:none;' : ''}">
             <div class="field-box">
               <label for="f-funded" id="f-funded-label">Planned funding date${o.offerType === 'held-and-dd' ? ' *' : ' (optional)'}</label>
-              <input id="f-funded" class="input yv-date" type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" value="${escapeAttr(o.optionalPlannedFundingDate)}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
+              <input id="f-funded" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.optionalPlannedFundingDate))}" name="optionalPlannedFundingDate" data-picker-mode="plain" />
             </div>
             <span class="field-hint" id="f-funded-suggest">${(() => {
               const sug = suggestedFundingDate(o.plannedSignupDate, o.daysAfterSignupAllowedBeforeDeposit);
@@ -7457,9 +7565,9 @@ function renderDdRow(dd, i) {
   }
   return `
     <div class="dd-row" data-dd-index="${i}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:6px;">
-      <input type="text" readonly inputmode="none" placeholder="YYYY-MM-DD" class="input dd-field yv-date" data-dd-field="plannedDate" data-picker-mode="dd" value="${escapeAttr(dd && dd.plannedDate || '')}" aria-label="Initiation date for DD ${i + 1}" />
+      <input type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" class="input dd-field yv-date" data-dd-field="plannedDate" data-picker-mode="dd" value="${escapeAttr(formatDateDisplay(dd && dd.plannedDate || ''))}" aria-label="Initiation date for DD ${i + 1}" />
       <div class="input-group"><span class="input-prefix">$</span>
-        <input type="number" class="input dd-field" data-dd-field="amount" min="0" step="50" value="${dd && dd.amount != null ? dd.amount : ''}" aria-label="Amount for DD ${i + 1}" />
+        <input type="text" inputmode="decimal" data-money class="input dd-field" data-dd-field="amount" value="${dd && dd.amount != null ? formatMoneyInput(dd.amount) : ''}" aria-label="Amount for DD ${i + 1}" />
       </div>
       <button type="button" class="btn-icon" data-action="remove-dd-row" aria-label="Remove DD ${i + 1}" title="Remove">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
@@ -7480,11 +7588,14 @@ function generateDdDatesFromRequirement() {
   const entries = form.querySelector('#dd-entries');
   if (!entries) return;
   const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
-  const signup = parseDate((form.querySelector('#f-signup') || {}).value);
+  // #f-signup shows M-D-YYYY display; parse via the date-input helper
+  // (parseDate alone would reject the non-ISO string and lose the seed).
+  const signup = parseDate(parseDateInput((form.querySelector('#f-signup') || {}).value));
   const baseStart = signup ? addBusinessDays(signup, 1) : addBusinessDays(TODAY, 1);
   const existing = readDdRowsFromForm();
   const fundingEl = form.querySelector('#f-funding');
-  const funding = fundingEl && fundingEl.value ? Number(fundingEl.value) : null;
+  // #f-funding shows comma-grouped money; strip commas before dividing.
+  const funding = fundingEl && fundingEl.value.trim() ? parseMoneyInput(fundingEl.value) : null;
 
   let count, stepDays = 0, monthly = false;
   if (mode === 'frequency') {
@@ -7521,9 +7632,11 @@ function readDdRowsFromForm() {
   rows.forEach(row => {
     const dateEl = row.querySelector('[data-dd-field="plannedDate"]');
     const amtEl  = row.querySelector('[data-dd-field="amount"]');
+    // Date field shows M-D-YYYY; amount shows comma-grouped money.
+    // Parse both back to storage form (ISO string / plain Number).
     out.push({
-      plannedDate: dateEl ? dateEl.value : '',
-      amount: amtEl && amtEl.value !== '' ? Number(amtEl.value) : null
+      plannedDate: dateEl ? (parseDateInput(dateEl.value) || '') : '',
+      amount: amtEl && amtEl.value.trim() !== '' ? parseMoneyInput(amtEl.value) : null
     });
   });
   return out;
@@ -7554,6 +7667,12 @@ function readOfferForm(idArg, isEdit) {
   const fd = new FormData(form);
   const data = Object.fromEntries(fd.entries());
   const num = (v) => (v === '' || v == null) ? null : Number(v);
+  // Money fields render with thousands commas ("25,000"); strip to a
+  // plain Number so a comma can never poison the stored value.
+  const money = (v) => parseMoneyInput(v);
+  // yv-date fields now hold M-D-YYYY display strings; parse back to
+  // canonical ISO for storage (empty/unparseable -> '' as before).
+  const dateIso = (v) => parseDateInput(v) || '';
 
   const offerType = data.offerType || 'new-funds-held';
   // DD requirement controls aren't form-named (id-only), so read directly.
@@ -7570,7 +7689,7 @@ function readOfferForm(idArg, isEdit) {
   const debitRequirement = {
     required: data.debitRequired === 'yes',
     count: data.debitRequired === 'yes' ? (num(data.debitCount) || null) : null,
-    byDate: data.debitRequired === 'yes' ? (data.debitByDate || '') : ''
+    byDate: data.debitRequired === 'yes' ? dateIso(data.debitByDate) : ''
   };
 
   const offer = {
@@ -7583,13 +7702,13 @@ function readOfferForm(idArg, isEdit) {
     color: data.color || '',
     directDeposits: readDdRowsFromForm()
       .filter(dd => dd.plannedDate || (dd.amount != null && dd.amount > 0)),
-    requiredFundingAmount: num(data.requiredFundingAmount),
-    signupBonusAmount: num(data.signupBonusAmount),
-    offerExpirationDate: data.offerExpirationDate || '',
-    plannedSignupDate: data.plannedSignupDate || '',
+    requiredFundingAmount: money(data.requiredFundingAmount),
+    signupBonusAmount: money(data.signupBonusAmount),
+    offerExpirationDate: dateIso(data.offerExpirationDate),
+    plannedSignupDate: dateIso(data.plannedSignupDate),
     daysAfterSignupAllowedBeforeDeposit: num(data.daysAfterSignupAllowedBeforeDeposit) ?? 30,
     daysFundsMustRemain: daysRemain,
-    optionalPlannedFundingDate: data.optionalPlannedFundingDate || '',
+    optionalPlannedFundingDate: dateIso(data.optionalPlannedFundingDate),
     lockStartsFrom: data.lockStartsFrom || 'funded date',
     accountStatus: data.accountStatus || 'closed',
     subStatus: data.subStatus || 'prospect',
@@ -7643,7 +7762,7 @@ function showCommitmentModal(commitmentId = null) {
             <div class="field-box">
               <label for="c-amount">Amount *</label>
               <div class="input-group"><span class="input-prefix">$</span>
-                <input id="c-amount" class="input" type="number" step="100" min="0" required value="${c.amount ?? ''}" name="amount" />
+                <input id="c-amount" class="input" type="text" inputmode="decimal" data-money required value="${formatMoneyInput(c.amount ?? '')}" name="amount" />
               </div>
             </div>
           </div>
@@ -7665,7 +7784,7 @@ function showCommitmentModal(commitmentId = null) {
           </select></div></div>
           <div class="field"><div class="field-box"><label for="c-bonus">Expected bonus</label>
             <div class="input-group"><span class="input-prefix">$</span>
-              <input id="c-bonus" class="input" type="number" step="1" min="0" value="${c.expectedBonus ?? 0}" name="expectedBonus" />
+              <input id="c-bonus" class="input" type="text" inputmode="decimal" data-money value="${formatMoneyInput(c.expectedBonus ?? 0)}" name="expectedBonus" />
             </div>
           </div></div>
           <div class="field" style="grid-column:1/-1;"><label class="checkbox-row"><input type="checkbox" name="includeInProjection" ${c.includeInProjection ? 'checked' : ''} /><span>Include in projection</span></label></div>
@@ -7692,13 +7811,15 @@ function readCommitmentForm(idArg) {
     id: idArg,
     commitmentName: (data.commitmentName || '').trim(),
     sourceBonusOfferId: orig ? orig.sourceBonusOfferId : null,
-    amount: Number(data.amount),
+    // Money fields render with commas; strip to plain Number. Dates
+    // (startDate/endDate) are native <input type="date"> — already ISO.
+    amount: parseMoneyInput(data.amount),
     startDate: data.startDate,
     endDate: data.endDate,
     type: data.type,
     status: data.status,
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
-    expectedBonus: Number(data.expectedBonus) || 0,
+    expectedBonus: parseMoneyInput(data.expectedBonus) || 0,
     notes: data.notes || ''
   };
 }
@@ -7759,7 +7880,7 @@ function showEventModal(eventId = null) {
           <div class="field" style="grid-column: 1 / -1;"><div class="field-box"><label for="e-name">Name *</label><input id="e-name" class="input" type="text" required value="${escapeAttr(e.eventName)}" name="eventName" placeholder="Paycheck, Tax payment, etc." /></div></div>
           <div class="field"><div class="field-box"><label for="e-amount">Amount *</label>
             <div class="input-group"><span class="input-prefix">$</span>
-              <input id="e-amount" class="input" type="number" step="0.01" required value="${e.amount}" name="amount" />
+              <input id="e-amount" class="input" type="text" inputmode="decimal" data-money required value="${formatMoneyInput(e.amount)}" name="amount" />
             </div>
           </div>
             <span class="field-hint">Sign is set automatically from the category — Inflow / Bonus payout are positive; Outflow / Fee are negative. Correction and Other use whatever sign you enter.</span>
@@ -7829,11 +7950,13 @@ function showEventModal(eventId = null) {
         // Outflow/Fee → negative; Inflow/Bonus payout → positive.
         // Correction/Other stay untouched. Empty/zero amounts skip.
         const amtEl = form.querySelector('#e-amount');
-        if (amtEl && amtEl.value !== '') {
-          const cur = Number(amtEl.value);
+        if (amtEl && amtEl.value.trim() !== '') {
+          // Value carries commas; parse to Number, flip sign, then
+          // re-render with commas so the field stays formatted.
+          const cur = parseMoneyInput(amtEl.value);
           if (Number.isFinite(cur) && cur !== 0) {
             const next = applyCategorySign(cur, ev.target.value);
-            if (next !== cur) amtEl.value = String(next);
+            if (next !== cur) amtEl.value = formatMoneyInput(next);
           }
         }
       }
@@ -7868,7 +7991,10 @@ function readEventForm(idArg) {
   // where the user typed an amount AFTER picking the category and the
   // sign is wrong. Categories with no implied sign (Correction, Other)
   // pass through untouched.
-  const signedAmount = applyCategorySign(Number(data.amount), data.category);
+  // Amount renders with commas and may be negative/decimal; strip to a
+  // plain Number before applying the category sign. Date fields here are
+  // native <input type="date"> (already ISO) so they need no parsing.
+  const signedAmount = applyCategorySign(parseMoneyInput(data.amount), data.category);
   return {
     id: idArg,
     eventName: (data.eventName || '').trim(),
@@ -8026,8 +8152,29 @@ function bindGlobalEvents() {
   // Open the custom date picker when a .yv-date field is clicked.
   document.addEventListener('click', (e) => {
     const inp = e.target.closest && e.target.closest('.yv-date');
-    if (inp) { e.preventDefault(); DatePicker.open(inp); }
+    // Open the visual picker on tap/click (the owner's primary date-entry
+    // path). Fields are no longer readonly, so we do NOT preventDefault —
+    // the input still focuses, allowing optional typing/paste of M-D-YYYY.
+    if (inp) { DatePicker.open(inp); }
   });
+  // Normalize a typed/pasted yv-date value when the field loses focus:
+  // parse via parseDateInput and, if understood, rewrite in canonical
+  // M-D-YYYY display form (so "8/1/2026" or a pasted ISO become "8-1-2026").
+  // Unparseable non-empty input is left visible so the user sees it wasn't
+  // accepted; every reader independently re-parses, so state stays clean.
+  document.addEventListener('blur', (e) => {
+    const inp = e.target && e.target.closest && e.target.closest('.yv-date');
+    if (!inp) return;
+    const iso = parseDateInput(inp.value);
+    if (iso) {
+      const disp = formatDateDisplay(iso);
+      if (disp !== inp.value) {
+        inp.value = disp;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  }, true);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const modal = document.getElementById('modal-root');
@@ -8202,8 +8349,14 @@ function onChange(e) {
   // Setting fields
   if (el.dataset.setting) {
     const key = el.dataset.setting;
-    let value = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
-    if (key === 'currentLiquidCapital' || key === 'minimumCashBuffer') value = Math.max(0, value);
+    // Money settings render as comma-grouped text inputs; parse via the
+    // money helper. Other numerics stay type=number. Checkboxes/selects
+    // pass through as before.
+    const isMoneySetting = key === 'currentLiquidCapital' || key === 'minimumCashBuffer';
+    let value = el.type === 'checkbox' ? el.checked
+      : isMoneySetting ? (parseMoneyInput(el.value) || 0)
+      : (el.type === 'number' ? Number(el.value) : el.value);
+    if (isMoneySetting) value = Math.max(0, value);
     if (key === 'projectionHorizonDays') value = Math.max(30, Math.min(1825, value));
     if (key === 'maxOptimizerCandidates') value = Math.max(1, Math.min(20, value));
     // Nested settings (e.g. "ddTransfer.inDays") — clamp transfer legs 0–10.
@@ -8263,6 +8416,13 @@ function onChange(e) {
 
 function onInput(e) {
   const el = e.target;
+  // Live thousands separators in money inputs (any [data-money] field).
+  // Reformat on every keystroke and restore the caret by digit count so
+  // inserting a comma to the left doesn't shove the cursor around.
+  if (el.hasAttribute && el.hasAttribute('data-money')) {
+    reformatMoneyFieldLive(el);
+    // fall through — no other onInput branch matches a money field.
+  }
   if (el.dataset.action === 'offers-search') {
     App.filters.offersSearch = el.value;
     clearTimeout(window._searchTimer);
@@ -8273,6 +8433,40 @@ function onInput(e) {
   if (el.id === 'sync-gist' || el.id === 'sync-token') {
     updateSyncButtonsLive();
   }
+}
+
+// Reformat a money <input> in place with thousands commas, keeping the
+// caret at the same logical position. Strategy: count the DIGITS (and a
+// leading '-') to the left of the caret in the raw value, reformat the
+// whole value, then advance the caret past that same number of digits in
+// the formatted string. Commas are the only chars inserted, so counting
+// digits is caret-stable regardless of where groups fall.
+function reformatMoneyFieldLive(el) {
+  const raw = el.value;
+  const caret = el.selectionStart == null ? raw.length : el.selectionStart;
+  // Significant chars = digits (commas don't count); a minus at position 0
+  // also anchors the caret so it survives the reflow.
+  let sig = 0;
+  for (let i = 0; i < caret; i++) {
+    const c = raw[i];
+    if (c >= '0' && c <= '9') sig++;
+    else if (c === '-' && i === 0) sig++;
+  }
+  const formatted = formatMoneyInput(raw);
+  if (formatted === raw) return; // nothing changed; leave caret alone
+  el.value = formatted;
+  // Walk the formatted value counting the same significant chars, then park
+  // the caret right after the sig-th one.
+  let seen = 0, pos = formatted.length;
+  for (let i = 0; i < formatted.length; i++) {
+    const c = formatted[i];
+    if ((c >= '0' && c <= '9') || (c === '-' && i === 0)) {
+      seen++;
+      if (seen === sig) { pos = i + 1; break; }
+    }
+  }
+  if (sig === 0) pos = 0;
+  try { el.setSelectionRange(pos, pos); } catch (_) { /* non-text input types can't set range */ }
 }
 
 function toggleAdvancedForm(btn) {
