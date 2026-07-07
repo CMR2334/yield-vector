@@ -839,10 +839,11 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
-/* Upcoming churn dates (F6) — bottom-of-Overview section. Full-width card that
-   spans the overview grid; rows reuse the offer-color stripe + tap-to-edit
-   idiom from .action-row but with a simpler two-line body. */
-.churn-section { grid-column: 1 / -1; margin-top: var(--space-4); }
+/* Upcoming churn dates (F6) — bottom-of-Overview section. Mounts after
+   .overview-grid as a block-level sibling, so it's naturally full-width (no
+   grid-column needed — the parent isn't a grid). Rows reuse the offer-color
+   stripe + tap-to-edit idiom from .action-row but with a simpler two-line body. */
+.churn-section { margin-top: var(--space-4); }
 .churn-list { display: flex; flex-direction: column; gap: 2px; }
 .churn-group-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
@@ -871,7 +872,6 @@ a { color: inherit; text-decoration: none; }
 .churn-row-date { font-size: 12px; color: var(--text-secondary); font-feature-settings: 'tnum' 1; }
 .churn-row-date.success { color: #047857; font-weight: 600; }
 .churn-wait-chip { flex: 0 0 auto; white-space: nowrap; }
-.churn-empty { padding: var(--space-4); color: var(--text-tertiary); font-size: 13px; }
 
 /* iOS calendar-icon-style date block: bright red month, large dark day */
 .action-day {
@@ -1133,6 +1133,10 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  /* Top margin so the chip row never abuts the lifecycle-info lines above it
+     (which carry margin-bottom:0). Collapses with a preceding block's own
+     bottom margin, so it never double-spaces when chips follow .offer-dates. */
+  margin-top: var(--space-3);
   margin-bottom: var(--space-3);
 }
 
@@ -1309,7 +1313,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px; font-weight: 500; color: var(--text-strong);
 }
 .req-auto-tag {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--accent); background: var(--accent-soft);
   padding: 1px 5px; border-radius: var(--radius-pill);
 }
@@ -1354,7 +1358,7 @@ a { color: inherit; text-decoration: none; }
 .doc-fetch-or { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.02em; margin: 8px 0 2px; }
 /* "AI" badge + failed-verification note on preview fields sourced from the LLM. */
 .doc-ai-badge {
-  flex: 0 0 auto; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  flex: 0 0 auto; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; line-height: 1.5;
 }
 .doc-ai-note { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; margin-top: 8px; }
@@ -1559,7 +1563,7 @@ a { color: inherit; text-decoration: none; }
 .yv-life-v.warn { color: #b45309; font-weight: 600; }
 .yv-life-v.muted { color: var(--text-tertiary); }
 .yv-life-tag {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--text-tertiary); background: var(--bg); padding: 1px 5px;
   border-radius: var(--radius-pill); margin-left: 2px;
 }
@@ -2562,7 +2566,10 @@ table.data-table {
   .mobile-nav { display: flex; }
   .fab { display: flex; }
   .app-main {
-    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-8));
+    /* Bottom padding clears BOTH the fixed mobile nav AND the FAB that floats
+       above it (bottom = nav+safe+12, height 56). Without the FAB allowance the
+       last offer card scrolled under the button (~36px overlap at 375px). */
+    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3));
   }
   .hero { padding: var(--space-4) var(--space-3); border-radius: var(--radius-lg); }
   .hero-amount { font-size: 36px; }
@@ -2610,6 +2617,13 @@ table.data-table {
 @media (max-width: 480px) {
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .hero-amount { font-size: 34px; }
+  /* Modal action rows carry up to four buttons (Delete · Save as template ·
+     Cancel · Save). At <=480px the modal is full-width and that row no longer
+     fits on one line — let it wrap so the primary Save button never spills off
+     the right edge and out of reach. Desktop keeps the single row (the 640px
+     modal has room). The inner group (right-aligned actions) wraps too. */
+  .modal-footer { flex-wrap: wrap; row-gap: var(--space-2); }
+  .modal-footer > div { flex-wrap: wrap; justify-content: flex-end; }
 }
 
 /* Portrait-only: header scrolls away naturally to reclaim ~64 px of
@@ -6542,9 +6556,13 @@ function renderOverviewChurnSection() {
     if (!d) continue;
     if (d.getTime() <= TODAY.getTime()) eligibleNow.push({ o, elig, d });
     else if (d.getTime() <= horizon.getTime()) upcoming.push({ o, elig, d });
-    // Beyond the horizon → not shown (but the section still renders because at
-    // least one churnable offer exists — the empty-bucket copy covers it).
+    // Beyond the horizon → not shown here.
   }
+  // Only mount the section when there's at least one computable date to list
+  // (eligible now or within the horizon). Churnable offers whose date isn't yet
+  // computable — missing anchor or wait period — surface that gap on their own
+  // cards, not as an empty overview card.
+  if (!eligibleNow.length && !upcoming.length) return '';
   eligibleNow.sort((a, b) => a.d - b.d);       // soonest first (oldest-eligible first)
   upcoming.sort((a, b) => a.d - b.d);
 
@@ -6572,9 +6590,9 @@ function renderOverviewChurnSection() {
     bodyParts.push(`<div class="churn-group-label">Upcoming (next ${CHURN_HORIZON_DAYS} days)</div>`);
     bodyParts.push(upcoming.map(r => row(r, false)).join(''));
   }
-  const body = bodyParts.length
-    ? bodyParts.join('')
-    : `<div class="churn-empty">No churn dates on the horizon.</div>`;
+  // Guaranteed non-empty: the section returns early above unless at least one
+  // bucket has an entry.
+  const body = bodyParts.join('');
 
   return `
     <section class="card churn-section">
@@ -7566,6 +7584,11 @@ function renderLifecycleInfo(o) {
       // Churnable with a wait set but the anchor date isn't recorded yet.
       const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
       parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">needs ${escapeHtml(anchorLabel)} date</span></div>`);
+    } else {
+      // Churnable but no cooling-off period recorded → no computable date.
+      // Mirror the "needs … date" prompt so the offer surfaces the gap here
+      // (the overview section stays absent — nothing computable to list).
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">needs wait period</span></div>`);
     }
   } else if (o.churnable === false && (parts.length > 0 || o.churn_notes)) {
     parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">not churnable</span></div>`);
@@ -11095,7 +11118,16 @@ function requirementWriteThroughTarget(row, field) {
     if (field === 'count') return { sel: '#f-debit-count', kind: 'number' };
     if (field === 'deadline_days') return { sel: '#f-debit-within', kind: 'number' };
   } else if (row.id === 'req-ddreq') {
-    if (field === 'count') return { sel: '#ddreq-count-n', kind: 'number' };
+    // The derived DD-count row mirrors the DD requirement's count. In count
+    // mode that's #ddreq-count-n; in frequency mode the count is the number of
+    // periods (#ddreq-freq-periods), and #ddreq-count-n is hidden + ignored by
+    // readOfferForm — so writing there would be silently discarded. Route to
+    // whichever input is actually live so the edit round-trips.
+    if (field === 'count') {
+      const freqOn = document.querySelector('#ddreq-freq');
+      const sel = (freqOn && freqOn.checked) ? '#ddreq-freq-periods' : '#ddreq-count-n';
+      return { sel, kind: 'number' };
+    }
   } else if (row.id && row.id.indexOf('req-dd-') === 0) {
     if (field === 'amount') return { sel: `.dd-row[data-dd-id="${row.id.slice('req-dd-'.length)}"] [data-dd-field="amount"]`, kind: 'money' };
     // per-DD deadline is derived from the DD's planned date → not editable here.
