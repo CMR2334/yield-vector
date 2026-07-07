@@ -1409,6 +1409,61 @@ a { color: inherit; text-decoration: none; }
 .doc-leftover { font-size: 12px; color: var(--text-secondary); line-height: 1.5; word-break: break-word; }
 .doc-apply-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 .doc-apply-hint { font-size: 11px; color: var(--text-tertiary); }
+/* F5: "also save as template" opt-in below the DoC apply button. */
+.doc-tpl-save { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.doc-tpl-save input { flex: 0 0 auto; }
+
+/* Template picker (F5): "Start from a template" affordance at the top of the
+   NEW-offer modal. Mirrors the .doc-import card idiom (bordered soft card,
+   uppercase toggle) so the two in-modal affordances read as a family. */
+.tpl-picker {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--card-soft);
+  overflow: hidden;
+}
+.tpl-picker-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; background: none; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--accent); text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.tpl-picker-toggle:hover { color: var(--accent-hover); }
+.tpl-picker-toggle svg { flex: 0 0 auto; transition: transform 0.15s ease; }
+.tpl-picker-toggle[aria-expanded="true"] .tpl-chevron { transform: rotate(180deg); }
+.tpl-picker-body { padding: 10px 12px 12px; border-top: 1px solid var(--border-soft); }
+.tpl-search { width: 100%; font-size: 13px; margin-bottom: 10px; }
+.tpl-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.tpl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px; align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+.tpl-row-main { min-width: 0; }
+.tpl-row-title { font-size: 13px; font-weight: 600; color: var(--text-strong); word-break: break-word; }
+.tpl-row-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.tpl-row-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+.tpl-row-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.tpl-del {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: none; color: var(--text-tertiary); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tpl-del:hover { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.tpl-empty { font-size: 12px; color: var(--text-tertiary); padding: 8px 2px; line-height: 1.45; }
+/* At narrow widths let the actions wrap under the details rather than squeeze. */
+@media (max-width: 420px) {
+  .tpl-row { grid-template-columns: 1fr; }
+  .tpl-row-actions { justify-content: flex-start; }
+}
 
 /* Card checklist (step 3): compact requirement list on the offer card. */
 .offer-req-checklist {
@@ -3218,6 +3273,178 @@ function schemaV2Defaults() {
   };
 }
 
+/* ============================================================
+   OFFER TEMPLATES (F5) — the personal "mini Deal Radar"
+   ------------------------------------------------------------
+   A template is an offer's TERMS with every scrap of personal data stripped:
+   no planned dates, no entity/email, no notes, no status, no per-DD instances,
+   no requirement done-state. It rides state.templates[] at the state root, so
+   the existing localStorage + Gist sync carry it for free; it is NEVER read by
+   buildReminderItems (that loop is state.offers only) so a template can never
+   emit a feed item. The two functions below are PURE (no App/DOM/Date-of-save
+   coupling except the fresh id + savedAt stamp) and are exported to a Node test
+   harness that asserts the strip is total. */
+
+// Whitelist of the OFFER keys a template preserves — offer TERMS only. Anything
+// not on this list (plannedSignupDate, optionalPlannedFundingDate,
+// bonus_received_date, closed_date, last_edited, entityUsed, emailUsed, notes,
+// churn_notes, lifecycle_suggest_dismissed, accountStatus/subStatus/status,
+// confidence, includeInScenario, directDeposits) is dropped by construction —
+// a whitelist (not a blacklist) means a NEW personal field added to offers
+// later can never silently leak into a template. color + docUrl are cosmetic /
+// provenance and intentionally travel; offerExpirationDate stays because a
+// template for an expired offer is still a valuable re-run reference.
+const TEMPLATE_TERMS_KEYS = [
+  'bankName', 'offerName', 'offerType',
+  'signupBonusAmount', 'offerExpirationDate',
+  'requiredFundingAmount', 'daysAfterSignupAllowedBeforeDeposit', 'daysFundsMustRemain',
+  'monthly_fee', 'fee_waiver_condition', 'promo_code',
+  'early_termination_fee', 'etf_window_days',
+  'bonus_post_min_days', 'bonus_post_max_days',
+  'churnable', 'churn_wait_months', 'churn_anchor',
+  'color', 'docUrl'
+];
+
+// Strip a requirement row down to its OBLIGATION shape for a template: keep what
+// the obligation IS (type/label/amount/count/deadline_days/frequency/hold_days)
+// but drop every trace of PROGRESS or import provenance (done, done_date, notes,
+// _fromImport) and force source:'user' (a template only carries the user's own
+// rows; derived rows are re-computed from the terms on instantiation).
+function stripRequirementForTemplate(row) {
+  if (!row) return null;
+  return {
+    type: row.type || 'custom',
+    label: row.label || '',
+    amount: (row.amount === undefined ? null : row.amount),
+    count: (row.count === undefined ? null : row.count),
+    deadline_days: (row.deadline_days === undefined ? null : row.deadline_days),
+    frequency: row.frequency || 'total',
+    hold_days: (row.hold_days === undefined ? null : row.hold_days),
+    source: 'user'
+  };
+}
+
+// Copy a template's ddRequirement CONFIG (the requirement shape — mode/count/
+// frequency) without any per-DD planned dates/instances (those live in the
+// offer's directDeposits[], which templates never carry). Returns null when the
+// source offer had none.
+function templateDdRequirement(dd) {
+  if (!dd || typeof dd !== 'object') return null;
+  return {
+    mode: dd.mode === 'frequency' ? 'frequency' : 'count',
+    count: (dd.count == null ? null : Number(dd.count)),
+    freqEvery: dd.freqEvery || 'month',
+    freqPeriods: (dd.freqPeriods == null ? null : Number(dd.freqPeriods))
+  };
+}
+
+// Copy a debit requirement's CONFIG for a template: keep required/count/
+// withinDays (the obligation) but drop byDate/byDateLegacy (absolute dates are
+// personal-timeline artifacts). Returns null when absent.
+function templateDebitRequirement(dr) {
+  if (!dr || typeof dr !== 'object') return null;
+  return {
+    required: !!dr.required,
+    count: (dr.count == null ? null : Number(dr.count)),
+    withinDays: (dr.withinDays == null ? null : Number(dr.withinDays))
+  };
+}
+
+// PURE: build a reusable template from an offer. Personal data is stripped by
+// whitelist (TEMPLATE_TERMS_KEYS) — the returned object contains NONE of the
+// personal fields. Requirement rows are reduced to obligation shape (user rows
+// only). A fresh tplId (tpl_… via the shared uid idiom) + savedAt ISO stamp are
+// the only non-offer-derived values. Never mutates `offer`.
+function offerToTemplate(offer) {
+  const o = offer || {};
+  const tpl = {
+    tplId: uid('tpl'),
+    savedAt: new Date().toISOString()
+  };
+  // Terms whitelist — copy only keys that are actually present so a template's
+  // shape mirrors the offer's known fields (undefined terms simply omitted).
+  for (const k of TEMPLATE_TERMS_KEYS) {
+    if (k in o) tpl[k] = o[k];
+  }
+  // Requirement CONFIG objects (not the offer's live instances).
+  tpl.ddRequirement = templateDdRequirement(o.ddRequirement);
+  tpl.debitRequirement = templateDebitRequirement(o.debitRequirement);
+  // User requirement rows only, stripped of done/done_date/notes/_fromImport.
+  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  tpl.requirements = reqs
+    .filter(r => r && r.source === 'user')
+    .map(stripRequirementForTemplate)
+    .filter(Boolean);
+  return tpl;
+}
+
+// PURE: instantiate a fresh, unsaved OFFER from a template. Today-agnostic — no
+// dates are invented (plannedSignupDate/funding dates start blank; the user
+// sets them in the modal). Status starts at the prospect/closed defaults (a new
+// offer is always a fresh prospect regardless of what the source offer was).
+// A fresh offer id (off_…) is minted. Requirement rows are rehydrated through
+// makeRequirementRow so downstream code sees a full row shape; derived rows are
+// left for readOfferForm/syncRequirementsWithLegacy to recompute from the terms.
+// Never mutates `tpl`.
+function templateToOffer(tpl) {
+  const t = tpl || {};
+  const offer = {
+    id: uid('off'),
+    // Terms — pull straight from the template, falling back to schema-sane
+    // empties so the offer object is always well-shaped for the modal render.
+    bankName: t.bankName || '',
+    offerName: t.offerName || '',
+    offerType: (t.offerType && t.offerType !== 'other') ? t.offerType : 'new-funds-held',
+    signupBonusAmount: (t.signupBonusAmount == null ? null : t.signupBonusAmount),
+    offerExpirationDate: t.offerExpirationDate || '',
+    requiredFundingAmount: (t.requiredFundingAmount == null ? null : t.requiredFundingAmount),
+    daysAfterSignupAllowedBeforeDeposit: (t.daysAfterSignupAllowedBeforeDeposit == null ? 30 : t.daysAfterSignupAllowedBeforeDeposit),
+    daysFundsMustRemain: (t.daysFundsMustRemain == null ? null : t.daysFundsMustRemain),
+    ddRequirement: templateDdRequirement(t.ddRequirement),
+    debitRequirement: t.debitRequirement
+      ? Object.assign(templateDebitRequirement(t.debitRequirement), { byDate: '', byDateLegacy: '' })
+      : { required: false, count: null, withinDays: null, byDate: '', byDateLegacy: '' },
+    // Fees & terms scalars.
+    monthly_fee: (t.monthly_fee == null ? null : t.monthly_fee),
+    fee_waiver_condition: t.fee_waiver_condition || '',
+    promo_code: t.promo_code || '',
+    early_termination_fee: (t.early_termination_fee == null ? null : t.early_termination_fee),
+    etf_window_days: (t.etf_window_days == null ? null : t.etf_window_days),
+    bonus_post_min_days: (t.bonus_post_min_days == null ? null : t.bonus_post_min_days),
+    bonus_post_max_days: (t.bonus_post_max_days == null ? null : t.bonus_post_max_days),
+    // Churnability.
+    churnable: (t.churnable === true ? true : (t.churnable === false ? false : null)),
+    churn_wait_months: (t.churn_wait_months == null ? null : t.churn_wait_months),
+    churn_anchor: t.churn_anchor || 'bonus_received',
+    churn_notes: '',
+    // Cosmetic / provenance travel with the template.
+    color: t.color || '',
+    docUrl: t.docUrl || '',
+    // Personal fields — reset to fresh-prospect defaults, NO invented dates.
+    plannedSignupDate: '',
+    optionalPlannedFundingDate: '',
+    bonus_received_date: null,
+    closed_date: null,
+    lockStartsFrom: 'funded date',
+    status: 'prospect',
+    accountStatus: 'closed',
+    subStatus: 'prospect',
+    includeInScenario: true,
+    confidence: 'likely',
+    notes: '',
+    entityUsed: '',
+    emailUsed: '',
+    directDeposits: [],
+    last_edited: null
+  };
+  // User requirement rows: rehydrate to full row shape (fresh ids, un-done).
+  const reqs = Array.isArray(t.requirements) ? t.requirements : [];
+  offer.requirements = reqs.map(r => makeRequirementRow(Object.assign(
+    {}, stripRequirementForTemplate(r), { id: uid('req'), source: 'user' }
+  )));
+  return offer;
+}
+
 // One-time migration to schema v2. Runs in App.init AFTER the legacy
 // per-offer migrations (so derivation reads already-normalized legacy values).
 // Per offer lacking the v2 marker (presence of a `requirements` array):
@@ -3232,6 +3459,13 @@ function schemaV2Defaults() {
 // persistence to the next genuine user save (like the other init migrations).
 function migrateOffersToSchemaV2(state) {
   if (!state || !Array.isArray(state.offers)) return state;
+
+  // F5: tolerant guard for the templates root key. This runs at boot AND at
+  // every cloud-adoption point (migrateOffersToSchemaV2 is called from all of
+  // them), so a state loaded from an OLDER build (which never wrote templates)
+  // or a corrupt value is normalized to [] before any code reads it. Root-level
+  // and idempotent — leaves an existing array untouched.
+  state.templates = Array.isArray(state.templates) ? state.templates : [];
 
   // Is there any pre-v2 offer? (one lacking the requirements marker) — gate the
   // backup on real work so we don't snapshot an already-v2 state.
@@ -5044,7 +5278,11 @@ const App = {
       },
       offers: [],
       commitments: [],
-      events: []
+      events: [],
+      // F5: reusable offer templates (terms only, personal data stripped).
+      // Root-level so localStorage + Gist sync carry them; never read by
+      // buildReminderItems, so they can't emit feed items.
+      templates: []
     };
   },
 
@@ -7782,6 +8020,7 @@ function renderOfferCardWithActions(o) {
     <div class="offer-actions" style="margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);">
       <button class="btn btn-ghost btn-sm" data-action="duplicate-offer" data-id="${o.id}">Duplicate</button>
       <button class="btn btn-ghost btn-sm" data-action="convert-offer" data-id="${o.id}" title="Lock this offer in as a commitment on your timeline">Commit</button>
+      <button class="btn btn-ghost btn-sm" data-action="save-offer-as-template-card" data-id="${o.id}" title="Save these offer terms as a reusable template (your personal dates, notes and status are not saved)">Template</button>
       <select class="select" style="height:30px;padding:4px 8px;font-size:12px;width:auto;flex:1;min-width:120px;" data-action="change-status" data-id="${o.id}" title="Offer status">
         ${SUB_STATUSES.map(s => `<option value="${s}" ${o.subStatus === s ? 'selected' : ''}>${SUB_STATUS_LABELS[s]}</option>`).join('')}
       </select>
@@ -9698,7 +9937,8 @@ function renderDocPreview(result) {
     <div class="doc-apply-row">
       <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-apply">Apply <span id="doc-apply-count">${applyCount}</span> selected</button>
       <span class="doc-apply-hint">Fills the form for your review — then Save as usual.</span>
-    </div>`;
+    </div>
+    <label class="doc-tpl-save"><input type="checkbox" id="doc-save-template" /> <span>Also save these terms as a template</span></label>`;
 }
 
 // Live-update the "Apply N selected" count as checkboxes toggle.
@@ -9960,15 +10200,169 @@ function testDocParser(rawText, fixtureKey) {
 }
 
 /* ============================================================
+   TEMPLATE PICKER (F5) — "Start from a template" in the new-offer flow
+   ============================================================ */
+
+// A concise "key requirement" chip label for a template. Prefers the funding
+// obligation (the headline number for most bank bonuses); falls back to the DD
+// requirement, then the first user requirement row (via the shared
+// requirementSummary). Returns '' when nothing summarizable — the chip is then
+// omitted rather than rendered empty.
+function templateRequirementChipText(tpl) {
+  if (!tpl) return '';
+  const funding = (tpl.requiredFundingAmount != null && tpl.requiredFundingAmount !== '')
+    ? Number(tpl.requiredFundingAmount) : null;
+  if (funding != null && funding > 0) return `Fund ${formatCompactCurrency(funding)}`;
+  const dd = tpl.ddRequirement;
+  if (dd && dd.mode === 'count' && dd.count) return `${dd.count} DD${dd.count === 1 ? '' : 's'}`;
+  if (dd && dd.mode === 'frequency' && dd.freqPeriods) {
+    const unit = dd.freqEvery === 'week' ? 'wk' : dd.freqEvery === '2weeks' ? 'cycle' : 'mo';
+    return `DD ×${dd.freqPeriods}/${unit}`;
+  }
+  const dr = tpl.debitRequirement;
+  if (dr && dr.required && dr.count) return `${dr.count} debit${dr.count === 1 ? '' : 's'}`;
+  const firstUser = Array.isArray(tpl.requirements) ? tpl.requirements.find(r => r && r.source === 'user') : null;
+  if (firstUser) {
+    const s = requirementSummary(firstUser);
+    if (s) return s;
+    if (firstUser.label) return firstUser.label;
+  }
+  return '';
+}
+
+// The chips row for one template: bonus amount (accent) + key-requirement
+// (muted). Each omitted when it has no value.
+function templateRowChips(tpl) {
+  const chips = [];
+  if (tpl.signupBonusAmount != null && tpl.signupBonusAmount !== '' && Number(tpl.signupBonusAmount) > 0) {
+    chips.push(`<span class="chip chip-accent">${escapeHtml(formatCompactCurrency(Number(tpl.signupBonusAmount)))} bonus</span>`);
+  }
+  const reqText = templateRequirementChipText(tpl);
+  if (reqText) chips.push(`<span class="chip chip-muted">${escapeHtml(reqText)}</span>`);
+  return chips.join('');
+}
+
+// One template row: title (bank — offer), chips, savedAt muted, Use + delete.
+function renderTemplateRow(tpl) {
+  const name = tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : (tpl.bankName || 'Untitled offer');
+  const saved = tpl.savedAt ? `Saved ${escapeHtml(formatDateMedium(tpl.savedAt))}` : '';
+  return `
+    <div class="tpl-row" data-tpl-row="${escapeAttr(tpl.tplId)}">
+      <div class="tpl-row-main">
+        <div class="tpl-row-title">${escapeHtml(name)}</div>
+        <div class="tpl-row-chips">${templateRowChips(tpl)}</div>
+        ${saved ? `<div class="tpl-row-meta">${saved}</div>` : ''}
+      </div>
+      <div class="tpl-row-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-action="use-template" data-tpl-id="${escapeAttr(tpl.tplId)}">Use</button>
+        <button type="button" class="tpl-del" data-action="delete-template" data-tpl-id="${escapeAttr(tpl.tplId)}" aria-label="Delete template" title="Delete template">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+
+// Render the filtered template list into markup. `query` filters by bank/offer
+// name (case-insensitive substring). Empty-after-filter shows a muted line.
+function renderTemplateList(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const all = Array.isArray(App.state.templates) ? App.state.templates : [];
+  const rows = (q
+    ? all.filter(t => `${t.bankName || ''} ${t.offerName || ''}`.toLowerCase().includes(q))
+    : all);
+  if (!rows.length) {
+    return `<div class="tpl-empty">${q ? 'No templates match your search.' : 'No templates yet.'}</div>`;
+  }
+  return rows.map(renderTemplateRow).join('');
+}
+
+// The whole "Start from a template (N)" affordance. Returns '' entirely when
+// there are zero templates (empty-state: the affordance is hidden, not shown
+// disabled), so a fresh install's new-offer modal is unchanged. Collapsed by
+// default; the toggle expands the search + list.
+function renderTemplatePicker() {
+  const n = (Array.isArray(App.state.templates) ? App.state.templates : []).length;
+  if (n === 0) return '';
+  return `
+    <div class="tpl-picker" id="tpl-picker">
+      <button type="button" class="tpl-picker-toggle" data-action="toggle-template-picker" aria-expanded="false" aria-controls="tpl-picker-body">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a2 2 0 0 1 2-2h2"/><path d="M4 17v2a2 2 0 0 0 2 2h2"/><path d="M16 3h2a2 2 0 0 1 2 2v2"/><path d="M16 21h2a2 2 0 0 0 2-2v-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Start from a template (${n})</span>
+        <svg class="tpl-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:auto;"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="tpl-picker-body" id="tpl-picker-body" hidden>
+        <input id="tpl-search" class="input tpl-search" type="text" placeholder="Search by bank or offer name…" autocomplete="off" aria-label="Search templates" />
+        <div class="tpl-list" id="tpl-list">${renderTemplateList('')}</div>
+      </div>
+    </div>`;
+}
+
+// Expand/collapse the template picker; focus the search box on open.
+function toggleTemplatePicker(btn) {
+  const body = document.getElementById('tpl-picker-body');
+  if (!btn || !body) return;
+  const open = btn.getAttribute('aria-expanded') === 'true';
+  btn.setAttribute('aria-expanded', String(!open));
+  body.hidden = open;
+  if (!open) setTimeout(() => document.getElementById('tpl-search')?.focus(), 30);
+}
+
+// Re-render the template list against the current search box value (bound as an
+// input listener when the modal opens — see the setTimeout wiring below).
+function filterTemplateList() {
+  const list = document.getElementById('tpl-list');
+  const search = document.getElementById('tpl-search');
+  if (!list) return;
+  list.innerHTML = renderTemplateList(search ? search.value : '');
+}
+
+// "Use" a template: instantiate a fresh offer via templateToOffer and re-render
+// the NEW-offer modal seeded from it. Closing + reopening the same modal-root is
+// how the app swaps modal content; the picker is gone (isEdit still false but
+// showOfferModal only renders the picker before there's a seed... it stays
+// visible, which is fine — the user can pick another). The user reviews the
+// populated form and Saves normally.
+function useTemplate(tplId) {
+  if (!tplId) return;
+  const tpl = (App.state.templates || []).find(t => t && t.tplId === tplId);
+  if (!tpl) { toast('Template not found', 'danger'); return; }
+  showOfferModal(null, templateToOffer(tpl));
+}
+
+// Delete a template (confirm). If the picker is open, re-render the list in
+// place; when the last template goes, re-render the whole picker so the
+// affordance disappears (empty-state hides it entirely).
+function deleteTemplate(tplId) {
+  if (!tplId) return;
+  const tpl = (App.state.templates || []).find(t => t && t.tplId === tplId);
+  const label = tpl ? (tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : tpl.bankName) : 'this template';
+  if (!confirm(`Delete the template "${label}"?`)) return;
+  App.update(s => {
+    s.templates = (s.templates || []).filter(t => t && t.tplId !== tplId);
+  });
+  // App.update re-renders the main view, but the modal is separate — patch it.
+  const picker = document.getElementById('tpl-picker');
+  if (picker) {
+    if ((App.state.templates || []).length === 0) {
+      picker.remove();  // affordance hidden entirely at zero
+    } else {
+      filterTemplateList();
+    }
+  }
+  toast('Template deleted');
+}
+
+/* ============================================================
    MODAL: ADD/EDIT OFFER
    ============================================================ */
-function showOfferModal(offerId = null) {
+function showOfferModal(offerId = null, seed = null) {
   const isEdit = Boolean(offerId);
   // Auto-assign the first unused palette color on new offers so the
   // chart/timeline picks up identity coding without making the user
   // hunt for a swatch. User can clear or change it in the modal.
   const autoColor = isEdit ? '' : firstUnusedOfferColor(null);
-  const o = isEdit ? App.state.offers.find(x => x.id === offerId) : {
+  // The blank-slate default offer for a brand-new "Add an offer" (no seed).
+  const blankOffer = {
     id: uid('off'),
     bankName: '',
     offerName: '',
@@ -9994,6 +10388,16 @@ function showOfferModal(offerId = null) {
     entityUsed: '',
     emailUsed: ''
   };
+  // F5: `seed` is a fresh, unsaved offer built by templateToOffer() — the
+  // "Start from a template → Use" path. It carries all the terms with prospect
+  // defaults + no invented dates; the NEW-offer modal renders populated from it
+  // (the whole form render below reads `o`, so a seeded `o` fills every field,
+  // DD/requirement section included). A seed with no color of its own (template
+  // saved without one) inherits the auto swatch so the chart still colour-codes.
+  if (seed && !isEdit && !seed.color) seed.color = autoColor;
+  const o = isEdit
+    ? App.state.offers.find(x => x.id === offerId)
+    : (seed || blankOffer);
   // Back-compat defaults for older offers loaded from storage.
   if (!o.offerType || o.offerType === 'other') o.offerType = 'new-funds-held';
   if (!Array.isArray(o.directDeposits)) o.directDeposits = [];
@@ -10017,6 +10421,7 @@ function showOfferModal(offerId = null) {
       </div>
       <form class="modal-body" id="offer-form">
         <div class="form-grid">
+          ${!isEdit ? renderTemplatePicker() : ''}
           <div class="field" style="grid-column: 1 / -1;">
             <div class="field-box">
               <label for="f-bank">Bank name *</label>
@@ -10418,6 +10823,7 @@ function showOfferModal(offerId = null) {
       <div class="modal-footer">
         ${isEdit ? `<button class="btn btn-ghost btn-danger" data-action="delete-offer-from-modal" data-id="${o.id}">Delete</button>` : '<span></span>'}
         <div style="display:flex;gap:var(--space-2);">
+          ${isEdit ? `<button class="btn btn-secondary" data-action="save-as-template" data-id="${o.id}" title="Save these offer terms as a reusable template (your personal dates, notes and status are not saved)">Save as template</button>` : ''}
           <button class="btn btn-secondary" data-action="close-modal">Cancel</button>
           <button class="btn btn-primary" data-action="save-offer" data-id="${o.id}" data-isedit="${isEdit ? '1' : '0'}">${isEdit ? 'Save changes' : 'Add offer'}</button>
         </div>
@@ -10428,6 +10834,11 @@ function showOfferModal(offerId = null) {
   modal.dataset.strictClose = '1'; // Require explicit X — don't close on backdrop click or Escape
   setTimeout(() => {
     document.getElementById('f-bank')?.focus();
+    // F5: live-filter the template picker list as the user types. Bound here
+    // (local DOM target) rather than via the global dispatcher, mirroring the
+    // DD-section wiring below. Present only when the picker rendered (templates
+    // exist); the ?. guard no-ops on the new-install / edit modal.
+    document.getElementById('tpl-search')?.addEventListener('input', filterTemplateList);
     // Wire the offer-type radios to show/hide the DD entries section.
     // Bound here rather than via the global onChange dispatcher because
     // the DOM target — the .dd-section div — is local to this modal.
@@ -11746,6 +12157,11 @@ function onClick(e) {
     case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
     case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { deleteOffer(id); closeModal(); } break;
     case 'save-offer': saveOfferFromForm(id, target.dataset.isedit === '1'); break;
+    case 'save-as-template': saveOfferAsTemplate(id); break;
+    case 'save-offer-as-template-card': saveOfferAsTemplateFromCard(id); break;
+    case 'use-template': useTemplate(target.dataset.tplId); break;
+    case 'delete-template': deleteTemplate(target.dataset.tplId); break;
+    case 'toggle-template-picker': toggleTemplatePicker(target.closest('.tpl-picker-toggle') || target); break;
     case 'toggle-advanced-form': toggleAdvancedForm(target); break;
     case 'doc-import-toggle': docImportToggle(target.closest('.doc-import-toggle') || target); break;
     case 'doc-import-parse': docImportParse(); break;
@@ -11994,13 +12410,24 @@ function saveOfferFromForm(id, isEdit) {
   const offer = readOfferForm(id, isEdit);
   if (!offer) return;
   if (!offer.bankName) { toast('Bank name is required', 'danger'); return; }
+  // F5 DoC hook: read the "Also save these terms as a template" opt-in BEFORE
+  // closeModal() wipes the DOM. When checked, we build the template from the
+  // SAVED offer (post-save) so it reflects exactly what the user committed.
+  const alsoTemplate = !!(document.getElementById('doc-save-template') || {}).checked;
   App.update(s => {
     const idx = s.offers.findIndex(o => o.id === id);
     if (idx >= 0) s.offers[idx] = offer;
     else s.offers.push(offer);
   });
+  let savedTemplate = false;
+  if (alsoTemplate) {
+    // Silent upsert (no confirm-replace) — the DoC-imported terms are the
+    // authoritative latest and shouldn't stack a second dialog on the Save.
+    savedTemplate = addOrReplaceTemplate(offerToTemplate(offer), { silent: true });
+  }
   closeModal();
   toast(isEdit ? 'Offer updated' : 'Offer added');
+  if (savedTemplate) toast('Saved to templates');
 }
 
 function deleteOffer(id) {
@@ -12009,6 +12436,62 @@ function deleteOffer(id) {
     s.commitments = s.commitments.filter(c => c.sourceBonusOfferId !== id);
   });
   toast('Offer deleted');
+}
+
+/* ---- Templates (F5) actions ------------------------------------------------ */
+
+// Case-insensitive identity for template de-dup: two templates are "the same
+// offer" when bank + offer name match (trimmed, lowercased). Empty offer names
+// compare equal, so re-saving an unnamed offer for the same bank replaces.
+function templateIdentity(t) {
+  return `${String((t && t.bankName) || '').trim().toLowerCase()}|${String((t && t.offerName) || '').trim().toLowerCase()}`;
+}
+
+// Commit a template into state.templates, replacing any existing one with the
+// same identity. In the interactive path an existing match triggers the
+// confirm-replace idiom; pass {silent:true} (the DoC post-save hook) to upsert
+// without a prompt — a DoC import is the authoritative latest terms and must not
+// stack a second dialog on top of the offer Save. Returns true when a template
+// was written, false when the user declined the replace. Shared by the modal
+// button and the DoC hook so dedupe semantics never diverge.
+function addOrReplaceTemplate(tpl, { silent = false } = {}) {
+  if (!tpl || !tpl.bankName) { if (!silent) toast('Add a bank name before saving a template', 'danger'); return false; }
+  const identity = templateIdentity(tpl);
+  const existingIdx = (App.state.templates || []).findIndex(t => templateIdentity(t) === identity);
+  if (existingIdx >= 0 && !silent) {
+    const label = tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : tpl.bankName;
+    if (!confirm(`A template for "${label}" already exists. Replace it with the current terms?`)) return false;
+  }
+  App.update(s => {
+    if (!Array.isArray(s.templates)) s.templates = [];
+    const idx = s.templates.findIndex(t => templateIdentity(t) === identity);
+    if (idx >= 0) s.templates[idx] = tpl;   // replace in place (keeps list order)
+    else s.templates.push(tpl);
+  });
+  return true;
+}
+
+// Modal "Save as template": build a template from the CURRENT form state (so an
+// in-progress edit is captured, matching the DoC "form is the truth" idiom),
+// strip personal data via offerToTemplate, and commit with the dedupe guard.
+// The offer edit modal stays open — saving a template is a side action, not a
+// commit of the offer itself.
+function saveOfferAsTemplate(id) {
+  const offer = readOfferForm(id, true);
+  if (!offer) return;
+  if (!offer.bankName) { toast('Bank name is required to save a template', 'danger'); return; }
+  const tpl = offerToTemplate(offer);
+  if (addOrReplaceTemplate(tpl)) toast('Saved to templates');
+}
+
+// Card-context "Template" action: save a template from the STORED offer (no
+// modal/form open here), reusing the same strip + dedupe path as the modal
+// button so behavior is identical whether you save from the card or the editor.
+function saveOfferAsTemplateFromCard(id) {
+  const offer = (App.state.offers || []).find(o => o && o.id === id);
+  if (!offer) { toast('Offer not found', 'danger'); return; }
+  if (!offer.bankName) { toast('Bank name is required to save a template', 'danger'); return; }
+  if (addOrReplaceTemplate(offerToTemplate(offer))) toast('Saved to templates');
 }
 
 // Toggle a requirement row's completion from the card checklist (step 3).
