@@ -1227,6 +1227,87 @@ a { color: inherit; text-decoration: none; }
 }
 .dd-row .input-group:focus-within .input { box-shadow: none; }
 
+/* ============================================================
+   REQUIREMENTS SECTION (step 3) — modal editor rows + card checklist.
+   Shares the app's tokens/radii; derived rows carry a subtle "auto" tag,
+   user rows a remove button. Rows wrap to a stacked layout on narrow
+   viewports (no horizontal scroll on phones).
+   ============================================================ */
+.req-section .field-hint { margin-top: 8px; }
+#req-rows { display: flex; flex-direction: column; gap: 8px; }
+.req-row {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  background: var(--card-soft);
+}
+.req-row.req-derived { border-left: 3px solid var(--accent-mid); }
+.req-row.req-user { border-left: 3px solid var(--success); }
+.req-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.req-cell { min-width: 0; }
+.req-cell-type { flex: 1 1 130px; min-width: 120px; }
+.req-cell-label { flex: 1 1 120px; min-width: 110px; }
+.req-cell-amount { flex: 0 1 120px; min-width: 96px; }
+.req-cell-count { flex: 0 1 88px; min-width: 78px; }
+.req-cell-deadline { flex: 0 1 88px; min-width: 74px; }
+.req-cell-freq { flex: 0 1 120px; min-width: 100px; }
+.req-cell-remove { flex: 0 0 auto; margin-left: auto; }
+.req-row .select, .req-row .input { height: 34px; padding: 6px 8px; font-size: 13px; color: var(--text-strong); }
+.req-row .input-group { width: 100%; }
+.req-row .input-group.with-suffix .input { padding-right: 26px; }
+.req-row .input-group.with-suffix .input-suffix { right: 6px; font-size: 12px; color: var(--text-tertiary); }
+.req-row .input-group .input-prefix { color: var(--text-strong); margin-right: 3px; }
+.req-type-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 500; color: var(--text-strong);
+}
+.req-auto-tag {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent); background: var(--accent-soft);
+  padding: 1px 5px; border-radius: var(--radius-pill);
+}
+.req-deadline-ro { font-size: 12px; color: var(--text-tertiary); font-feature-settings: 'tnum' 1; }
+.req-row-date { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+.req-row-date strong { color: var(--text-strong); }
+.req-row-date .req-nodate { color: var(--text-tertiary); }
+.req-add-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.req-add-row .select { flex: 1 1 auto; max-width: 240px; }
+.req-empty { font-size: 12px; color: var(--text-tertiary); padding: 6px 2px; }
+
+/* Card checklist (step 3): compact requirement list on the offer card. */
+.offer-req-checklist {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+.offer-req-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-tertiary); margin-bottom: 4px; }
+.offer-req-item {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12px; padding: 3px 0; cursor: pointer;
+  border-radius: var(--radius-sm);
+  -webkit-tap-highlight-color: transparent;
+}
+.offer-req-check {
+  flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px;
+  border: 1.5px solid var(--border-strong); border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-inverse);
+}
+.offer-req-item.done .offer-req-check { background: var(--success); border-color: var(--success); }
+.offer-req-label { flex: 1 1 auto; min-width: 0; color: var(--text); }
+.offer-req-item.done .offer-req-label { text-decoration: line-through; color: var(--text-tertiary); }
+.offer-req-date { flex: 0 0 auto; color: var(--text-secondary); font-feature-settings: 'tnum' 1; font-size: 11px; }
+.offer-req-item.done .offer-req-date { color: var(--text-tertiary); }
+.offer-req-count { font-weight: 500; color: var(--text-tertiary); }
+
 /* DD transfer-timing row (Settings → "Direct-deposit transfer timing"):
    the three mini inputs ("in"/"season"/"back") previously sized by a
    per-item max-width guess (130/150/140px) tuned to roughly fit each
@@ -2673,6 +2754,65 @@ const REQUIREMENT_TYPES = [
   'online_banking', 'maintain_balance', 'promo_code', 'custom'
 ];
 
+// Per-type UI metadata for the Requirements section (step 3). `label` is the
+// human dropdown/display name; `money`/`count` flag which numeric inputs the
+// type exposes (a `$` amount, an integer count, or neither). This is the single
+// source both the add-row dropdown and per-row field rendering read, so the two
+// can't drift.
+const REQUIREMENT_TYPE_META = {
+  spend:                { label: 'Spend ($)',            money: true,  count: false },
+  deposit:              { label: 'Deposit ($)',          money: true,  count: false },
+  direct_deposit_amt:   { label: 'Direct Deposit ($)',   money: true,  count: false },
+  direct_deposit_count: { label: 'Direct Deposits (#)',  money: false, count: true  },
+  transactions:         { label: 'Transactions (#)',     money: false, count: true  },
+  debit_txns:           { label: 'Debit Transactions (#)', money: false, count: true },
+  activate_debit:       { label: 'Activate Debit Card',  money: false, count: false },
+  estatements:          { label: 'Enroll e-Statements',  money: false, count: false },
+  online_banking:       { label: 'Enroll Online Banking', money: false, count: false },
+  maintain_balance:     { label: 'Maintain Balance ($)', money: true,  count: false },
+  promo_code:           { label: 'Enter Promo Code',     money: false, count: false },
+  custom:               { label: 'Custom',               money: true,  count: true  }
+};
+const REQUIREMENT_FREQUENCIES = ['total', 'monthly', 'per_statement'];
+const REQUIREMENT_FREQ_LABELS = { total: 'Total', monthly: 'Monthly', per_statement: 'Per statement' };
+
+// Display title for a requirement row: an explicit label wins (custom rows,
+// derived rows already carry a computed label); otherwise fall back to the
+// type's human name. Keeps the card checklist / feed titles readable.
+function requirementDisplayLabel(row) {
+  if (!row) return '';
+  if (row.label && String(row.label).trim()) return String(row.label).trim();
+  const meta = REQUIREMENT_TYPE_META[row.type];
+  return meta ? meta.label : (row.type || 'Requirement');
+}
+
+// The absolute calendar deadline for a requirement row, as an ISO string, or
+// '' when it can't be computed. Anchored on the SAME sign-up date the existing
+// deposit/debit deadline math uses (offer.plannedSignupDate): deadline_days is
+// stored relative to it (deriveRequirementsFromLegacy computes derived rows'
+// day-counts the same way), so a sign-up-date edit re-dates every row with no
+// stored absolute date to drift. A signupOverride (ISO) lets the modal compute
+// live against the currently-typed sign-up field before save.
+function requirementDeadlineISO(offer, row, signupOverride) {
+  if (!row || row.deadline_days == null || row.deadline_days === '') return '';
+  const days = Number(row.deadline_days);
+  if (!Number.isFinite(days)) return '';
+  const anchor = parseDate(signupOverride != null ? signupOverride : (offer && offer.plannedSignupDate));
+  if (!anchor) return '';
+  return isoDate(addDays(anchor, days));
+}
+
+// A short "$amount · frequency" style summary for a requirement row, used as
+// the feed item notes and the card checklist sub-line. Empty parts are omitted.
+function requirementSummary(row) {
+  if (!row) return '';
+  const parts = [];
+  if (row.amount != null && row.amount !== '') parts.push(formatCurrency(Number(row.amount)));
+  if (row.count != null && row.count !== '') parts.push(`${Number(row.count)}×`);
+  if (row.frequency && row.frequency !== 'total') parts.push(REQUIREMENT_FREQ_LABELS[row.frequency] || row.frequency);
+  return parts.join(' · ');
+}
+
 // Build a fresh requirement row with all fields defaulted. `over` supplies
 // the derived/known fields; done/done_date/notes default empty so a new
 // derived row starts un-done (syncRequirementsWithLegacy preserves those
@@ -2717,7 +2857,15 @@ function deriveRequirementsFromLegacy(offer) {
   // (the COUNT/frequency requirement, distinct from the individual scheduled
   // DD rows below). frequency maps count-mode → 'total', frequency-mode → the
   // period cadence. Only emitted when a positive count is specified.
-  const ddReq = offer.ddRequirement;
+  // MATERIALIZATION GATE (step-3 fix #2): the offer form writes a DEFAULT
+  // ddRequirement ({mode:'count',count:1,…}) for EVERY offer regardless of type,
+  // so gating only on "count > 0" would grow a phantom req-ddreq row on every
+  // saved new-funds-held offer that never had a DD requirement. A ddRequirement
+  // is only a real obligation for the DD-family types, so require the offerType
+  // to be one of them before deriving the row. (Per-DD rows below are naturally
+  // gated — a non-DD offer has no directDeposits[] entries.)
+  const isDdFamily = offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd';
+  const ddReq = isDdFamily ? offer.ddRequirement : null;
   if (ddReq) {
     if (ddReq.mode === 'frequency') {
       const periods = Number(ddReq.freqPeriods) || null;
@@ -5839,6 +5987,39 @@ function buildReminderItems(state) {
       }
     }
 
+    // requirement-deadline (WORK, step 3) — one per USER-added requirement row
+    // with a computable deadline. NO-DUPLICATE RULE: source:'derived' rows
+    // mirror legacy fields (funding/DD/debit) that the blocks above already
+    // emit deposit-deadline / dd-initiate / debit-deadline items for, so
+    // deriving feed items from them too would double-book the same obligation.
+    // Only source:'user' rows (e-statements, promo code, extra spend, …) have
+    // no legacy equivalent and are the sole new emitters. Done rows emit
+    // nothing (the obligation is met). Same committed gate as the other work
+    // items so a prospect's requirements don't surface before the account is
+    // pursued. Id `yv-offer-<offerId>-req-<rowId>` uses the STABLE row id from
+    // step 2 (never an array index) so it participates in the _feedEmitted/
+    // _feedRemoved tombstone mechanism automatically via computeReminderFeed.
+    if (committed && Array.isArray(o.requirements)) {
+      for (const r of o.requirements) {
+        if (!r || r.source !== 'user' || !r.id || r.done) continue;
+        const dlISO = requirementDeadlineISO(o, r);
+        if (!dlISO) continue;
+        const due = dlISO.slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+        const label = requirementDisplayLabel(r);
+        const summary = requirementSummary(r);
+        items.push({
+          id: `yv-offer-${o.id}-req-${r.id}`,
+          ownerId: o.id, kind: 'requirement-deadline', dueDate: due, isWork: true,
+          title: `${name} — ${label}`,
+          notes: summary ? `${summary}. Complete by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`
+                         : `Complete by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`,
+          listLabel: label, tag: 'danger', name,
+          sub: summary || label, color, targetKind: 'offer', targetId: o.id
+        });
+      }
+    }
+
     // withdrawal / lock-release — informational: funds free up. Keyed on the
     // modern field: any offer whose capital is still live (approved/on-track/
     // met-waiting) and whose hold has a computable release date (prospects
@@ -5922,6 +6103,18 @@ function buildReminderItems(state) {
    (retained a fixed 90 days for now; ack-based retention arrives with
    consumer heartbeats later). Previously-emitted ids live in state._feedEmitted
    so a disappearance can be detected on the next compute.
+
+   ITEM KINDS (additive — the ENVELOPE shape above is frozen; only the set of
+   `kind` values grows, which the iOS Shortcut tolerates because it matches
+   reminders by the id/URL, not by kind): offer-expires, deposit-deadline,
+   dd-initiate, dd-window-end, debit-deadline, withdrawal, commitment-end,
+   inflow, outflow, and (step 3) `requirement-deadline` — one per USER-added
+   requirement row (source:'user') with a computable deadline on a committed
+   offer, id `yv-offer-<offerId>-req-<rowId>` off the row's STABLE id. Derived
+   requirement rows (source:'derived') deliberately emit NOTHING: they mirror
+   the legacy funding/DD/debit fields the deposit-deadline / dd-initiate /
+   debit-deadline items already cover, so emitting from them too would
+   double-book. Done rows emit nothing (obligation met).
 
    NOTE: this function MUTATES state (manifestVersion, _feedEmitted,
    _feedRemoved) — call it only on the push/persist path (Sync.push /
@@ -6327,6 +6520,48 @@ function renderDdMethodPanel(o) {
   </div>`;
 }
 
+// {done, total} requirement counts for an offer — drives the card checklist
+// header and the offers-table met/total chip.
+function requirementChecklistCounts(o) {
+  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  const total = reqs.length;
+  const done = reqs.filter(r => r && r.done).length;
+  return { done, total };
+}
+
+// Compact requirement checklist on the offer card (step 3). Each row shows a
+// checkbox, its title, and the computed deadline date; tapping toggles `done`
+// (strikethrough + check, sorts below pending). Pending rows first (soonest
+// date first, undated last), then done rows. Renders nothing when the offer has
+// no requirement rows.
+function renderRequirementChecklist(o) {
+  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  if (reqs.length === 0) return '';
+  const rows = reqs.map(r => ({ row: r, dlISO: requirementDeadlineISO(o, r) }));
+  rows.sort((a, b) => {
+    // Pending above done.
+    if (!!a.row.done !== !!b.row.done) return a.row.done ? 1 : -1;
+    // Within a group: dated soonest-first, undated last, then stable by label.
+    if (a.dlISO && b.dlISO) return a.dlISO.localeCompare(b.dlISO);
+    if (a.dlISO) return -1;
+    if (b.dlISO) return 1;
+    return requirementDisplayLabel(a.row).localeCompare(requirementDisplayLabel(b.row));
+  });
+  const { done, total } = requirementChecklistCounts(o);
+  const checkSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const items = rows.map(({ row, dlISO }) => `
+    <div class="offer-req-item ${row.done ? 'done' : ''}" data-action="toggle-req-done" data-id="${o.id}" data-req-id="${escapeAttr(row.id)}" role="button" tabindex="0" aria-pressed="${row.done ? 'true' : 'false'}" title="${row.done ? 'Mark not done' : 'Mark done'}">
+      <span class="offer-req-check">${row.done ? checkSvg : ''}</span>
+      <span class="offer-req-label">${escapeHtml(requirementDisplayLabel(row))}</span>
+      <span class="offer-req-date">${dlISO ? formatDateMedium(dlISO) : ''}</span>
+    </div>`).join('');
+  return `
+    <div class="offer-req-checklist">
+      <div class="offer-req-title">Requirements <span class="offer-req-count">${done}/${total}</span></div>
+      ${items}
+    </div>`;
+}
+
 function renderOfferCard(o) {
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
@@ -6404,6 +6639,7 @@ function renderOfferCard(o) {
         </div>
       ` : ''}
       ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? renderDdMethodPanel(o) : ''}
+      ${renderRequirementChecklist(o)}
       <div class="offer-chips">
         <span class="chip chip-offer-type-${(o.offerType && o.offerType !== 'other') ? o.offerType : 'new-funds-held'}" title="${
           o.offerType === 'direct-deposit' ? 'Direct deposit — no hold; money round-trips through the account' :
@@ -6689,7 +6925,7 @@ function renderOffersTable(offers) {
                 <td>${formatDateShort(ls) || '—'}</td>
                 <td>${formatDateShort(we) || '—'}</td>
                 <td class="num">${ar != null ? formatPercent(ar) : '—'}</td>
-                <td><span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || STATUS_LABELS[o.status]}</span>${o.accountStatus === 'closed' ? ' <span class="chip chip-muted">Closed</span>' : ''}</td>
+                <td><span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || STATUS_LABELS[o.status]}</span>${o.accountStatus === 'closed' ? ' <span class="chip chip-muted">Closed</span>' : ''}${(() => { const c = requirementChecklistCounts(o); return c.total > 0 ? ` <span class="chip ${c.done >= c.total ? 'chip-success' : 'chip-muted'}" title="Requirements met">${c.done}/${c.total} reqs</span>` : ''; })()}</td>
                 <td style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(o.entityUsed || '—')}</td>
                 <td>
                   <div class="row-action-buttons">
@@ -7834,8 +8070,17 @@ function showOfferModal(offerId = null) {
   // Back-compat defaults for older offers loaded from storage.
   if (!o.offerType || o.offerType === 'other') o.offerType = 'new-funds-held';
   if (!Array.isArray(o.directDeposits)) o.directDeposits = [];
-  if (!o.ddRequirement) o.ddRequirement = { mode: 'count', count: o.directDeposits.length || 1, freqEvery: 'month', freqPeriods: 3 };
   if (!o.debitRequirement) o.debitRequirement = { required: false, count: null, withinDays: null, byDate: '', byDateLegacy: '' };
+  // DD-requirement RENDER default (step-3 fix #2): do NOT write a default
+  // ddRequirement onto the live offer object here. The old
+  // `if (!o.ddRequirement) o.ddRequirement = {…count:1…}` mutated the actual
+  // state offer on open, so opening + saving a new-funds-held offer that never
+  // had a DD requirement grew a phantom derived req-ddreq row. Keep a purely-
+  // local view for rendering the (hidden-for-non-DD) requirement controls; the
+  // real ddRequirement is only ever materialized by readOfferForm when the user
+  // saves a DD-family offer (and deriveRequirementsFromLegacy now gates req-ddreq
+  // on the DD-family offerType, so a stray default can't produce a row anyway).
+  const ddReqView = o.ddRequirement || { mode: 'count', count: o.directDeposits.length || 1, freqEvery: 'month', freqPeriods: 3 };
   const modal = document.getElementById('modal-root');
   modal.innerHTML = `
     <div class="modal-card">
@@ -7910,28 +8155,28 @@ function showOfferModal(offerId = null) {
           <div class="field dd-section" style="grid-column: 1 / -1;${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? '' : 'display:none;'}">
             <label>Direct deposit requirement *</label>
             <div class="radio-group" style="margin-bottom:8px;">
-              <input type="radio" id="ddreq-count" name="ddReqMode" value="count" ${o.ddRequirement.mode !== 'frequency' ? 'checked' : ''} />
+              <input type="radio" id="ddreq-count" name="ddReqMode" value="count" ${ddReqView.mode !== 'frequency' ? 'checked' : ''} />
               <label for="ddreq-count">Minimum total #</label>
-              <input type="radio" id="ddreq-freq" name="ddReqMode" value="frequency" ${o.ddRequirement.mode === 'frequency' ? 'checked' : ''} />
+              <input type="radio" id="ddreq-freq" name="ddReqMode" value="frequency" ${ddReqView.mode === 'frequency' ? 'checked' : ''} />
               <label for="ddreq-freq">Required frequency</label>
             </div>
-            <div id="ddreq-count-fields" style="${o.ddRequirement.mode !== 'frequency' ? '' : 'display:none;'}margin-bottom:8px;">
+            <div id="ddreq-count-fields" style="${ddReqView.mode !== 'frequency' ? '' : 'display:none;'}margin-bottom:8px;">
               <div class="input-group with-suffix" style="max-width:200px;">
-                <input id="ddreq-count-n" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.count || 1}" />
+                <input id="ddreq-count-n" class="input" type="number" min="1" max="24" step="1" value="${ddReqView.count || 1}" />
                 <span class="input-suffix">deposits</span>
               </div>
             </div>
-            <div id="ddreq-freq-fields" style="${o.ddRequirement.mode === 'frequency' ? '' : 'display:none;'}margin-bottom:8px;display:${o.ddRequirement.mode === 'frequency' ? 'flex' : 'none'};gap:8px;flex-wrap:wrap;align-items:center;">
+            <div id="ddreq-freq-fields" style="${ddReqView.mode === 'frequency' ? '' : 'display:none;'}margin-bottom:8px;display:${ddReqView.mode === 'frequency' ? 'flex' : 'none'};gap:8px;flex-wrap:wrap;align-items:center;">
               <span style="font-size:13px;color:var(--text-secondary);">Once per</span>
               <select id="ddreq-freq-every" class="select" style="max-width:130px;">
-                <option value="week" ${o.ddRequirement.freqEvery === 'week' ? 'selected' : ''}>week</option>
-                <option value="2weeks" ${o.ddRequirement.freqEvery === '2weeks' ? 'selected' : ''}>2 weeks</option>
-                <option value="month" ${(o.ddRequirement.freqEvery || 'month') === 'month' ? 'selected' : ''}>month</option>
+                <option value="week" ${ddReqView.freqEvery === 'week' ? 'selected' : ''}>week</option>
+                <option value="2weeks" ${ddReqView.freqEvery === '2weeks' ? 'selected' : ''}>2 weeks</option>
+                <option value="month" ${(ddReqView.freqEvery || 'month') === 'month' ? 'selected' : ''}>month</option>
               </select>
               <span style="font-size:13px;color:var(--text-secondary);">for</span>
               <div class="input-group with-suffix" style="max-width:160px;">
-                <input id="ddreq-freq-periods" class="input" type="number" min="1" max="24" step="1" value="${o.ddRequirement.freqPeriods || 3}" style="padding-right:72px;" />
-                <span class="input-suffix" id="ddreq-freq-unit">${o.ddRequirement.freqEvery === 'week' ? 'weeks' : o.ddRequirement.freqEvery === '2weeks' ? 'cycles' : 'months'}</span>
+                <input id="ddreq-freq-periods" class="input" type="number" min="1" max="24" step="1" value="${ddReqView.freqPeriods || 3}" style="padding-right:72px;" />
+                <span class="input-suffix" id="ddreq-freq-unit">${ddReqView.freqEvery === 'week' ? 'weeks' : ddReqView.freqEvery === '2weeks' ? 'cycles' : 'months'}</span>
               </div>
               <button type="button" class="btn btn-secondary btn-sm" id="ddreq-generate">Generate dates</button>
             </div>
@@ -8069,6 +8314,17 @@ function showOfferModal(offerId = null) {
               <input type="checkbox" name="includeInScenario" ${o.includeInScenario ? 'checked' : ''} />
               <span>Include in projection scenario</span>
             </label>
+          </div>
+          <div class="field req-section" style="grid-column: 1 / -1;">
+            <label>Requirements</label>
+            <div id="req-rows">${renderRequirementRows(o)}</div>
+            <div class="req-add-row">
+              <select id="req-add-type" class="select" aria-label="New requirement type">
+                ${REQUIREMENT_TYPES.map(t => `<option value="${t}">${escapeHtml(REQUIREMENT_TYPE_META[t] ? REQUIREMENT_TYPE_META[t].label : t)}</option>`).join('')}
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" data-action="add-req-row">+ Add requirement</button>
+            </div>
+            <span class="field-hint">Every obligation for this bonus. <strong>Auto</strong> rows mirror the fields above (funding, DDs, debit) — edit their amount/count/deadline here or above, either updates both. Add rows for anything else (e-statements, promo code, extra spend). The date beside each row is computed from the sign-up date + its deadline.</span>
           </div>
         </div>
 
@@ -8214,6 +8470,26 @@ function showOfferModal(offerId = null) {
           entries.innerHTML = snap.map((dd, i) => renderDdRow(dd, i)).join('');
         }
       }
+      // Requirements section — forward write-through on a select change
+      // (type/frequency); text/number selects fire change on commit.
+      if (ev.target.classList && ev.target.classList.contains('req-input')) {
+        handleRequirementInput(ev.target);
+      }
+      // Reverse write-through: a legacy field that a derived row mirrors
+      // changed → rebuild the section so its auto rows reflect the new value
+      // (design §B, both directions). On `change` (commit), not per keystroke,
+      // to avoid feedback with the forward path's dispatched input events.
+      // Also covers structural changes (offer type, DD-req mode, debit Yes/No)
+      // that add/remove derived rows.
+      if (ev.target.id === 'f-funding' || ev.target.id === 'f-days-deposit' ||
+          ev.target.id === 'f-days-remain' || ev.target.id === 'f-debit-count' ||
+          ev.target.id === 'f-debit-within' || ev.target.id === 'ddreq-count-n' ||
+          ev.target.id === 'ddreq-freq-periods' || ev.target.id === 'ddreq-freq-every' ||
+          ev.target.name === 'offerType' || ev.target.name === 'ddReqMode' ||
+          ev.target.name === 'debitRequired' ||
+          (ev.target.dataset && (ev.target.dataset.ddField === 'amount' || ev.target.dataset.ddField === 'plannedDate'))) {
+        refreshRequirementsSection();
+      }
     });
     // Generate-dates button (delegated click).
     form.addEventListener('click', (ev) => {
@@ -8277,6 +8553,17 @@ function showOfferModal(offerId = null) {
       if (ev.target && (ev.target.id === 'f-signup' || ev.target.id === 'f-debit-within')) {
         refreshDebitDeadline();
       }
+      // Requirements: forward write-through per keystroke for text/number/money
+      // inputs inside the section (updates the row's legacy target + live date
+      // in place, preserving caret). Selects are handled on `change` above.
+      if (ev.target && ev.target.classList && ev.target.classList.contains('req-input') && ev.target.tagName !== 'SELECT') {
+        handleRequirementInput(ev.target);
+      }
+      // Sign-up date changed → re-date every requirement row (derived deadlines
+      // are stored as day-counts, so only the computed absolute date moves).
+      if (ev.target && ev.target.id === 'f-signup') {
+        refreshRequirementDates();
+      }
     });
     // Run the section sync once at open. This shows/hides the DD section
     // for the current type AND auto-populates DD rows if the section is
@@ -8312,6 +8599,304 @@ function renderDdRow(dd, i) {
       ${info ? `<div style="grid-column:1 / -1;font-size:11px;color:var(--text-tertiary);margin-top:-2px;">${info}</div>` : ''}
     </div>
   `;
+}
+
+/* ============================================================
+   REQUIREMENTS SECTION (step 3): offer-modal editor
+   ============================================================
+   Renders every requirement row (derived + user) with a live computed
+   calendar deadline. Derived rows REFLECT the legacy inputs elsewhere in the
+   form: editing a derived row's amount/count/deadline WRITES THROUGH to the
+   canonical legacy input (design §B), so readOfferForm's normal flow captures
+   it and syncRequirementsWithLegacy re-derives consistently. done/done_date/
+   notes live on the row (toggled from the card, not here). User rows have no
+   legacy equivalent — they ride in a hidden JSON field (#f-user-reqs) so new
+   ones survive to readOfferForm, which merges them back into requirements[]. */
+
+// The legacy form input a derived row's field writes through to (design §B).
+// Returns { sel, kind } where kind is 'money' | 'number' | null (null → the
+// field is not writable-through here, e.g. a per-DD deadline that is derived
+// from the DD's own planned date and edited in the DD list, not here).
+function requirementWriteThroughTarget(row, field) {
+  if (!row || row.source !== 'derived') return null;
+  if (row.id === 'req-funding') {
+    if (field === 'amount') return { sel: '#f-funding', kind: 'money' };
+    if (field === 'deadline_days') return { sel: '#f-days-deposit', kind: 'number' };
+  } else if (row.id === 'req-debit') {
+    if (field === 'count') return { sel: '#f-debit-count', kind: 'number' };
+    if (field === 'deadline_days') return { sel: '#f-debit-within', kind: 'number' };
+  } else if (row.id === 'req-ddreq') {
+    if (field === 'count') return { sel: '#ddreq-count-n', kind: 'number' };
+  } else if (row.id && row.id.indexOf('req-dd-') === 0) {
+    if (field === 'amount') return { sel: `.dd-row[data-dd-id="${row.id.slice('req-dd-'.length)}"] [data-dd-field="amount"]`, kind: 'money' };
+    // per-DD deadline is derived from the DD's planned date → not editable here.
+  }
+  return null;
+}
+
+// True when a derived row's field is editable in this section (has a write-
+// through target). User-row fields are always editable for their type.
+function requirementFieldEditable(row, field) {
+  if (!row) return false;
+  if (row.source === 'user') return true;
+  return requirementWriteThroughTarget(row, field) != null;
+}
+
+// One requirement row in the modal editor. `i` indexes user rows within the
+// hidden JSON payload (derived rows pass i = -1). Renders type, optional custom
+// label, amount and/or count (only the inputs the type uses), deadline_days,
+// frequency, a live computed date, and (user rows only) a remove button.
+function renderRequirementRow(row, offer, i) {
+  const meta = REQUIREMENT_TYPE_META[row.type] || REQUIREMENT_TYPE_META.custom;
+  const isDerived = row.source === 'derived';
+  const idAttr = escapeAttr(row.id || '');
+  const dataAttrs = `data-req-id="${idAttr}" data-req-source="${row.source}" data-req-index="${i}"`;
+  // Amount/count exposure: derived rows show whatever numeric they carry
+  // (so a per-DD amount shows even though its meta says money); user rows use
+  // their type meta.
+  const showMoney = isDerived ? (row.amount != null || meta.money) : meta.money;
+  const showCount = isDerived ? (row.count != null || meta.count) : meta.count;
+  const dlISO = requirementDeadlineISO(offer, row);
+  const typeCell = isDerived
+    ? `<span class="req-type-label">${escapeHtml(meta.label)}<span class="req-auto-tag" title="Mirrors a field above — edit here or there.">auto</span></span>`
+    : `<select class="select req-input" ${dataAttrs} data-req-field="type" aria-label="Requirement type">
+         ${REQUIREMENT_TYPES.map(t => `<option value="${t}" ${row.type === t ? 'selected' : ''}>${escapeHtml(REQUIREMENT_TYPE_META[t] ? REQUIREMENT_TYPE_META[t].label : t)}</option>`).join('')}
+       </select>`;
+  const labelCell = (!isDerived && row.type === 'custom')
+    ? `<input type="text" class="input req-input" ${dataAttrs} data-req-field="label" placeholder="Label" value="${escapeAttr(row.label || '')}" aria-label="Custom requirement label" />`
+    : '';
+  const amountCell = showMoney
+    ? `<div class="input-group"><span class="input-prefix">$</span>
+         <input type="text" inputmode="decimal" data-money class="input req-input" ${dataAttrs} data-req-field="amount" value="${row.amount != null ? formatMoneyInput(row.amount) : ''}" aria-label="Amount" />
+       </div>`
+    : '';
+  const countCell = showCount
+    ? `<div class="input-group with-suffix">
+         <input type="number" min="0" step="1" class="input req-input" ${dataAttrs} data-req-field="count" value="${row.count != null ? escapeAttr(row.count) : ''}" aria-label="Count" />
+         <span class="input-suffix">×</span>
+       </div>`
+    : '';
+  // Per-DD deadline is DD-derived (read-only here); all others are editable.
+  const deadlineEditable = requirementFieldEditable(row, 'deadline_days');
+  const deadlineCell = deadlineEditable
+    ? `<div class="input-group with-suffix">
+         <input type="number" min="0" step="1" class="input req-input" ${dataAttrs} data-req-field="deadline_days" value="${row.deadline_days != null ? escapeAttr(row.deadline_days) : ''}" aria-label="Deadline (days after sign up)" />
+         <span class="input-suffix">d</span>
+       </div>`
+    : `<span class="req-deadline-ro" title="Derived from this deposit's planned date">${row.deadline_days != null ? `+${row.deadline_days}d` : '—'}</span>`;
+  const freqCell = (showCount || (!isDerived && row.type === 'custom'))
+    ? `<select class="select req-input" ${dataAttrs} data-req-field="frequency" aria-label="Frequency">
+         ${REQUIREMENT_FREQUENCIES.map(f => `<option value="${f}" ${row.frequency === f ? 'selected' : ''}>${REQUIREMENT_FREQ_LABELS[f]}</option>`).join('')}
+       </select>`
+    : '';
+  const removeCell = isDerived
+    ? ''
+    : `<button type="button" class="btn-icon" data-action="remove-req-row" data-req-index="${i}" aria-label="Remove requirement" title="Remove">
+         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+       </button>`;
+  return `
+    <div class="req-row ${isDerived ? 'req-derived' : 'req-user'}" ${dataAttrs}>
+      <div class="req-row-main">
+        <div class="req-cell req-cell-type">${typeCell}</div>
+        ${labelCell ? `<div class="req-cell req-cell-label">${labelCell}</div>` : ''}
+        ${amountCell ? `<div class="req-cell req-cell-amount">${amountCell}</div>` : ''}
+        ${countCell ? `<div class="req-cell req-cell-count">${countCell}</div>` : ''}
+        <div class="req-cell req-cell-deadline">${deadlineCell}</div>
+        ${freqCell ? `<div class="req-cell req-cell-freq">${freqCell}</div>` : ''}
+        <div class="req-cell req-cell-remove">${removeCell}</div>
+      </div>
+      <div class="req-row-date" data-req-date-for="${idAttr}">${dlISO ? `Due <strong>${formatDateMedium(dlISO)}</strong>` : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`}</div>
+    </div>`;
+}
+
+// Render all requirement rows for the modal + the hidden user-rows JSON field.
+// Order: derived rows in derive() order (already how requirements[] is stored),
+// then user rows. User rows are indexed for the hidden-payload/remove wiring.
+function renderRequirementRows(offer) {
+  const reqs = Array.isArray(offer.requirements) ? offer.requirements : [];
+  const derived = reqs.filter(r => r && r.source === 'derived');
+  const user = reqs.filter(r => r && r.source === 'user');
+  const rowsHtml = derived.map(r => renderRequirementRow(r, offer, -1)).join('')
+    + user.map((r, i) => renderRequirementRow(r, offer, i)).join('');
+  const empty = (derived.length + user.length) === 0
+    ? `<div class="req-empty">No requirements yet — the fields above populate these automatically, or add one below.</div>`
+    : '';
+  const hidden = `<input type="hidden" id="f-user-reqs" name="userReqs" value="${escapeAttr(JSON.stringify(user))}" />`;
+  return rowsHtml + empty + hidden;
+}
+
+// Parse the hidden user-rows JSON payload (#f-user-reqs). Never throws — a
+// corrupt/absent value yields []. Each row is normalized through
+// makeRequirementRow so downstream code sees a full row shape.
+function readUserReqsFromForm() {
+  const el = document.getElementById('f-user-reqs');
+  if (!el) return [];
+  let arr;
+  try { arr = JSON.parse(el.value || '[]'); } catch (e) { arr = []; }
+  if (!Array.isArray(arr)) return [];
+  return arr.map(r => makeRequirementRow(Object.assign({}, r, { source: 'user' })));
+}
+
+// Serialize user rows back into the hidden payload so they survive to
+// readOfferForm (which merges them into requirements[] before the derived sync).
+function writeUserReqsToForm(rows) {
+  const el = document.getElementById('f-user-reqs');
+  if (el) el.value = JSON.stringify(rows || []);
+}
+
+// Build a minimal offer object from the CURRENT form values (legacy fields +
+// user rows) and run syncRequirementsWithLegacy so the derived rows reflect the
+// live inputs. Used to re-render the requirements section after a change and to
+// recompute live deadline dates against the currently-typed sign-up date.
+function buildLiveRequirementsOffer() {
+  const form = document.getElementById('offer-form');
+  if (!form) return { requirements: [] };
+  const qv = (sel) => { const el = form.querySelector(sel); return el ? el.value : ''; };
+  const offerType = (form.querySelector('[name="offerType"]:checked') || {}).value || 'new-funds-held';
+  const debitRequired = (form.querySelector('[name="debitRequired"]:checked') || {}).value === 'yes';
+  const ddReqMode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value === 'frequency' ? 'frequency' : 'count';
+  const numOrNull = (v) => (v === '' || v == null) ? null : Number(v);
+  const offer = {
+    offerType,
+    plannedSignupDate: parseDateInput(qv('#f-signup')) || '',
+    requiredFundingAmount: parseMoneyInput(qv('#f-funding')),
+    daysAfterSignupAllowedBeforeDeposit: numOrNull(qv('#f-days-deposit')),
+    daysFundsMustRemain: offerType === 'direct-deposit' ? null : numOrNull(qv('#f-days-remain')),
+    directDeposits: readDdRowsFromForm(),
+    ddRequirement: {
+      mode: ddReqMode,
+      count: Math.max(1, Math.min(24, Number(qv('#ddreq-count-n')) || 1)),
+      freqEvery: qv('#ddreq-freq-every') || 'month',
+      freqPeriods: Math.max(1, Math.min(24, Number(qv('#ddreq-freq-periods')) || 3))
+    },
+    debitRequirement: {
+      required: debitRequired,
+      count: debitRequired ? (numOrNull(qv('#f-debit-count'))) : null,
+      withinDays: debitRequired ? numOrNull(qv('#f-debit-within')) : null,
+      byDate: '', byDateLegacy: ''
+    },
+    // Seed with the user rows so syncRequirementsWithLegacy preserves them
+    // (it only touches derived rows) and appends fresh derived rows around them.
+    requirements: readUserReqsFromForm()
+  };
+  syncRequirementsWithLegacy(offer);
+  return offer;
+}
+
+// Full re-render of the modal requirements section from the live form state.
+// Used after add/remove and after a legacy field changes (reverse write-
+// through). Forward per-keystroke edits inside the section update in place
+// instead (see the modal input handler) so focus/caret are preserved.
+function refreshRequirementsSection() {
+  const host = document.getElementById('req-rows');
+  if (!host) return;
+  const offer = buildLiveRequirementsOffer();
+  host.innerHTML = renderRequirementRows(offer);
+}
+
+// Recompute ONLY the live deadline-date lines in the section (no re-render), so
+// changing the sign-up date re-dates every row without disturbing focus.
+function refreshRequirementDates() {
+  const host = document.getElementById('req-rows');
+  if (!host) return;
+  const offer = buildLiveRequirementsOffer();
+  const byId = new Map((offer.requirements || []).map(r => [r.id, r]));
+  host.querySelectorAll('.req-row-date').forEach(node => {
+    const id = node.getAttribute('data-req-date-for');
+    const row = byId.get(id);
+    if (!row) return;
+    const dlISO = requirementDeadlineISO(offer, row);
+    node.innerHTML = dlISO
+      ? `Due <strong>${formatDateMedium(dlISO)}</strong>`
+      : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`;
+  });
+}
+
+// Forward write-through for an in-section edit (fired on input/change of a
+// .req-input). Derived rows mirror the new value into their canonical legacy
+// input (design §B) so readOfferForm captures it; user rows persist into the
+// hidden JSON payload. Either way the edited row's live date is recomputed in
+// place (no full re-render → caret/focus preserved). `el` is the changed input.
+function handleRequirementInput(el) {
+  if (!el || !el.dataset) return;
+  const id = el.dataset.reqId || '';
+  const field = el.dataset.reqField;
+  const source = el.dataset.reqSource;
+  if (!field) return;
+
+  if (source === 'derived') {
+    // Mirror to the legacy input. Money fields carry a comma-grouped display;
+    // parse to a plain-number string before writing so the legacy field (also
+    // data-money) reformats cleanly and readOfferForm parses it back.
+    const tgt = requirementWriteThroughTarget({ id, source: 'derived' }, field);
+    if (tgt) {
+      const legacy = document.querySelector(tgt.sel);
+      if (legacy) {
+        if (tgt.kind === 'money') {
+          const n = parseMoneyInput(el.value);
+          legacy.value = n == null ? '' : formatMoneyInput(n);
+        } else {
+          legacy.value = el.value;
+        }
+        // Let dependent hints (funding-suggest, debit-deadline) update too.
+        legacy.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  } else if (source === 'user') {
+    // Persist the edit into the hidden user-rows payload by index.
+    const idx = Number(el.dataset.reqIndex);
+    const rows = readUserReqsFromForm();
+    if (Number.isFinite(idx) && idx >= 0 && idx < rows.length) {
+      const row = rows[idx];
+      if (field === 'amount') row.amount = parseMoneyInput(el.value);
+      else if (field === 'count') row.count = (el.value === '' ? null : Number(el.value));
+      else if (field === 'deadline_days') row.deadline_days = (el.value === '' ? null : Number(el.value));
+      else if (field === 'label') row.label = el.value;
+      else if (field === 'frequency') row.frequency = el.value;
+      else if (field === 'type') {
+        row.type = el.value;
+        // Type change alters which inputs a user row shows → full re-render.
+        writeUserReqsToForm(rows);
+        refreshRequirementsSection();
+        return;
+      }
+      writeUserReqsToForm(rows);
+    }
+  }
+  // Recompute just this row's live date line.
+  const dateNode = el.closest('.req-row') && el.closest('.req-row').querySelector('.req-row-date');
+  if (dateNode) {
+    const offer = buildLiveRequirementsOffer();
+    const row = (offer.requirements || []).find(r => r.id === id) ||
+      (source === 'user' ? (offer.requirements || []).filter(r => r.source === 'user')[Number(el.dataset.reqIndex)] : null);
+    if (row) {
+      const dlISO = requirementDeadlineISO(offer, row);
+      dateNode.innerHTML = dlISO
+        ? `Due <strong>${formatDateMedium(dlISO)}</strong>`
+        : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`;
+    }
+  }
+}
+
+// Add a new user requirement row of the chosen type (from #req-add-type).
+function addRequirementRow() {
+  const sel = document.getElementById('req-add-type');
+  const type = (sel && sel.value) || 'custom';
+  const rows = readUserReqsFromForm();
+  rows.push(makeRequirementRow({ id: uid('req'), type, source: 'user' }));
+  writeUserReqsToForm(rows);
+  refreshRequirementsSection();
+}
+
+// Remove the user requirement row at the given hidden-payload index.
+function removeRequirementRow(idx) {
+  const i = Number(idx);
+  const rows = readUserReqsFromForm();
+  if (Number.isFinite(i) && i >= 0 && i < rows.length) {
+    rows.splice(i, 1);
+    writeUserReqsToForm(rows);
+    refreshRequirementsSection();
+  }
 }
 
 // Build DD rows from the requirement controls + planned signup date.
@@ -8489,8 +9074,20 @@ function readOfferForm(idArg, isEdit) {
     last_edited: new Date().toISOString()
   };
   normalizeOfferStatus(offer); // sync the legacy shadow status
-  // Schema v2: refresh the derived requirement rows from the freshly-read legacy
-  // fields, preserving done/done_date/notes on surviving rows and any user rows.
+  // Schema v2 (step 3): assemble requirements[] before the derived sync.
+  //   • User rows come from the modal's hidden #f-user-reqs payload — that's
+  //     the authoritative latest state of every user-added/edited row (their
+  //     done/done_date carry through from when the modal serialized them).
+  //   • Prior DERIVED rows are kept as the sync's starting point so their
+  //     done/done_date/notes survive re-derivation (syncRequirementsWithLegacy
+  //     preserves those on rows it refreshes in place); the spread-in prior
+  //     supplied them, we just drop the prior USER rows in favor of the form's.
+  const priorDerived = (prior && Array.isArray(prior.requirements))
+    ? prior.requirements.filter(r => r && r.source === 'derived')
+    : [];
+  offer.requirements = priorDerived.concat(readUserReqsFromForm());
+  // Refresh the derived rows from the freshly-read legacy fields (preserving
+  // done/done_date/notes on survivors); user rows are left untouched.
   syncRequirementsWithLegacy(offer);
   return offer;
 }
@@ -8963,6 +9560,12 @@ function bindGlobalEvents() {
         e.preventDefault();
         openActionTarget(row.dataset.targetKind, row.dataset.targetId);
       }
+      // Toggle a keyboard-focused requirement checklist item (role=button).
+      const reqItem = e.target && e.target.closest && e.target.closest('.offer-req-item');
+      if (reqItem) {
+        e.preventDefault();
+        toggleRequirementDone(reqItem.dataset.id, reqItem.dataset.reqId);
+      }
     }
   });
   // Close modal on backdrop click (suppressed for offer modal to prevent losing in-progress data)
@@ -9026,6 +9629,9 @@ function onClick(e) {
     case 'toggle-advanced-form': toggleAdvancedForm(target); break;
     case 'add-dd-row': addDdRow(); break;
     case 'remove-dd-row': removeDdRow(target.closest('.dd-row')); break;
+    case 'add-req-row': addRequirementRow(); break;
+    case 'remove-req-row': removeRequirementRow(target.dataset.reqIndex); break;
+    case 'toggle-req-done': toggleRequirementDone(id, target.dataset.reqId); break;
     case 'close-modal': closeModal(); break;
 
     case 'add-commitment': showCommitmentModal(); break;
@@ -9272,6 +9878,23 @@ function deleteOffer(id) {
     s.commitments = s.commitments.filter(c => c.sourceBonusOfferId !== id);
   });
   toast('Offer deleted');
+}
+
+// Toggle a requirement row's completion from the card checklist (step 3).
+// Flips `done`, stamping `done_date` = today (ISO date) when completing and
+// clearing it when un-completing. This is a state edit, so it rides the normal
+// App.update → save (debounced push) path — no special feed handling needed;
+// the feed rebuild on push drops done user rows automatically.
+function toggleRequirementDone(offerId, rowId) {
+  if (!offerId || !rowId) return;
+  App.update(s => {
+    const o = (s.offers || []).find(x => x.id === offerId);
+    if (!o || !Array.isArray(o.requirements)) return;
+    const row = o.requirements.find(r => r && r.id === rowId);
+    if (!row) return;
+    row.done = !row.done;
+    row.done_date = row.done ? isoDate(TODAY) : null;
+  });
 }
 
 function duplicateOffer(id) {
