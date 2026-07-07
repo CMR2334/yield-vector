@@ -2398,7 +2398,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.06e';
+const APP_VERSION = '2026.07.07';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -2587,6 +2587,19 @@ function normalizeOfferStatus(o) {
   }
   if (!o.accountStatus) o.accountStatus = defaultAccountForSub(o.subStatus);
   o.status = deriveLegacyStatus(o.accountStatus, o.subStatus);
+  return o;
+}
+
+// Mint a stable per-DD `id` on any direct-deposit row loaded from storage
+// that predates the field, so reminder-feed items keyed
+// `yv-<offerId>-dd-<ddId>` bind to the DD identity, never its array index
+// (step-6 amendment 5). Idempotent: rows that already have an id keep it.
+// Runs on load; new rows get ids at creation (readDdRowsFromForm/addDdRow).
+function migrateDdIds(o) {
+  if (!o || !Array.isArray(o.directDeposits)) return o;
+  for (const dd of o.directDeposits) {
+    if (dd && !dd.id) dd.id = uid('dd');
+  }
   return o;
 }
 
@@ -3094,7 +3107,7 @@ const Sync = {
       // remote reflects the upload. The feed is what an iOS Shortcut will
       // read to build merge-style Reminders entries.
       App.state._lastModified = Date.now();
-      try { App.state._feed = computeReminderFeed(App.state); } catch {}
+      App.state._feed = computeFeedSafely(App.state);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
 
       if (!force) {
@@ -3199,7 +3212,7 @@ const Sync = {
   async createGist(token) {
     // Convenience: create a private Gist seeded with current state + feed.
     App.state._lastModified = Date.now();
-    try { App.state._feed = computeReminderFeed(App.state); } catch {}
+    App.state._feed = computeFeedSafely(App.state);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
     const body = JSON.stringify({
       description: 'Yield Vector sync',
@@ -4144,8 +4157,12 @@ const App = {
         this.state = seedSampleData(this.state);
         this.save({ system: true });
       }
-      // Migrate offers to the two-field status model + sync legacy status.
-      (this.state.offers || []).forEach(normalizeOfferStatus);
+      // Migrate offers to the two-field status model + sync legacy status,
+      // and mint stable per-DD ids for feed item keys (never array index).
+      (this.state.offers || []).forEach(o => { normalizeOfferStatus(o); migrateDdIds(o); });
+      // Seed the manifestVersion high-water mark from the loaded state so the
+      // feed version never regresses below what a prior session already shipped.
+      _manifestHwm = Number(this.state._manifestVersion) || 0;
       this.rollProjectionStartIfStale();
       setupPwa();
       if (Sync.isConfigured()) Sync.setStatus('synced'); // optimistic until startup pull replies
@@ -5201,65 +5218,222 @@ function statCard(label, value, meta = '', variant = '', action = null) {
   `;
 }
 
-/* Reminder feed: a stable, machine-readable snapshot of every actionable
-   date in the planner. Emitted into App.state._feed on every save so the
-   same JSON the cloud Sync writes to GitHub Gist also carries the feed.
-   An iOS Shortcut (Personal Automation, daily) reads the Gist, parses
-   `_feed.items[]`, and merges into Reminders.app — preserving any user-
-   added notes/alarms/completion via per-item stable `id`s.
+/* ============================================================
+   REMINDER / ACTION ITEM MODEL — ONE SHARED BUILDER
+   ============================================================
+   buildReminderItems(state) is the SINGLE source of every actionable
+   date in the planner. All three surfaces consume its output so they can
+   never diverge again (step-3 P1; step-6 feed-contract v2):
+     • computeReminderFeed     — schema-2 machine feed (Gist → iOS Shortcut
+                                 / ICS worker); emits ALL future items, no
+                                 horizon; adds tombstones + manifestVersion.
+     • computeUpcomingActions  — the overview "Upcoming actions" LIST; keeps
+                                 its 90-day horizon filter (by design).
+     • computeActionsRequired  — the at-a-glance headline COUNT; counts WORK
+                                 items only, from today forward (no UPPER
+                                 horizon, but past-due items drop).
+   RECONCILIATION INVARIANT (see computeActionsRequired / computeUpcomingActions):
+   count = the WORK items from this builder (isWork===true) due today or later
+   (no upper horizon); the LIST = every builder item within [today, today+90].
+   Both derive from the same items[] and both drop past-due dates, so the
+   headline count and the visible list agree by construction — a committed
+   offer past its funding date reads count 0 / list 0, never count 1 / list 0.
 
-   Each item has:
-     id       — stable across syncs (composed of offer/event id + kind)
-     title    — what shows up as the Reminder title
-     dueDate  — ISO 8601 with explicit time (09:00 local), so iOS parses
-                it as a date+time alarm rather than an all-day reminder
-     kind     — semantic tag the Shortcut can route on (list, list color)
-     notes    — short context for the Reminder body (planner-owned; the
-                Shortcut should NOT overwrite a user's added notes — see
-                SHORTCUT_SETUP.md for the merge logic)
+   Each built item carries BOTH the feed fields and the list fields:
+     id         — stable across syncs (offer/commitment/event id + kind);
+                  per-DD items use a persisted per-DD id, never array index.
+     kind       — feed semantic tag (offer-expires | deposit-deadline |
+                  dd-initiate | dd-window-end | debit-deadline | withdrawal |
+                  commitment-end | inflow | outflow).
+     dueDate    — ISO YYYY-MM-DD (feed stamps 09:00 local on emit).
+     title,notes— Reminder title/body (planner-owned; the consumer must not
+                  overwrite a user's added notes — see the build guide).
+     isWork     — true for to-dos the user must perform (deposit/DD/debit);
+                  false for informational dates (expiry, withdrawal, events).
+     listLabel/tag/name/sub/color/targetKind/targetId — LIST-row fields.
+
+   GATE RULES (step-6 [3], step-3 P1) — keyed on the MODERN status fields
+   (accountStatus / subStatus), NOT the legacy deriveLegacyStatus shadow
+   (the legacy 'approved→funded' mapping used to hide funding deadlines the
+   moment an account opened). offer-expires shows for prospects too (owner
+   wants prospect expiries visible); WORK items (deposit/dd/debit) emit only
+   when the offer is committed (subStatus approved or on-track) — met-waiting
+   is excluded because the work is already done. The legacy-status shadow is
+   NOT read here at all (it stays elsewhere per R38; deriveLegacyStatus is
+   untouched).
 */
-function computeReminderFeed(state) {
+// subStatus values for which the account is committed and requirement WORK
+// (deposit / DD initiations / debit purchases) is still outstanding.
+const WORK_ITEM_SUB_STATUSES = new Set(['approved', 'on-track']);
+
+// The "all DDs by" window-end date for a DD-family offer, where derivable.
+// Frequency mode ("N DDs, one every <period>") → signup + periods×period.
+// Count mode → the latest planned DD effective (posting) date. Returns an
+// ISO string or '' when it can't be derived. Distinct from any single
+// dd-initiate date (it's the deadline the whole set must be complete by).
+function ddWindowEndDate(offer) {
+  if (offer.offerType !== 'direct-deposit' && offer.offerType !== 'held-and-dd') return '';
+  const req = offer.ddRequirement;
+  if (req && req.mode === 'frequency') {
+    const start = parseDate(offer.plannedSignupDate);
+    const periods = Math.max(1, Number(req.freqPeriods) || 1);
+    if (!start) return '';
+    const d = new Date(start);
+    if (req.freqEvery === 'week') d.setDate(d.getDate() + periods * 7);
+    else if (req.freqEvery === '2weeks') d.setDate(d.getDate() + periods * 14); // UI's biweekly option
+    else if (req.freqEvery === 'day') d.setDate(d.getDate() + periods);
+    else d.setMonth(d.getMonth() + periods); // 'month' default
+    return isoDate(d);
+  }
+  // Count mode: the last DD must have POSTED — use the max effective date.
+  const effs = (offer.directDeposits || [])
+    .map(dd => directDepositEffectiveDate(dd))
+    .filter(Boolean)
+    .sort();
+  return effs.length ? effs[effs.length - 1] : '';
+}
+
+// THE ONE SHARED ITEM BUILDER. Pure (no state mutation) so the render-time
+// list/count callers can invoke it freely; the feed layers tombstones and
+// manifestVersion on top.
+function buildReminderItems(state) {
   const items = [];
-  const stamp = (d) => (d && /^\d{4}-\d{2}-\d{2}/.test(d)) ? (d.slice(0, 10) + 'T09:00:00') : null;
+  const nm = (o) => `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
 
   for (const o of state.offers || []) {
     if (!o.id) continue;
+    // Terminal offers (marked done or dropped, incl. closed-and-done which
+    // deriveLegacyStatus maps to 'completed') are out of every surface.
     if (o.status === 'completed' || o.status === 'skipped') continue;
-    if (!offerIsActiveForProjection(o)) continue;
-    const name = `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+    const name = nm(o);
+    const color = offerColorHex(o);
+    // Committed = account is being pursued and requirement WORK is still
+    // open (approved/on-track). Keyed on the MODERN field, never the legacy
+    // shadow. capitalLive additionally includes met-waiting: requirements
+    // are done but funds are still locked, so the withdrawal/release date is
+    // still worth surfacing (matches the pre-v2 legacy 'funded' behavior for
+    // that informational item without re-reading the legacy shadow).
+    const committed = WORK_ITEM_SUB_STATUSES.has(o.subStatus);
+    const capitalLive = WORKING_SUB_STATUSES.has(o.subStatus);
 
+    // offer-expires — informational and INTENTIONALLY NOT gated on
+    // offerIsActiveForProjection: the owner wants a prospect's expiry visible
+    // even when it's excluded from the capital scenario (his live BMO offer is
+    // prospect + includeInScenario:false and would otherwise vanish). Scenario
+    // inclusion governs capital modeling, not expiry visibility. Shows for any
+    // non-terminal offer (terminal already skipped above) that isn't confirmed/
+    // applied (once confirmed the deadline no longer matters). Work items and
+    // withdrawal below keep the stricter committed/capital-live gates.
     if (o.offerExpirationDate && !CONFIRMED_OFFER_STATUSES.has(o.status)) {
-      const due = stamp(o.offerExpirationDate);
-      if (due) items.push({
+      const due = o.offerExpirationDate.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
         id: `yv-offer-${o.id}-expires`,
+        ownerId: o.id, kind: 'offer-expires', dueDate: due, isWork: false,
         title: `${name} — offer expires`,
-        dueDate: due,
-        kind: 'offer-expires',
-        notes: `Bonus ${formatCompactCurrency(o.signupBonusAmount)}; required funding ${formatCompactCurrency(o.requiredFundingAmount)}.`
+        notes: `Bonus ${formatCompactCurrency(o.signupBonusAmount)}; required funding ${formatCompactCurrency(o.requiredFundingAmount)}.`,
+        listLabel: 'Offer expires', tag: 'warn', name,
+        sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`,
+        color, targetKind: 'offer', targetId: o.id
       });
     }
 
-    const dd = depositDeadline(o);
-    if (dd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
-      const due = stamp(dd);
-      if (due) items.push({
+    // deposit-deadline (WORK) — the lump-sum funding a committed offer still
+    // owes. Emits ONLY for committed offers (approved/on-track); prospects
+    // and met-waiting do not. This is the step-3 P1 gate fix: keyed on the
+    // modern field so it stays visible exactly when the account is open and
+    // funding is pending (the legacy status hid it as 'funded'). Restricted to
+    // the fund-a-lump types: only a STANDARD direct-deposit offer has NO lump
+    // sum — its money movement IS the DDs, already covered by dd-initiate +
+    // dd-window-end — so a "fund $X" item there is spurious. Everything else
+    // (new-funds-held, held-and-dd, and legacy offers whose offerType is
+    // absent/'other' — which the app defaults to new-funds-held) funds a lump,
+    // so gate on "not standard direct-deposit" rather than an allow-list that
+    // would wrongly drop the undefined-offerType legacy/seed case.
+    const fundsLump = o.offerType !== 'direct-deposit';
+    const dd = fundsLump ? depositDeadline(o) : null;
+    if (dd && committed) {
+      const due = dd.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
         id: `yv-offer-${o.id}-deposit`,
+        ownerId: o.id, kind: 'deposit-deadline', dueDate: due, isWork: true,
         title: `${name} — fund ${formatCompactCurrency(o.requiredFundingAmount)}`,
-        dueDate: due,
-        kind: 'deposit-deadline',
-        notes: `Deposit by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`
+        notes: `Deposit by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`,
+        listLabel: 'Deposit deadline', tag: 'danger', name,
+        sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`,
+        color, targetKind: 'offer', targetId: o.id
       });
     }
 
+    // dd-initiate (WORK) — one per planned DD with a future plannedDate.
+    // Uses the persisted per-DD id (dd.id) minted at DD-row creation so
+    // completion state stays glued to the right DD across insert/reorder.
+    if (committed && (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd')) {
+      for (const dep of (o.directDeposits || [])) {
+        if (!dep || !dep.id || !dep.plannedDate) continue;
+        const due = String(dep.plannedDate).slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+        items.push({
+          id: `yv-${o.id}-dd-${dep.id}`,
+          ownerId: o.id, kind: 'dd-initiate', dueDate: due, isWork: true,
+          title: `${name} — initiate DD ${formatCompactCurrency(dep.amount)}`,
+          notes: `Start this direct deposit so it posts in time for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`,
+          listLabel: 'Initiate DD', tag: 'danger', name,
+          sub: `Initiate ${formatCompactCurrency(dep.amount)}`,
+          color, targetKind: 'offer', targetId: o.id
+        });
+      }
+      // dd-window-end — informational: the date all required DDs must be
+      // done by (where derivable). Not a separate to-do beyond the DDs
+      // themselves, so isWork:false.
+      const winEnd = ddWindowEndDate(o);
+      if (winEnd) {
+        const due = winEnd.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+          id: `yv-offer-${o.id}-dd-window`,
+          ownerId: o.id, kind: 'dd-window-end', dueDate: due, isWork: false,
+          title: `${name} — all DDs complete by`,
+          notes: `All qualifying direct deposits must have posted by this date.`,
+          listLabel: 'All DDs by', tag: 'warn', name,
+          sub: 'All DDs complete', color, targetKind: 'offer', targetId: o.id
+        });
+      }
+    }
+
+    // debit-deadline (WORK) — qualifying debit-card purchases by a date.
+    // Counts as debitRequirement.count work items; the dated item carries
+    // the byDate when present.
+    if (committed && o.debitRequirement && o.debitRequirement.required && o.debitRequirement.byDate) {
+      const due = String(o.debitRequirement.byDate).slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+        const cnt = Number(o.debitRequirement.count) || 0;
+        items.push({
+          id: `yv-offer-${o.id}-debit`,
+          ownerId: o.id, kind: 'debit-deadline', dueDate: due, isWork: true,
+          workCount: cnt > 0 ? cnt : 1,
+          title: `${name} — ${cnt || 1} debit purchase${cnt === 1 ? '' : 's'}`,
+          notes: `Make the required qualifying debit-card purchase${cnt === 1 ? '' : 's'} by this date.`,
+          listLabel: 'Debit purchases', tag: 'danger', name,
+          sub: `${cnt || 1} debit txn${cnt === 1 ? '' : 's'}`,
+          color, targetKind: 'offer', targetId: o.id
+        });
+      }
+    }
+
+    // withdrawal / lock-release — informational: funds free up. Keyed on the
+    // modern field: any offer whose capital is still live (approved/on-track/
+    // met-waiting) and whose hold has a computable release date (prospects
+    // have no live account to release from).
     const we = withdrawalEligibleDate(o);
-    if (we && (o.status === 'funded' || o.status === 'applied')) {
-      const due = stamp(we);
-      if (due) items.push({
+    if (we && capitalLive) {
+      const due = we.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
         id: `yv-offer-${o.id}-withdraw`,
+        ownerId: o.id, kind: 'withdrawal', dueDate: due, isWork: false,
         title: `${name} — withdraw ${formatCompactCurrency(o.requiredFundingAmount)}`,
-        dueDate: due,
-        kind: 'withdrawal',
-        notes: `Funds released; bonus ${formatCompactCurrency(o.signupBonusAmount)}.`
+        notes: `Funds released; bonus ${formatCompactCurrency(o.signupBonusAmount)}.`,
+        listLabel: 'Withdrawal', tag: 'success', name,
+        sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`,
+        color, targetKind: 'offer', targetId: o.id
       });
     }
   }
@@ -5267,131 +5441,235 @@ function computeReminderFeed(state) {
   for (const c of state.commitments || []) {
     if (!c.id) continue;
     if (c.status === 'cancelled' || c.status === 'completed') continue;
-    if (c.endDate) {
-      const due = stamp(c.endDate);
-      if (due) items.push({
-        id: `yv-cmt-${c.id}-end`,
-        title: `${c.commitmentName} — release`,
-        dueDate: due,
-        kind: 'commitment-end',
-        notes: `${formatCurrency(c.amount)} (${c.type}).`
-      });
-    }
+    if (!c.endDate) continue;
+    const due = String(c.endDate).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+    items.push({
+      id: `yv-cmt-${c.id}-end`,
+      ownerId: c.id, kind: 'commitment-end', dueDate: due, isWork: false,
+      title: `${c.commitmentName} — release`,
+      notes: `${formatCurrency(c.amount)} (${c.type}).`,
+      listLabel: 'Commitment release', tag: 'success', name: c.commitmentName,
+      sub: formatCompactCurrency(c.amount), color: '', targetKind: 'commitment', targetId: c.id
+    });
   }
 
+  // inflow / outflow events — informational. Respect BOTH flags exactly as
+  // the list historically did (includeInProjection AND showInUpcoming), and
+  // surface only the NEXT instance of a recurring event (from today), so the
+  // feed and the list agree on which occurrence they mean. A generous
+  // look-ahead finds the next instance even for a distant recurrence; the
+  // list re-applies its own 90-day cutoff on the resulting date.
+  const FEED_EVENT_HORIZON = addDays(TODAY, 366 * 5);
   for (const e of state.events || []) {
     if (!e.id) continue;
     if (!e.includeInProjection) continue;
-    if (e.date) {
-      const due = stamp(e.date);
-      if (due) items.push({
-        id: `yv-evt-${e.id}`,
-        title: e.eventName,
-        dueDate: due,
-        kind: Number(e.amount) >= 0 ? 'inflow' : 'outflow',
-        notes: `${formatCurrency(e.amount)}${e.category ? ' (' + e.category + ')' : ''}.`
-      });
-    }
+    if (e.showInUpcoming === false) continue;
+    const next = nextEventInstance(e, TODAY, FEED_EVENT_HORIZON);
+    if (!next) continue;
+    const amt = Number(next.amount);
+    const isRecurring = e.recurrence && e.recurrence.kind && e.recurrence.kind !== 'none';
+    const label = e.eventName + (isRecurring ? ` (${e.recurrence.kind === 'custom' ? `every ${e.recurrence.everyDays || 7}d` : e.recurrence.kind})` : '');
+    items.push({
+      id: `yv-evt-${e.id}`,
+      ownerId: e.id, kind: amt >= 0 ? 'inflow' : 'outflow',
+      dueDate: isoDate(next.date), isWork: false,
+      title: e.eventName,
+      notes: `${formatCurrency(amt)}${e.category ? ' (' + e.category + ')' : ''}.`,
+      listLabel: amt >= 0 ? 'Inflow' : 'Outflow', tag: amt >= 0 ? 'success' : '',
+      name: label, sub: formatCurrency(amt), color: '', targetKind: 'event', targetId: e.id
+    });
   }
 
   items.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return items;
+}
+
+/* Reminder feed (contract v2): a stable, machine-readable snapshot emitted
+   into App.state._feed on every push so the same JSON the cloud Sync writes
+   to the Gist also carries the feed. A consumer (iOS Shortcut / ICS worker)
+   reads it and merges into its surface — preserving user-added notes/alarms/
+   completion via per-item stable `id`s.
+
+   Contract v2 (see docs/assessments/2026-07-05/step6-reminders-redesign.md):
+     schema:2, generatedAt, manifestVersion (monotonic; survives restore-
+     from-history via a max(prev+1, minutes-since-epoch) clock component),
+     feedStatus ('ok'|'stale'|'error'), lastGoodGeneratedAt,
+     items:[{id,kind,title,dueDate,notes}], removed:[{id,tombstonedAt,reason}].
+   `risk` is intentionally OMITTED (computed risk is a later phase; the guide
+   treats it as optional). Tombstones: when an offer/commitment is deleted or
+   a previously-emitted id permanently disappears, its id moves to removed[]
+   (retained a fixed 90 days for now; ack-based retention arrives with
+   consumer heartbeats later). Previously-emitted ids live in state._feedEmitted
+   so a disappearance can be detected on the next compute.
+
+   NOTE: this function MUTATES state (manifestVersion, _feedEmitted,
+   _feedRemoved) — call it only on the push/persist path (Sync.push /
+   createGist / safeSync), never from a render loop. The item universe comes
+   from the shared buildReminderItems() so the feed can never drift from the
+   in-app list/count. */
+const FEED_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // fixed 90-day retention
+// Session high-water mark for manifestVersion (see computeReminderFeed). Seeded
+// from the loaded state on init so it survives a reload; can only ever rise.
+let _manifestHwm = 0;
+function computeReminderFeed(state) {
+  const built = buildReminderItems(state);
+  const generatedAt = new Date().toISOString();
+  const stampTime = (d) => d.slice(0, 10) + 'T09:00:00';
+
+  // Monotonic manifestVersion. Three terms guarantee it only ever grows:
+  //   • minutes-since-epoch — advances across sessions/devices (a device
+  //     that hasn't pushed in a while still lands a higher number).
+  //   • prev + 1 — climbs on rapid same-minute pushes.
+  //   • session high-water mark + 1 — the RESTORE guard. restoreState()
+  //     swaps in an OLD snapshot whose _manifestVersion is small; without
+  //     this a same-minute restore could regress below a number already
+  //     shipped this session. The HWM (module-scoped, seeded from the loaded
+  //     state on init) can never be lowered by a restored snapshot, so a
+  //     restore-from-history still produces a strictly-higher version.
+  const minutesEpoch = Math.floor(Date.now() / 60000);
+  const prevVersion = Number(state._manifestVersion) || 0;
+  const manifestVersion = Math.max(prevVersion + 1, minutesEpoch, _manifestHwm + 1);
+  _manifestHwm = manifestVersion;
+  state._manifestVersion = manifestVersion;
+
+  // Tombstones. Diff the ids we emit now against the ids we emitted last
+  // time (state._feedEmitted). Any id that was live and is now gone gets a
+  // tombstone, reason inferred from whether its owning record still exists.
+  const liveIds = new Set(built.map(it => it.id));
+  const offerIds = new Set((state.offers || []).map(o => o.id));
+  const cmtIds = new Set((state.commitments || []).map(c => c.id));
+  const evtIds = new Set((state.events || []).map(e => e.id));
+  const prevEmitted = (state._feedEmitted && typeof state._feedEmitted === 'object') ? state._feedEmitted : {};
+
+  let removed = Array.isArray(state._feedRemoved) ? state._feedRemoved.slice() : [];
+  const alreadyTombstoned = new Set(removed.map(r => r.id));
+  // A tombstoned id that RE-appears (offer un-deleted / status flips back) is
+  // resurrected — drop its tombstone so the consumer stops deleting it.
+  removed = removed.filter(r => !liveIds.has(r.id));
+  const reasonFor = (id, ownerId) => {
+    // ownerId was recorded when the id was last emitted; if that record is
+    // gone the item was deleted, otherwise it was superseded by a status/
+    // date change that made the item no longer apply.
+    if (ownerId && !offerIds.has(ownerId) && !cmtIds.has(ownerId) && !evtIds.has(ownerId)) {
+      if (id.startsWith('yv-cmt-')) return 'commitment-deleted';
+      if (id.startsWith('yv-evt-')) return 'event-deleted';
+      return 'offer-deleted';
+    }
+    return 'superseded';
+  };
+  for (const id in prevEmitted) {
+    if (liveIds.has(id)) continue;
+    if (alreadyTombstoned.has(id)) continue;
+    removed.push({ id, tombstonedAt: generatedAt, reason: reasonFor(id, prevEmitted[id]) });
+  }
+  // Retain tombstones for a fixed 90-day TTL (ack-based retention is a later
+  // phase once consumer heartbeats exist).
+  const cutoff = Date.now() - FEED_TOMBSTONE_TTL_MS;
+  removed = removed.filter(r => {
+    const t = Date.parse(r.tombstonedAt);
+    return !Number.isFinite(t) || t >= cutoff;
+  });
+  state._feedRemoved = removed;
+
+  // Record what we emitted this round (id → ownerId) for the next diff.
+  const emittedNow = {};
+  for (const it of built) emittedNow[it.id] = it.ownerId || '';
+  state._feedEmitted = emittedNow;
+
+  const lastGoodGeneratedAt = generatedAt; // this compute succeeded
   return {
-    schema: 1,
-    generatedAt: new Date().toISOString(),
-    horizonDays: effectiveHorizonDays(state),
-    items
+    schema: 2,
+    generatedAt,
+    manifestVersion,
+    feedStatus: 'ok',
+    lastGoodGeneratedAt,
+    items: built.map(it => ({
+      id: it.id,
+      kind: it.kind,
+      title: it.title,
+      dueDate: stampTime(it.dueDate),
+      notes: it.notes
+    })),
+    removed
   };
 }
 
-// "Actions required": discrete to-dos you still have to perform to secure
-// SUB requirements across offers that aren't done/closed. Counts upcoming
-// direct deposits to initiate, lump-sum deposits not yet made, and
-// qualifying debit-card transactions. Met (Waiting)/Earned/closed offers
-// have no pending actions.
+// Compute the feed for the push/persist path, but never ship absent or
+// silently-stale on failure. On a throw: log via ErrCode.RENDER (no more
+// silent try{}catch{}), and REUSE the last good feed marked feedStatus
+// 'stale' so a consumer can tell the producer is degraded rather than act
+// on nothing. If there is no last-good feed to reuse, return a minimal
+// feedStatus:'error' envelope. Returns the feed to store in state._feed.
+function computeFeedSafely(state) {
+  try {
+    return computeReminderFeed(state);
+  } catch (e) {
+    logError(ErrCode.RENDER, e, 'reminder-feed');
+    const lastGood = state && state._feed;
+    if (lastGood && lastGood.items) {
+      return { ...lastGood, feedStatus: 'stale', generatedAt: new Date().toISOString() };
+    }
+    return {
+      schema: 2,
+      generatedAt: new Date().toISOString(),
+      manifestVersion: Number(state && state._manifestVersion) || 0,
+      feedStatus: 'error',
+      lastGoodGeneratedAt: (lastGood && lastGood.lastGoodGeneratedAt) || null,
+      items: [],
+      removed: (state && Array.isArray(state._feedRemoved)) ? state._feedRemoved : []
+    };
+  }
+}
+
+// "Actions required": the headline count of discrete to-dos still owed on
+// committed offers. Counts the WORK items from the shared builder (deposit,
+// each future DD initiation, debit purchases) that are still ACTIONABLE
+// (due today or later). No UPPER horizon — a work item past the list's 90-day
+// window still counts — but a work item whose deadline has already PASSED is
+// dropped, exactly as the list drops d < TODAY, so the headline count and the
+// visible list can never disagree (a committed offer past its funding date
+// must read count 0 / list 0, not count 1 / list 0). Prospects/applied
+// contribute ZERO (owner decision, step-6 [4]); met-waiting/earned/closed
+// offers have no outstanding work (excluded by the builder's committed gate).
 function computeActionsRequired(state) {
-  const ACTIONABLE_SUBS = new Set(['prospect', 'applied', 'approved', 'on-track']);
+  const todayISO = isoDate(TODAY);
   let n = 0;
-  for (const o of state.offers || []) {
-    if (!ACTIONABLE_SUBS.has(o.subStatus)) continue;
-    // Skip an account that was opened then Closed (done). Pre-account
-    // statuses (prospect/applied) default to Closed = "not opened yet" —
-    // their planned actions still count.
-    if (o.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(o.subStatus)) continue;
-    if (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') {
-      for (const dd of (o.directDeposits || [])) {
-        const d = parseDate(dd.plannedDate);
-        if (d && d >= TODAY) n++;          // a DD you still need to initiate
-      }
-    }
-    if (o.offerType === 'new-funds-held') {
-      const fund = parseDate(lockStartDate(o));
-      if (fund && fund >= TODAY) n++;       // the lump-sum deposit to make
-    }
-    if (o.debitRequirement && o.debitRequirement.required) {
-      n += Number(o.debitRequirement.count) || 0;  // qualifying debit purchases
-    }
+  for (const it of buildReminderItems(state)) {
+    if (!it.isWork) continue;
+    // Past-due work items drop from the count just as they drop from the list
+    // (string compare is safe on canonical YYYY-MM-DD).
+    if (it.dueDate < todayISO) continue;
+    // debit-deadline is one dated item standing in for N purchases.
+    n += Number(it.workCount) || 1;
   }
   return n;
 }
 
+// The overview "Upcoming actions" LIST: every builder item within the
+// 90-day horizon (the horizon filter is by design — the FEED keeps the full
+// future). Reconciles with computeActionsRequired by construction: same
+// items[], count = the isWork subset regardless of horizon, list = all
+// within horizon.
 function computeUpcomingActions(state, limit = 12) {
   const horizonEnd = addDays(TODAY, 90);
   const items = [];
-  for (const o of state.offers) {
-    if (o.status === 'completed' || o.status === 'skipped') continue;
-    const offerColor = offerColorHex(o);
-    if (o.offerExpirationDate && !CONFIRMED_OFFER_STATUSES.has(o.status)) {
-      const d = parseDate(o.offerExpirationDate);
-      if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Offer expires', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `${formatCompactCurrency(o.signupBonusAmount)} bonus`, tag: 'warn', color: offerColor, targetKind: 'offer', targetId: o.id });
-      }
-    }
-    const dd = depositDeadline(o);
-    if (dd) {
-      const d = parseDate(dd);
-      if (d && d >= TODAY && d <= horizonEnd && (o.status === 'applied' || o.status === 'selected' || o.status === 'prospect')) {
-        items.push({ date: d, kind: 'Deposit deadline', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Fund ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'danger', color: offerColor, targetKind: 'offer', targetId: o.id });
-      }
-    }
-    const we = withdrawalEligibleDate(o);
-    if (we && (o.status === 'funded' || o.status === 'applied')) {
-      const d = parseDate(we);
-      if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Withdrawal', name: `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`, sub: `Release ${formatCompactCurrency(o.requiredFundingAmount)}`, tag: 'success', color: offerColor, targetKind: 'offer', targetId: o.id });
-      }
-    }
-  }
-  for (const c of state.commitments) {
-    if (c.status === 'cancelled' || c.status === 'completed') continue;
-    if (c.endDate) {
-      const d = parseDate(c.endDate);
-      if (d && d >= TODAY && d <= horizonEnd) {
-        items.push({ date: d, kind: 'Commitment release', name: c.commitmentName, sub: formatCompactCurrency(c.amount), tag: 'success', targetKind: 'commitment', targetId: c.id });
-      }
-    }
-  }
-  for (const e of state.events) {
-    if (!e.includeInProjection) continue;
-    // Independent of the projection: an event can stay in the running
-    // balance but be hidden from this list (e.g. recurring paychecks).
-    if (e.showInUpcoming === false) continue;
-    // For recurring events, surface only the NEXT instance from today
-    // forward so the list doesn't fill with the same paycheck row 12
-    // times. The event's edit modal still owns the full recurrence rule.
-    const next = nextEventInstance(e, TODAY, horizonEnd);
-    if (!next) continue;
-    const amt = Number(next.amount);
-    const isRecurring = e.recurrence && e.recurrence.kind && e.recurrence.kind !== 'none';
+  for (const it of buildReminderItems(state)) {
+    const d = parseDate(it.dueDate);
+    if (!d || d < TODAY || d > horizonEnd) continue;
     items.push({
-      date: next.date,
-      kind: amt >= 0 ? 'Inflow' : 'Outflow',
-      name: e.eventName + (isRecurring ? ` (${e.recurrence.kind === 'custom' ? `every ${e.recurrence.everyDays || 7}d` : e.recurrence.kind})` : ''),
-      sub: formatCurrency(amt),
-      tag: amt >= 0 ? 'success' : '',
-      targetKind: 'event',
-      targetId: e.id
+      date: d,
+      kind: it.listLabel,
+      name: it.name,
+      sub: it.sub,
+      tag: it.tag,
+      color: it.color,
+      targetKind: it.targetKind,
+      targetId: it.targetId
     });
   }
+  // Builder already sorts by dueDate; keep a stable date sort for the Date
+  // objects (identical ordering) and page.
   items.sort((a, b) => a.date - b.date);
   return items.slice(0, limit);
 }
@@ -7564,7 +7842,7 @@ function renderDdRow(dd, i) {
       + (adjusted ? ` · initiation shifted from ${formatDateMedium(planned)} (${isUsBankHoliday(planned) ? 'holiday' : 'weekend'})` : '');
   }
   return `
-    <div class="dd-row" data-dd-index="${i}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:6px;">
+    <div class="dd-row" data-dd-index="${i}" data-dd-id="${escapeAttr((dd && dd.id) || '')}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:6px;">
       <input type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" class="input dd-field yv-date" data-dd-field="plannedDate" data-picker-mode="dd" value="${escapeAttr(formatDateDisplay(dd && dd.plannedDate || ''))}" aria-label="Initiation date for DD ${i + 1}" />
       <div class="input-group"><span class="input-prefix">$</span>
         <input type="text" inputmode="decimal" data-money class="input dd-field" data-dd-field="amount" value="${dd && dd.amount != null ? formatMoneyInput(dd.amount) : ''}" aria-label="Amount for DD ${i + 1}" />
@@ -7613,7 +7891,10 @@ function generateDdDatesFromRequirement() {
   let cursor = new Date(baseStart);
   for (let k = 0; k < count; k++) {
     const amt = (existing[k] && existing[k].amount != null) ? existing[k].amount : defaultAmt;
-    rows.push({ plannedDate: isoDate(cursor), amount: amt });
+    // Keep the existing row's stable id positionally (mint a new one for
+    // rows the regenerate adds) so per-DD feed ids don't churn.
+    const id = (existing[k] && existing[k].id) || uid('dd');
+    rows.push({ id, plannedDate: isoDate(cursor), amount: amt });
     // Advance the cursor for the NEXT deposit.
     if (monthly) cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
     else if (stepDays > 0) cursor = addDays(cursor, stepDays);
@@ -7632,9 +7913,15 @@ function readDdRowsFromForm() {
   rows.forEach(row => {
     const dateEl = row.querySelector('[data-dd-field="plannedDate"]');
     const amtEl  = row.querySelector('[data-dd-field="amount"]');
+    // Preserve (or mint) the per-DD stable id so feed items keyed
+    // `yv-<offerId>-dd-<ddId>` never migrate completion state onto the
+    // wrong DD across insert/reorder/delete (step-6 amendment 5). The id
+    // lives in the row's data-dd-id and is re-read on every form mutation.
+    const ddId = (row.dataset.ddId && row.dataset.ddId.trim()) ? row.dataset.ddId.trim() : uid('dd');
     // Date field shows M-D-YYYY; amount shows comma-grouped money.
     // Parse both back to storage form (ISO string / plain Number).
     out.push({
+      id: ddId,
       plannedDate: dateEl ? (parseDateInput(dateEl.value) || '') : '',
       amount: amtEl && amtEl.value.trim() !== '' ? parseMoneyInput(amtEl.value) : null
     });
@@ -7646,7 +7933,7 @@ function addDdRow() {
   const entries = document.getElementById('dd-entries');
   if (!entries) return;
   const current = readDdRowsFromForm();
-  current.push({ plannedDate: '', amount: null });
+  current.push({ id: uid('dd'), plannedDate: '', amount: null });
   entries.innerHTML = current.map((dd, i) => renderDdRow(dd, i)).join('');
 }
 

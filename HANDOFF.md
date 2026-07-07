@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-06, Round 62)
+## Current state (as of 2026-07-07, Round 63)
 
-- `index.html` ≈ 8,900 lines, single-file PWA. `APP_VERSION` = `2026.07.06e`
+- `index.html` ≈ 9,000 lines, single-file PWA. `APP_VERSION` = `2026.07.07`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -90,6 +90,38 @@ grows past ~8 entries, keeping the newest 3–4 live.
   timing model + dollar-days-weighted ROI (R37).
 - **Diagnostics:** `logError`/`ErrCode` ring buffer, global error handlers,
   recovery panel — exists since R51; don't rebuild.
+- **Reminder feed = contract v2 (R63):** ONE shared `buildReminderItems(state)`
+  (~line 5293) is the sole source of every actionable date; `computeReminderFeed`
+  (schema-2 machine feed), `computeUpcomingActions` (overview list, 90-day
+  horizon, but past-due dropped) all consume it — they reconcile by
+  construction: count = the isWork items due TODAY-or-later; list = builder
+  items within [today, today+90]; BOTH drop past-due dates, so a committed
+  offer past its funding date reads count 0 / list 0 (never 1 / 0). `_feed`
+  is now `{schema:2, generatedAt, manifestVersion, feedStatus,
+  lastGoodGeneratedAt, items, removed}`; `risk` deliberately omitted (later
+  phase). Gates key on the MODERN `subStatus` fields, never the legacy
+  `deriveLegacyStatus` shadow (which is why funding deadlines used to vanish
+  on Approved — legacy maps approved→'funded'): offer-expires shows for ALL
+  non-terminal offers INCLUDING scenario-excluded prospects (it bypasses
+  `offerIsActiveForProjection` on purpose — scenario inclusion is capital
+  modeling, not expiry visibility; the owner's live BMO is a prospect w/
+  `includeInScenario:false` and must still surface its expiry); work items
+  (deposit/dd/debit) only for committed (approved/on-track, met-waiting
+  excluded); withdrawal while capital is live (approved/on-track/met-waiting).
+  deposit-deadline emits for the fund-a-lump types only — NOT standard
+  `direct-deposit` (its money movement IS the DDs) — gated as "not
+  direct-deposit" so a legacy/seed offer with absent `offerType` (app-default
+  new-funds-held) still emits it. Per-DD items are keyed `yv-<offerId>-dd-<ddId>`
+  off a persisted per-DD `id` (minted at row creation, back-filled on load by
+  `migrateDdIds`) — never array index; id stability assumes all devices run ≥
+  this build (an OLD build editing DDs re-mints ids — accepted: both owner
+  devices are current and no Shortcut consumer exists yet). Deletions/
+  disappearances tombstone into `removed[]` (90-day fixed TTL;
+  `state._feedEmitted` tracks prior ids). Feed computation on the push path
+  routes through `computeFeedSafely` (logError + last-good reuse marked
+  `feedStatus:'stale'`) — never a silent `try{}catch{}`. `deriveLegacyStatus`
+  is UNCHANGED (R38 shadow stays). Don't re-introduce a legacy-status read in
+  these functions or a bare feed try/catch.
 - **Chart/tooltip colors are LOCKED** — see AGENTS.md → "Locked design
   values" before touching any chart, legend, or tooltip hex.
 - **Pending:** iOS Reminders Shortcut on-device build (SHORTCUT_SETUP.md);
@@ -99,6 +131,99 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor)
+**Round 63 — Reminder-feed contract v2: one shared item-builder, coverage + gate fixes, tombstones (Phase 1a)**
+
+Phase 1a of the reminders redesign (feed contract v2 + step-3 P1). Scope was
+`index.html` plus doc updates; no chart/tooltip/legend changes; Gist payload
+kept additively compatible (new fields on offers/DDs only).
+
+- **One shared builder.** New `buildReminderItems(state)` (~line 5293) is the
+  SOLE source of every actionable date. `computeReminderFeed`,
+  `computeUpcomingActions`, and `computeActionsRequired` were all rewritten to
+  consume it, so the machine feed, the overview list, and the headline count
+  can never drift apart again. Reconciliation invariant (stated inline):
+  count = the builder's `isWork` items regardless of horizon; list = every
+  builder item within the 90-day horizon (the list keeps its horizon by
+  design; the feed emits all future items, no horizon).
+- **Feed contract v2.** `_feed` is now `{ schema:2, generatedAt,
+  manifestVersion, feedStatus:'ok'|'stale'|'error', lastGoodGeneratedAt,
+  items:[{id,kind,title,dueDate,notes}], removed:[{id,tombstonedAt,reason}] }`.
+  `risk` deliberately OMITTED (later phase). `manifestVersion` is monotonic:
+  `max(prev+1, minutes-since-epoch, sessionHWM+1)` where the session
+  high-water mark (`_manifestHwm`, seeded on load from `_manifestVersion`)
+  guarantees no regression even when restore-from-history swaps in an old
+  snapshot — this was a real edge case the plain `max(prev+1, epochMin)`
+  formula missed within a single minute; the HWM term fixes it.
+- **Stable per-DD ids.** DD rows carry a persisted `id` minted at row
+  creation (`readDdRowsFromForm`/`addDdRow`/`generateDdDatesFromRequirement`
+  now thread it via a `data-dd-id` attribute) and back-filled on load by new
+  `migrateDdIds` (called next to `normalizeOfferStatus` in `App.init`).
+  Per-DD feed items key `yv-<offerId>-dd-<ddId>` — never array index.
+- **Coverage** now emitted consistently by both feed and list: offer-expires,
+  deposit-deadline (fund-a-lump types only — NOT standard `direct-deposit`),
+  dd-initiate (one per future planned DD), dd-window-end (frequency mode →
+  signup + periods×period incl. `2weeks`; count mode → last DD effective
+  date), debit-deadline (from `debitRequirement.byDate`), withdrawal/
+  lock-release, commitment-end, inflow/outflow (respecting `showInUpcoming`;
+  recurring events surface their next instance).
+- **Gate fix (step-3 P1).** Both surfaces key on the MODERN `subStatus`
+  fields, not the legacy `deriveLegacyStatus` shadow. The legacy map sends
+  approved→'funded', which hid funding deadlines the instant an account
+  opened. New rule: offer-expires shows for ALL non-terminal offers,
+  INCLUDING scenario-excluded prospects (see review fix 4 below); work items
+  (deposit/dd/debit) emit only for committed offers (approved/on-track),
+  met-waiting excluded (work done); withdrawal shows while capital is live
+  (approved/on-track/met-waiting, so a met-waiting offer keeps its release
+  date). Legacy-status reads are gone from these functions;
+  `deriveLegacyStatus` itself is UNTOUCHED (R38 shadow stays elsewhere).
+- **Count semantics (owner decision).** `computeActionsRequired` counts work
+  items only for committed offers, and only those due TODAY-or-later (past-due
+  drops — see review fix 1); prospects/applied contribute ZERO (their
+  expiries still show in the list).
+- **Tombstones.** Deleting an offer/commitment (or an item that permanently
+  disappears) moves its id to `removed[]` with a `reason`
+  (`offer-deleted`/`commitment-deleted`/`event-deleted`/`superseded`),
+  retained a fixed 90-day TTL. `state._feedEmitted` (id→ownerId) tracks
+  previously-emitted ids to detect disappearances; a tombstoned id that
+  re-appears is resurrected (tombstone dropped). Ack-based retention is a
+  later phase.
+- **No silent feed failure.** The `try{}catch{}` around feed computation in
+  `Sync.push` and `createGist` is replaced by `computeFeedSafely`, which logs
+  via `ErrCode.RENDER` (ctx `'reminder-feed'`) and reuses the last good feed
+  marked `feedStatus:'stale'` (or a minimal `'error'` envelope when there is
+  no last-good) rather than shipping absent/stale silently.
+- **Docs.** `SHORTCUT_SETUP.md` gets a deprecation banner pointing to the v2
+  build guide; `APP_VERSION` 2026.07.06e → 2026.07.07.
+- **Review fixes (independent adversarial pass, all applied + re-verified).**
+  (1) `computeActionsRequired` dropped past-due work items — a committed offer
+  past its funding date was count 1 / list 0; now 0 / 0. (2) deposit-deadline
+  was spuriously emitted for standard `direct-deposit` offers (no lump sum);
+  now gated to "not `direct-deposit`" — NB gated as NOT-direct-deposit, not an
+  allow-list, because the seed/legacy offers carry an ABSENT `offerType` that
+  the app treats as new-funds-held, and an allow-list wrongly dropped US
+  Bank's deposit-deadline (caught by re-running the seed reconciliation). (3)
+  `ddWindowEndDate` fell through to the month branch for the UI's `2weeks`
+  option (signup 7-10 → wrong 10-10); added the biweekly branch → 8-21. (4)
+  offer-expires now bypasses the `offerIsActiveForProjection` gate so a
+  scenario-excluded prospect's expiry still shows (the owner's BMO is exactly
+  this: prospect + `includeInScenario:false` + a near expiry that would
+  otherwise vanish). This raised the sample-seed list from 6 → 10 rows.
+- **Verified** via `node --check` (extracted script), a Node VM harness running
+  the real functions against the sample seed + synthetic offers (14/14 fix
+  assertions pass), and the live app (Preview MCP, port 4173): sample seed
+  (TODAY 2026-07-06) renders Actions-required **1** vs Upcoming **10 rows**
+  (2 pages of 6), reconciling (US Bank's deposit-deadline 2026-07-11 —
+  formerly hidden by the legacy gate — is the one work item, present in both;
+  the list now also shows the four previously-hidden excluded-prospect
+  expiries PNC/Chase/BMO/HSBC + Citi's, Charles Schwab's 11-03 beyond the 90d
+  horizon); `_feed` is schema 2 with correct kinds/ids and no `risk`; deleting
+  US Bank tombstones its 2 ids as `offer-deleted`; a synthetic committed
+  standard-DD offer emits DD items only (no deposit-deadline, count 2), a
+  held-and-dd keeps its lump deposit-deadline, a biweekly window-end computes
+  8-21, and prospect/met-waiting variants gate to expiry-only / withdrawal-only.
+  Locked hex counts identical to HEAD.
 
 ### 2026-07-06 — Session (claude-opus-4-8, /orchestrate executor)
 **Round 62 — Display formats for dates & money (M-D-YYYY + live thousands commas), tighter `$` prefix, un-abbreviated K in two spots, tightened uppercase-label letterspacing**

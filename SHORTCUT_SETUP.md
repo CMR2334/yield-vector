@@ -1,3 +1,5 @@
+> **⚠️ Superseded — do not build from this doc.** This single-channel Shortcut guide has been replaced by the "one brain, three surfaces" reminders framework (feed contract v2). The consumer spec, gate rules, tombstone/heartbeat contract, and the ICS + watchdog channels now live in **[docs/SHORTCUT_BUILD_GUIDE.md](docs/SHORTCUT_BUILD_GUIDE.md)**; build the minimal v2 executor described there against the app's schema-2 `_feed`, not the 20-step merge Shortcut below. This file is retained only for historical reference.
+
 # Reminders sync — Apple Shortcut setup
 
 This doc walks you through building a single Apple Shortcut + a Personal
