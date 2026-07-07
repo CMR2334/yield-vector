@@ -1344,6 +1344,20 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--font-mono); line-height: 1.4; color: var(--text-strong);
 }
 .doc-import-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+/* Fetch-from-URL mode (Phase 7 v2). Only rendered when a Worker URL is
+   configured — see the gated block in showOfferModal. */
+.doc-fetch { margin: 4px 0 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-soft); }
+.doc-fetch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doc-fetch-url { flex: 1 1 220px; min-width: 0; font-size: 13px; }
+.doc-fetch-btn[aria-busy="true"] { opacity: 0.7; pointer-events: none; }
+.doc-fetch-err { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.4; }
+.doc-fetch-or { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.02em; margin: 8px 0 2px; }
+/* "AI" badge + failed-verification note on preview fields sourced from the LLM. */
+.doc-ai-badge {
+  flex: 0 0 auto; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; line-height: 1.5;
+}
+.doc-ai-note { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; margin-top: 8px; }
 .doc-import-status { font-size: 12px; }
 .doc-import-status.muted { color: var(--text-tertiary); }
 .doc-import-status.success { color: var(--success); }
@@ -3608,6 +3622,44 @@ const Sync = {
     if (cfg) localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg));
     else localStorage.removeItem(SYNC_CONFIG_KEY);
   },
+  // Optional DoC-import Worker URL (Phase 7 v2). Stored in the same local sync-
+  // config blob (device-local, never in the public state payload synced to the
+  // Gist), but independent of the Gist credentials: it is read/written on its
+  // own key and deliberately survives a sync disconnect, since it's a separate
+  // integration. Empty string / null when unconfigured — the whole URL-import
+  // feature is gated on this being a non-empty https URL.
+  getDocWorkerUrl() {
+    const c = this.getConfig();
+    const u = c && typeof c.docWorkerUrl === 'string' ? c.docWorkerUrl.trim() : '';
+    return u;
+  },
+  setDocWorkerUrl(url) {
+    const c = this.getConfig() || {};
+    const clean = (url == null ? '' : String(url)).trim();
+    if (clean) c.docWorkerUrl = clean;
+    else delete c.docWorkerUrl;
+    // Persist even if there are no Gist credentials yet — the URL is standalone.
+    if (Object.keys(c).length) localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(c));
+    else localStorage.removeItem(SYNC_CONFIG_KEY);
+  },
+  // Optional shared secret for the DoC Worker (matches the Worker's
+  // WORKER_SECRET; sent as the X-YV-Key header). Same storage + privacy
+  // guarantees as the URL: device-local in SYNC_CONFIG_KEY, NEVER in App.state,
+  // so it is never synced to the Gist or written to a JSON export, and it
+  // survives a sync disconnect. Empty when unconfigured (then no header is sent
+  // and the Worker's secret gate must also be unset for fetches to work).
+  getDocWorkerSecret() {
+    const c = this.getConfig();
+    return c && typeof c.docWorkerSecret === 'string' ? c.docWorkerSecret.trim() : '';
+  },
+  setDocWorkerSecret(secret) {
+    const c = this.getConfig() || {};
+    const clean = (secret == null ? '' : String(secret)).trim();
+    if (clean) c.docWorkerSecret = clean;
+    else delete c.docWorkerSecret;
+    if (Object.keys(c).length) localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(c));
+    else localStorage.removeItem(SYNC_CONFIG_KEY);
+  },
   isConfigured() {
     const c = this.getConfig();
     return Boolean(c && c.token && c.gistId);
@@ -4003,7 +4055,15 @@ const Sync = {
 
   disconnect() {
     if (this.pushTimer) clearTimeout(this.pushTimer);
+    // Preserve the optional DoC-import Worker URL + secret across a sync
+    // disconnect — they're a separate integration, not Gist credentials, so
+    // dropping them here would silently break URL import when someone just
+    // resets cloud sync.
+    const keepWorkerUrl = this.getDocWorkerUrl();
+    const keepWorkerSecret = this.getDocWorkerSecret();
     this.setConfig(null);
+    if (keepWorkerUrl) this.setDocWorkerUrl(keepWorkerUrl);
+    if (keepWorkerSecret) this.setDocWorkerSecret(keepWorkerSecret);
     this.lastSyncAt = 0;
     this.setStatus('unconfigured');
   }
@@ -8141,6 +8201,24 @@ function renderSyncSection() {
           </div>
           <span class="field-hint">Stored locally per device. Scope: only <strong>gist</strong>.</span>
         </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <div class="field-box">
+            <label for="sync-doc-worker">DoC import Worker URL</label>
+            <input id="sync-doc-worker" class="input" type="url" placeholder="https://…workers.dev" value="${escapeAttr(Sync.getDocWorkerUrl())}" autocomplete="off" spellcheck="false" />
+          </div>
+          <span class="field-hint">Optional — enables URL import for offers; see <code>cloudflare/README.md</code>. Leave empty to paste posts manually.</span>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <div class="field-box">
+            <label for="sync-doc-worker-secret">Worker secret (optional)</label>
+            <input id="sync-doc-worker-secret" class="input" type="password" placeholder="only if you set WORKER_SECRET" value="${escapeAttr(Sync.getDocWorkerSecret())}" autocomplete="off" spellcheck="false" />
+          </div>
+          <span class="field-hint">Stored locally per device, never synced. Set this only if the Worker has a <code>WORKER_SECRET</code> — recommended, it locks out non-browser callers.</span>
+        </div>
+      </div>
+
+      <div class="btn-grid" style="margin-top:var(--space-3);">
+        <button class="btn btn-secondary" data-action="doc-worker-save">Save Worker settings</button>
       </div>
 
       <div id="sync-buttons" class="btn-grid" style="margin-top:var(--space-4);">
@@ -9481,6 +9559,14 @@ function _docAddUserReq(type, over) {
   if (typeof writeUserReqsToForm === 'function') writeUserReqsToForm(rows);
   if (typeof refreshRequirementsSection === 'function') refreshRequirementsSection();
 }
+// Append a line to the Notes textarea (shared by points-bonus + the LLM-only
+// prose fields). Fires input so the modal's write-through picks it up.
+function _docAppendNote(line) {
+  const el = _docEl('#f-notes');
+  if (!el) return;
+  el.value = el.value && el.value.trim() ? (el.value.replace(/\s+$/, '') + '\n' + line) : line;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
 
 const DOC_FIELD_MAP = [
   { key: 'bankName', label: 'Bank name', format: v => v, current: () => _docCurrentInput('#f-bank'), apply: v => _docSetInput('#f-bank', v) },
@@ -9518,12 +9604,22 @@ const DOC_FIELD_MAP = [
     current: () => { const el = _docEl('#f-churn-anchor'); return (el && el.value) ? ({ bonus_received: 'Bonus received', account_closed: 'Account closed', account_opened: 'Account opened' }[el.value] || '') : ''; },
     apply: v => _docSetInput('#f-churn-anchor', v) },
   { key: 'churn_notes', label: 'Churn notes', format: v => v, current: () => _docCurrentInput('#f-churn-notes'), apply: v => _docSetInput('#f-churn-notes', v) },
+  // LLM-only prose fields (Phase 7 v2) with no dedicated schema slot — they
+  // append to the Notes textarea (same idiom as bonusPointsNote). Only ever
+  // present when the Worker's grounded LLM tier returns them, always marked AI
+  // + low-confidence + default-unchecked in the preview.
+  { key: 'eligibility_notes', label: 'Eligibility notes (→ notes)', format: v => v, current: () => '',
+    apply: v => _docAppendNote('Eligibility: ' + v) },
+  { key: 'early_close_notes', label: 'Early-close notes (→ notes)', format: v => v, current: () => '',
+    apply: v => _docAppendNote('Early close: ' + v) },
+  { key: 'bonus_posting_notes', label: 'Bonus posting (→ notes)', format: v => v, current: () => '',
+    apply: v => _docAppendNote('Bonus posting: ' + v) },
   // Row-only requirement types (no legacy field): land in #f-user-reqs.
   { key: 'spendAmount', label: 'Spend requirement', format: v => '$' + formatMoneyInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
   { key: 'transactionsCount', label: 'Transactions requirement', format: v => v + '×', current: () => '', apply: v => _docAddUserReq('transactions', { count: v, label: 'Transactions' }) },
   // Notes-only (points bonus, quirk 1): appended to the Notes textarea.
   { key: 'bonusPointsNote', label: 'Points bonus (→ notes)', format: v => v, current: () => '',
-    apply: v => { const el = _docEl('#f-notes'); if (el) { const add = 'Bonus: ' + v; el.value = el.value && el.value.trim() ? (el.value.replace(/\s+$/, '') + '\n' + add) : add; el.dispatchEvent(new Event('input', { bubbles: true })); } } },
+    apply: v => _docAppendNote('Bonus: ' + v) },
 ];
 const DOC_FIELD_BY_KEY = DOC_FIELD_MAP.reduce((m, e) => { m[e.key] = e; return m; }, {});
 
@@ -9543,7 +9639,9 @@ function renderDocPreview(result) {
   const fields = (result && result.fields) || {};
   const keys = DOC_FIELD_MAP.map(e => e.key).filter(k => fields[k] && fields[k].value != null && fields[k].value !== '');
   if (!keys.length) {
-    host.innerHTML = `<div class="doc-import-empty">No fields could be read from that paste. Fill the form manually.</div>`;
+    const nFailed = Number(result && result._aiFailed) || 0;
+    const failLine = nFailed ? `<div class="doc-ai-note">${nFailed} AI suggestion${nFailed === 1 ? '' : 's'} failed verification and ${nFailed === 1 ? 'was' : 'were'} discarded.</div>` : '';
+    host.innerHTML = `<div class="doc-import-empty">No fields could be read. Fill the form manually.</div>${failLine}`;
     return;
   }
   const rows = keys.map(key => {
@@ -9552,20 +9650,27 @@ function renderDocPreview(result) {
     let display = '';
     try { display = meta.format(f.value); } catch (e) { display = String(f.value); }
     const conf = f.confidence || 'low';
-    const checked = (conf === 'high' || conf === 'medium') ? 'checked' : '';
+    // AI (LLM-sourced) fields always default UNCHECKED and low-confidence,
+    // regardless of any confidence the model implied — the user opts in per
+    // field after eyeballing the grounding quote. Deterministic fields keep the
+    // existing high/medium = checked default.
+    const isAi = !!f._ai;
+    const checked = (!isAi && (conf === 'high' || conf === 'medium')) ? 'checked' : '';
     let curr = '';
     try { curr = meta.current(); } catch (e) { curr = ''; }
     const overwrite = curr && curr !== display
       ? `<span class="doc-overwrite"><span class="doc-old">${escapeHtml(curr)}</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>`
       : '';
     const noteLine = f.note ? `<div class="doc-note">${escapeHtml(f.note)}</div>` : '';
+    const aiBadge = isAi ? `<span class="doc-ai-badge" title="AI-extracted — verified against a quote from the post">AI</span>` : '';
     return `
       <label class="doc-field" data-doc-key="${escapeAttr(key)}">
         <input type="checkbox" class="doc-check" ${checked} />
         <span class="doc-field-main">
           <span class="doc-field-head">
             <span class="doc-field-label">${escapeHtml(meta.label)}</span>
-            ${_docConfDot(conf)}
+            ${aiBadge}
+            ${_docConfDot(isAi ? 'low' : conf)}
           </span>
           <span class="doc-field-val">${overwrite}<span class="doc-new">${escapeHtml(display)}</span></span>
           ${noteLine}
@@ -9576,10 +9681,19 @@ function renderDocPreview(result) {
   const leftovers = Array.isArray(result.unparsed) && result.unparsed.length
     ? `<div class="doc-leftovers"><div class="doc-leftovers-head">Not auto-filled (manual reference)</div>${result.unparsed.map(s => `<div class="doc-leftover">${escapeHtml(s)}</div>`).join('')}</div>`
     : '';
-  const applyCount = keys.filter(k => { const c = fields[k].confidence; return c === 'high' || c === 'medium'; }).length;
+  // Muted note when the Worker's LLM tier returned fields that failed the
+  // verbatim-quote tripwire (client-side) and were discarded before display.
+  const aiFailed = Number(result._aiFailed) || 0;
+  const aiFailNote = aiFailed
+    ? `<div class="doc-ai-note">${aiFailed} AI suggestion${aiFailed === 1 ? '' : 's'} failed verification and ${aiFailed === 1 ? 'was' : 'were'} discarded.</div>`
+    : '';
+  // Deterministic (non-AI) fields default checked at high/medium; AI fields
+  // never do — so the initial apply count excludes them.
+  const applyCount = keys.filter(k => { const f = fields[k]; return !f._ai && (f.confidence === 'high' || f.confidence === 'medium'); }).length;
   host.innerHTML = `
     <div class="doc-preview-head">Review ${keys.length} field${keys.length === 1 ? '' : 's'} — uncheck anything you don't want. Values only fill the form; nothing saves until you press Save.</div>
     <div class="doc-fields">${rows}</div>
+    ${aiFailNote}
     ${leftovers}
     <div class="doc-apply-row">
       <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-apply">Apply <span id="doc-apply-count">${applyCount}</span> selected</button>
@@ -9641,6 +9755,122 @@ function docImportParse() {
   }
   if (status) { status.textContent = `Found ${nFields} field${nFields === 1 ? '' : 's'} — review below.` + truncNote; status.className = 'doc-import-status success'; }
   renderDocPreview(result);
+}
+
+/* ---- Fetch-from-URL mode (Phase 7 v2, GATED) ------------------------------
+   Only reachable when a Worker URL is configured (the button doesn't render
+   otherwise). Calls the owner's Cloudflare Worker, which fetches the DoC page
+   server-side (DoC has no CORS) and optionally runs an AI pass on the ~5 fuzzy
+   prose fields. The returned article text flows through the SAME parseDocPost
+   pipeline as a paste; AI fields are merged into the preview ONLY after each
+   passes a client-side verbatim-quote tripwire against that same article text.
+   Every failure path degrades to the paste flow — it can never block it. */
+
+// Normalize text for the client-side tripwire — must mirror the Worker's
+// normalizeForQuote (collapse whitespace, trim, lowercase) so a quote the
+// Worker accepted is re-checkable here against the article we received.
+function _docNormForQuote(s) {
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+// Merge grounded LLM fields from the Worker into a parseDocPost result. Each
+// candidate must (a) map to a known DOC field, (b) have a non-empty value +
+// quote, and (c) have its quote appear verbatim (normalized) in `articleText`.
+// Survivors are marked `_ai` + low-confidence (default-unchecked in preview);
+// failures are counted into result._aiFailed. Never overwrites a field the
+// deterministic parser already produced with higher confidence — AI only fills
+// gaps (if the parser already has the key, the AI candidate is skipped).
+function _docMergeLlmFields(result, llm, articleText) {
+  result._aiFailed = 0;
+  if (!llm || typeof llm !== 'object') return result;
+  const article = _docNormForQuote(articleText);
+  Object.keys(llm).forEach(key => {
+    if (!DOC_FIELD_BY_KEY[key]) return;                 // not a mappable field
+    const entry = llm[key];
+    if (!entry || typeof entry !== 'object') return;
+    const value = entry.value;
+    const quote = entry.quote;
+    if (value == null || String(value).trim() === '') return;
+    if (typeof quote !== 'string' || !quote.trim()) { result._aiFailed++; return; }
+    // Tripwire: the quote must be present verbatim in the fetched article.
+    if (!article.includes(_docNormForQuote(quote))) { result._aiFailed++; return; }
+    // Don't clobber a deterministic parse of the same field — prefer the parser.
+    if (result.fields[key] && result.fields[key].value != null && result.fields[key].value !== '') return;
+    result.fields[key] = { value: String(value), confidence: 'low', snippet: String(quote), _ai: true };
+  });
+  return result;
+}
+
+async function docImportFetch() {
+  const urlInput = document.getElementById('doc-fetch-url');
+  const btn = document.getElementById('doc-fetch-btn');
+  const errBox = document.getElementById('doc-fetch-err');
+  const status = document.getElementById('doc-import-status');
+  const preview = document.getElementById('doc-import-preview');
+  const setErr = (msg) => { if (errBox) errBox.textContent = msg || ''; };
+  setErr('');
+  const workerUrl = Sync.getDocWorkerUrl();
+  if (!workerUrl) { setErr('No Worker URL configured — paste the post text instead.'); return; }
+  const url = urlInput ? urlInput.value.trim() : '';
+  if (!url) { setErr('Enter a Doctor of Credit post URL first.'); return; }
+
+  // Loading state on the button (label swap + busy flag). Restored in finally.
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.setAttribute('aria-busy', 'true'); btn.disabled = true; btn.textContent = 'Fetching…'; }
+  if (status) { status.textContent = 'Fetching from Worker…'; status.className = 'doc-import-status muted'; }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000); // 15s client budget
+  try {
+    // Attach the optional shared secret as X-YV-Key when configured (matches
+    // the Worker's WORKER_SECRET gate). Omitted entirely when unset.
+    const headers = { 'Content-Type': 'application/json' };
+    const secret = Sync.getDocWorkerSecret();
+    if (secret) headers['X-YV-Key'] = secret;
+    const resp = await fetch(workerUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url }),
+      signal: controller.signal
+    });
+    if (!resp.ok) {
+      let detail = '';
+      try { const j = await resp.json(); detail = j && j.error ? ' (' + j.error + ')' : ''; } catch {}
+      throw new Error('worker responded ' + resp.status + detail);
+    }
+    const data = await resp.json();
+    if (!data || data.ok !== true || typeof data.html !== 'string' || !data.html.trim()) {
+      throw new Error((data && data.error) ? data.error : 'empty response');
+    }
+    // Feed the fetched article through the EXACT same parser as a paste. All
+    // returned strings are untrusted → parseDocPost + the preview escape them
+    // identically to pasted text.
+    let result;
+    try { result = parseDocPost(data.html); }
+    catch (e) {
+      if (typeof logError === 'function') logError(ErrCode.PARSE, e, 'docImportFetch: parse');
+      throw new Error('could not parse the fetched post');
+    }
+    _docMergeLlmFields(result, data.llm, data.html);
+    _docLastParse = result;
+    const nFields = Object.keys(result.fields || {}).filter(k => result.fields[k] && result.fields[k].value != null && result.fields[k].value !== '' && DOC_FIELD_BY_KEY[k]).length;
+    const nAi = Object.keys(result.fields || {}).filter(k => result.fields[k] && result.fields[k]._ai).length;
+    renderDocPreview(result);
+    if (status) {
+      const aiBit = nAi ? ` · ${nAi} AI` : '';
+      status.textContent = nFields ? `Fetched — found ${nFields} field${nFields === 1 ? '' : 's'}${aiBit}. Review below.` : 'Fetched, but no fields were readable — paste the text instead.';
+      status.className = nFields ? 'doc-import-status success' : 'doc-import-status muted';
+    }
+    // Keep the paste box + the docUrl field in sync with what was fetched.
+    if (urlInput) { const df = document.getElementById('f-doc'); if (df && !df.value.trim()) { df.value = url; df.dispatchEvent(new Event('input', { bubbles: true })); } }
+  } catch (e) {
+    if (typeof logError === 'function') logError(ErrCode.SYNC_PULL, e, 'docImportFetch');
+    setErr('Fetch failed — paste the post text instead.');
+    if (status) { status.textContent = ''; status.className = 'doc-import-status'; }
+    if (preview) preview.innerHTML = '';
+  } finally {
+    clearTimeout(timer);
+    if (btn) { btn.removeAttribute('aria-busy'); btn.disabled = false; btn.textContent = origLabel || 'Fetch & Parse'; }
+  }
 }
 
 // Apply handler — writes every CHECKED field into the form via its map entry.
@@ -10040,6 +10270,17 @@ function showOfferModal(offerId = null) {
                   <span>Import from Doctor of Credit</span>
                 </button>
                 <div class="doc-import-body" id="doc-import-body" hidden>
+                  ${Sync.getDocWorkerUrl() ? `
+                  <div class="doc-fetch" id="doc-fetch">
+                    <p class="doc-import-help">Fetch the post straight from its URL — the configured Worker retrieves it and runs an AI pass on the fuzzy fields (each shown with the exact quote it came from). Results fill the form for review; nothing saves.</p>
+                    <div class="doc-fetch-row">
+                      <input id="doc-fetch-url" class="input doc-fetch-url" type="url" placeholder="https://www.doctorofcredit.com/…" value="${escapeAttr(o.docUrl || '')}" autocomplete="off" spellcheck="false" />
+                      <button type="button" class="btn btn-primary btn-sm doc-fetch-btn" id="doc-fetch-btn" data-action="doc-import-fetch">Fetch &amp; Parse</button>
+                    </div>
+                    <div class="doc-fetch-err" id="doc-fetch-err" role="status" aria-live="polite"></div>
+                  </div>
+                  <div class="doc-fetch-or">or paste the post text</div>
+                  ` : ''}
                   <p class="doc-import-help">Paste the full Doctor of Credit post text or HTML below, then Parse. Nothing is saved — parsed values fill the form for you to review and confirm.</p>
                   <textarea id="doc-import-paste" class="textarea doc-import-paste" rows="5" placeholder="Paste the Doctor of Credit post here…" autocomplete="off" spellcheck="false"></textarea>
                   <div class="doc-import-actions">
@@ -11508,6 +11749,7 @@ function onClick(e) {
     case 'toggle-advanced-form': toggleAdvancedForm(target); break;
     case 'doc-import-toggle': docImportToggle(target.closest('.doc-import-toggle') || target); break;
     case 'doc-import-parse': docImportParse(); break;
+    case 'doc-import-fetch': docImportFetch(); break;
     case 'doc-import-apply': docImportApply(); break;
     case 'doc-import-clear': docImportClear(); break;
     case 'add-dd-row': addDdRow(); break;
@@ -11583,6 +11825,7 @@ function onClick(e) {
     // Sync actions
     case 'open-sync': App.setView('settings'); setTimeout(() => { document.getElementById('sync-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); break;
     case 'sync-save': saveSyncConfigFromForm(); break;
+    case 'doc-worker-save': saveDocWorkerUrlFromForm(); break;
     case 'sync-pull': ensureSyncConfigSaved().then(ok => { if (ok) Sync.pull(); }); break;
     case 'sync-push': guardedManualPush(); break;
     case 'sync-create-gist': createGistFromForm(); break;
@@ -12002,6 +12245,35 @@ async function saveSyncConfigFromForm() {
     Sync.setStatus('error', e.message);
     toast('Sync test failed: ' + e.message, 'danger');
   }
+  render();
+}
+
+// Save (or clear) the optional DoC-import Worker URL + secret. Validates
+// https:// on the URL so a mistyped/downgraded URL can't be stored (the Worker
+// is only ever called over https; a non-https value would be dead weight and a
+// footgun). The secret is independent — persisted verbatim (or cleared when
+// blank) regardless of the URL. Re-renders so the gated "Fetch from URL" UI in
+// the offer modal reflects the new configured/unconfigured state immediately.
+function saveDocWorkerUrlFromForm() {
+  const input = document.getElementById('sync-doc-worker');
+  const secretInput = document.getElementById('sync-doc-worker-secret');
+  if (!input) return;
+  const raw = input.value.trim();
+  // Persist the secret first (independent of URL validity so a valid secret
+  // isn't lost if the URL is being cleared or re-entered).
+  const secret = secretInput ? secretInput.value.trim() : '';
+  Sync.setDocWorkerSecret(secret);
+  if (!raw) {
+    Sync.setDocWorkerUrl('');
+    toast('Worker URL cleared — URL import disabled');
+    render();
+    return;
+  }
+  let u;
+  try { u = new URL(raw); } catch { toast('That is not a valid URL', 'danger'); return; }
+  if (u.protocol !== 'https:') { toast('Worker URL must start with https://', 'danger'); return; }
+  Sync.setDocWorkerUrl(u.toString());
+  toast(secret ? 'Worker settings saved — URL import enabled (secret set)' : 'Worker URL saved — URL import enabled');
   render();
 }
 
