@@ -2647,6 +2647,330 @@ function reconcileDebitWithinDays(o) {
   return o;
 }
 
+/* ============================================================
+   SCHEMA V2 — requirements[] layer over legacy offer fields.
+   ============================================================
+   The legacy fields (ddRequirement, debitRequirement, directDeposits,
+   requiredFundingAmount, funding-window/hold day-counts) stay CANONICAL
+   for every existing consumer — renders, feed, projection, ROI, lock
+   math. The v2 `requirements[]` rows are an additive richer layer:
+     • source:'derived' rows are a read-only projection of legacy fields,
+       refreshed from legacy on every load + save (see syncRequirementsWith-
+       Legacy). Their id is tied to the legacy source (never an array index)
+       so refresh is a keyed upsert and later-step feed items bind to
+       requirement identity, exactly like the per-DD feed keys do today.
+     • source:'user' rows are NEW requirement types with no legacy equivalent
+       (e-statements, maintain balance, promo code, …). Authoritative in
+       their own right; the derivation layer never touches them.
+   Design: docs/assessments/2026-07-07-schema-v2-design.md. */
+
+// The v2 requirement row types. `derived` rows use a subset; `user` rows
+// (added by later form-UI steps) can use any. Kept as a doc-only reference
+// list — no runtime enum enforcement (matches the loose offerType handling).
+const REQUIREMENT_TYPES = [
+  'spend', 'deposit', 'direct_deposit_amt', 'direct_deposit_count',
+  'transactions', 'debit_txns', 'activate_debit', 'estatements',
+  'online_banking', 'maintain_balance', 'promo_code', 'custom'
+];
+
+// Build a fresh requirement row with all fields defaulted. `over` supplies
+// the derived/known fields; done/done_date/notes default empty so a new
+// derived row starts un-done (syncRequirementsWithLegacy preserves those
+// across refreshes for rows that already exist).
+function makeRequirementRow(over) {
+  return Object.assign({
+    id: '', type: 'custom', label: '', amount: null, count: null,
+    deadline_days: null, frequency: 'total', hold_days: null,
+    done: false, done_date: null, source: 'user', notes: ''
+  }, over || {});
+}
+
+// PURE: compute the set of derived requirement rows from an offer's current
+// legacy fields. Allocates new rows (source:'derived') with STABLE ids tied
+// to each legacy source — never merges or reads existing requirements. Every
+// legacy access is guarded so offers missing a sub-object (e.g. seed offers
+// with no ddRequirement/debitRequirement/directDeposits) simply yield fewer
+// rows rather than throwing. Deterministic order: funding, ddreq, per-DD (in
+// array order), debit — so a re-run with unchanged legacy is byte-identical.
+function deriveRequirementsFromLegacy(offer) {
+  const rows = [];
+  if (!offer) return rows;
+
+  // requiredFundingAmount → a single `deposit` obligation. deadline_days is
+  // the funding window (daysAfterSignupAllowedBeforeDeposit); hold_days is the
+  // post-funding lock (daysFundsMustRemain). Both may be null.
+  const funding = (offer.requiredFundingAmount != null && offer.requiredFundingAmount !== '')
+    ? Number(offer.requiredFundingAmount) : null;
+  if (funding != null && funding > 0) {
+    rows.push(makeRequirementRow({
+      id: 'req-funding', type: 'deposit', source: 'derived',
+      label: 'Fund account',
+      amount: funding,
+      deadline_days: (offer.daysAfterSignupAllowedBeforeDeposit != null && offer.daysAfterSignupAllowedBeforeDeposit !== '')
+        ? Number(offer.daysAfterSignupAllowedBeforeDeposit) : null,
+      hold_days: (offer.daysFundsMustRemain != null && offer.daysFundsMustRemain !== '')
+        ? Number(offer.daysFundsMustRemain) : null
+    }));
+  }
+
+  // ddRequirement count/frequency spec → a `direct_deposit_count` obligation
+  // (the COUNT/frequency requirement, distinct from the individual scheduled
+  // DD rows below). frequency maps count-mode → 'total', frequency-mode → the
+  // period cadence. Only emitted when a positive count is specified.
+  const ddReq = offer.ddRequirement;
+  if (ddReq) {
+    if (ddReq.mode === 'frequency') {
+      const periods = Number(ddReq.freqPeriods) || null;
+      if (periods && periods > 0) {
+        rows.push(makeRequirementRow({
+          id: 'req-ddreq', type: 'direct_deposit_count', source: 'derived',
+          label: `Direct deposits (${periods}× per ${ddReq.freqEvery || 'month'})`,
+          count: periods,
+          frequency: (ddReq.freqEvery === 'week' || ddReq.freqEvery === '2weeks') ? 'monthly' : 'monthly'
+        }));
+      }
+    } else {
+      const cnt = Number(ddReq.count) || null;
+      if (cnt && cnt > 0) {
+        rows.push(makeRequirementRow({
+          id: 'req-ddreq', type: 'direct_deposit_count', source: 'derived',
+          label: `Direct deposits (${cnt} total)`,
+          count: cnt, frequency: 'total'
+        }));
+      }
+    }
+  }
+
+  // Each scheduled directDeposits[] row → a per-DD `direct_deposit_amt` row,
+  // id reusing the DD's own persisted id (minted by migrateDdIds) so it stays
+  // stable across reorders. deadline_days derived from the DD's plannedDate vs
+  // the sign-up date when both exist.
+  if (Array.isArray(offer.directDeposits)) {
+    const signup = parseDate(offer.plannedSignupDate);
+    for (const dd of offer.directDeposits) {
+      if (!dd || !dd.id) continue; // ids are guaranteed by migrateDdIds on load
+      const amt = (dd.amount != null && dd.amount !== '') ? Number(dd.amount) : null;
+      const planned = parseDate(dd.plannedDate);
+      const deadline = (signup && planned) ? Math.round(daysBetween(signup, planned)) : null;
+      rows.push(makeRequirementRow({
+        id: `req-dd-${dd.id}`, type: 'direct_deposit_amt', source: 'derived',
+        label: 'Direct deposit',
+        amount: amt,
+        deadline_days: (deadline != null && deadline >= 0) ? deadline : null
+      }));
+    }
+  }
+
+  // debitRequirement (when required) → a `debit_txns` obligation. deadline_days
+  // is the relative withinDays (migrateDebitRequirement already converted any
+  // legacy absolute byDate to withinDays).
+  const dr = offer.debitRequirement;
+  if (dr && dr.required) {
+    rows.push(makeRequirementRow({
+      id: 'req-debit', type: 'debit_txns', source: 'derived',
+      label: 'Debit transactions',
+      count: (dr.count != null && dr.count !== '') ? Number(dr.count) : null,
+      deadline_days: (dr.withinDays != null && dr.withinDays !== '') ? Number(dr.withinDays) : null
+    }));
+  }
+
+  return rows;
+}
+
+// Refresh an offer's source:'derived' requirement rows IN PLACE from its
+// current legacy fields — called on load (migration) and on every form save.
+//   • Existing derived row (matched by id) → its derived fields are refreshed
+//     but done/done_date/notes are PRESERVED (a user's "I did this deposit"
+//     survives editing the deposit amount).
+//   • New derived source → row appended.
+//   • Derived row whose legacy source is gone (DD deleted, debit unset, funding
+//     cleared) → removed.
+//   • source:'user' rows are never inspected or modified.
+// Idempotent: unchanged legacy → identical requirements (same ids, same order).
+function syncRequirementsWithLegacy(offer) {
+  if (!offer) return offer;
+  if (!Array.isArray(offer.requirements)) offer.requirements = [];
+
+  const desired = deriveRequirementsFromLegacy(offer);
+  const desiredById = new Map(desired.map(r => [r.id, r]));
+  const desiredIds = new Set(desiredById.keys());
+
+  // Index the offer's EXISTING derived rows by id (to preserve their progress).
+  const existingDerived = new Map();
+  for (const row of offer.requirements) {
+    if (row && row.source === 'derived' && row.id) existingDerived.set(row.id, row);
+  }
+
+  // Rebuild the array: keep user rows untouched (in place), drop derived rows
+  // whose source vanished, refresh-in-place survivors, append new derived rows.
+  const next = [];
+  // 1) user rows first stay wherever they were relative to each other; we keep
+  //    them in their original positions by walking the original array and
+  //    emitting user rows + surviving derived rows in order, then appending any
+  //    brand-new derived rows at the end (deterministic: derive() order).
+  const emittedDerived = new Set();
+  for (const row of offer.requirements) {
+    if (!row) continue;
+    if (row.source === 'user') { next.push(row); continue; }
+    if (row.source === 'derived') {
+      if (!row.id || !desiredIds.has(row.id)) continue; // source gone → drop
+      // Refresh derived fields in place; preserve progress + notes.
+      const d = desiredById.get(row.id);
+      row.type = d.type; row.label = d.label; row.amount = d.amount;
+      row.count = d.count; row.deadline_days = d.deadline_days;
+      row.frequency = d.frequency; row.hold_days = d.hold_days;
+      next.push(row);
+      emittedDerived.add(row.id);
+      continue;
+    }
+    // Unknown source (defensive) — keep as-is so nothing is silently lost.
+    next.push(row);
+  }
+  // 2) Append derived rows that didn't already exist, in derive() order.
+  for (const d of desired) {
+    if (!emittedDerived.has(d.id)) next.push(d);
+  }
+
+  offer.requirements = next;
+  return offer;
+}
+
+// V2 scalar-field defaults (churnability, promoted fees/promo, bonus-post
+// window). Applied once per offer in migrateOffersToSchemaV2 and used as the
+// literal defaults spread into a new offer on save. Kept as a factory so the
+// migration and readOfferForm can't drift.
+function schemaV2Defaults() {
+  return {
+    churnable: null,               // true | false | null (unknown)
+    churn_wait_months: null,       // Number | null
+    churn_anchor: 'bonus_received',// 'bonus_received' | 'account_closed' | 'account_opened'
+    churn_notes: '',
+    bonus_received_date: null,     // ISO | null (anchor date; new — no legacy equiv)
+    closed_date: null,             // ISO | null (anchor date; new — no legacy equiv)
+    monthly_fee: null,             // Number | null
+    fee_waiver_condition: '',
+    promo_code: '',
+    early_termination_fee: null,   // Number | null
+    etf_window_days: null,         // Number | null
+    bonus_post_min_days: null,     // Number | null
+    bonus_post_max_days: null      // Number | null
+  };
+}
+
+// One-time migration to schema v2. Runs in App.init AFTER the legacy
+// per-offer migrations (so derivation reads already-normalized legacy values).
+// Per offer lacking the v2 marker (presence of a `requirements` array):
+//   • seed the new scalar fields (only if absent — never clobber),
+//   • seed requirements:[] and run derivation,
+//   • set last_edited:null (unknown history — we don't fabricate a timestamp).
+// Idempotent: a second run finds `requirements` present and does the always-on
+// derived-row sync only (no scalar re-seed, no last_edited reset). Before the
+// FIRST mutation, snapshots the whole state to localStorage 'yv-backup-pre-v2'
+// (only if that key is absent) for the Settings restore path; a quota failure
+// is logged and must NOT block the app. Does NOT save()/schedulePush — leaves
+// persistence to the next genuine user save (like the other init migrations).
+function migrateOffersToSchemaV2(state) {
+  if (!state || !Array.isArray(state.offers)) return state;
+
+  // Is there any pre-v2 offer? (one lacking the requirements marker) — gate the
+  // backup on real work so we don't snapshot an already-v2 state.
+  const needsMigration = state.offers.some(o => o && !Array.isArray(o.requirements));
+
+  if (needsMigration) {
+    // One-time full-state backup BEFORE the first mutation. Never overwrite an
+    // existing (older, more original) backup. Quota/serialize failure is
+    // degraded-not-fatal: log and continue migrating.
+    try {
+      if (localStorage.getItem('yv-backup-pre-v2') == null) {
+        localStorage.setItem('yv-backup-pre-v2', JSON.stringify(state));
+      }
+    } catch (e) {
+      logError(ErrCode.STORAGE, e, 'migrateOffersToSchemaV2: backup');
+    }
+  }
+
+  for (const o of state.offers) {
+    if (!o) continue;
+    const firstTime = !Array.isArray(o.requirements);
+    if (firstTime) {
+      // Seed scalar defaults without clobbering any that somehow already exist.
+      const defs = schemaV2Defaults();
+      for (const k in defs) { if (!(k in o)) o[k] = defs[k]; }
+      if (!('last_edited' in o)) o.last_edited = null; // unknown history
+      o.requirements = [];
+    }
+    // Always-on: refresh derived rows from current legacy values (idempotent).
+    syncRequirementsWithLegacy(o);
+  }
+  return state;
+}
+
+// True when the one-time pre-v2 backup snapshot exists in localStorage. Gates
+// the Settings "Restore pre-v2 backup" button (rendered only when recoverable).
+function hasPreV2Backup() {
+  try { return localStorage.getItem('yv-backup-pre-v2') != null; }
+  catch (e) { return false; }
+}
+
+// Drop the pre-v2 backup snapshot. Called by the destructive "Clear all data"
+// flow so an erase can't be undone via the restore button (which would otherwise
+// resurrect erased financial data), and after a successful restore consumes it.
+// The next render re-hides the restore button (hasPreV2Backup() → false).
+function clearPreV2Backup() {
+  try { localStorage.removeItem('yv-backup-pre-v2'); }
+  catch (e) { /* nothing to clear / storage unavailable — best effort */ }
+}
+
+// Restore the pre-v2 snapshot as an intentional local change.
+//   • Sync configured → migrate the snapshot to v2 IN MEMORY first (so the
+//     restored state renders coherently), stamp a fresh _lastModified, then hand
+//     it to Sync.restoreState() — the existing "make THIS the truth" path, which
+//     clears lineage (_baseRevision=null) and force-pushes past the CAS so the
+//     restore becomes the new cloud head and CANNOT be silently clobbered by the
+//     next startup pull (the R56 restore guard). No reload needed — restoreState
+//     persists + renders; we migrated before handing off.
+//   • Sync NOT configured → write localStorage directly + reload; the reload's
+//     fresh init re-runs migrateOffersToSchemaV2, cleanly re-migrating the
+//     restored pre-v2 payload (no cloud, so nothing to push).
+// The consumed backup is cleared either way. Returns false (and toasts) on a
+// missing/corrupt backup.
+function restorePreV2Backup() {
+  let raw;
+  try { raw = localStorage.getItem('yv-backup-pre-v2'); }
+  catch (e) { raw = null; }
+  if (raw == null) { toast('No pre-v2 backup found', 'danger'); return false; }
+  let snap;
+  try { snap = JSON.parse(raw); }
+  catch (e) { logError(ErrCode.PARSE, e, 'restorePreV2Backup'); toast('Backup is corrupt — could not restore', 'danger'); return false; }
+
+  if (typeof Sync !== 'undefined' && Sync.isConfigured && Sync.isConfigured()) {
+    // Migrate the pre-v2 snapshot to v2 before it becomes the live/pushed state,
+    // and stamp it as a fresh intentional edit so timestamp comparisons on other
+    // devices also pull it (restoreState's forced push already wins by lineage).
+    App.state = snap;
+    migrateOffersToSchemaV2(App.state);
+    App.state._lastModified = Date.now();
+    clearPreV2Backup();
+    Sync.restoreState(App.state)
+      .then(() => { render(); toast('Restored pre-v2 backup'); })
+      .catch((e) => { logError(ErrCode.SYNC_PUSH, e, 'restorePreV2Backup: restoreState'); toast('Restore saved locally; cloud push failed', 'danger'); });
+    return true;
+  }
+
+  // Unconfigured: direct write + reload (init re-migrates the restored payload).
+  try {
+    App.state = snap;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    clearPreV2Backup();
+  } catch (e) {
+    logError(ErrCode.STORAGE, e, 'restorePreV2Backup: write');
+    toast('Could not write restored data', 'danger');
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 const CONFIDENCE_LABELS = { confirmed: 'Confirmed', likely: 'Likely', uncertain: 'Uncertain' };
 
 /* ============================================================
@@ -2887,6 +3211,10 @@ const Sync = {
 
     const adoptCloud = () => {
       App.state = remote;
+      // Adopted cloud payload may predate schema v2 — migrate before persist/
+      // render so requirements[]/scalars exist (idempotent; the one-time backup
+      // guard means repeat adoptions don't churn yv-backup-pre-v2).
+      migrateOffersToSchemaV2(App.state);
       App.state._baseRevision = cloudHead;
       this.markClean();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
@@ -3009,6 +3337,8 @@ const Sync = {
         // the SAME shared conflict resolver as the push side.
         const adoptRemote = () => {
           App.state = remote;
+          // Cloud payload may predate v2 — migrate before persist/render.
+          migrateOffersToSchemaV2(App.state);
           App.state._baseRevision = cloudHead;
           this.markClean();
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
@@ -3043,6 +3373,8 @@ const Sync = {
         if (remoteModified > 0 && localModified === 0) {
           // Local is fresh / unsaved — pull remote rather than push
           App.state = remote;
+          // Cloud payload may predate v2 — migrate before persist/render.
+          migrateOffersToSchemaV2(App.state);
           App.state._baseRevision = cloudHead;
           this.markClean();
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
@@ -3108,6 +3440,9 @@ const Sync = {
         }
       }
       App.state = remote;
+      // Manually-pulled cloud payload may predate v2 — migrate before persist/
+      // render (idempotent; backup guard prevents churn on repeat pulls).
+      migrateOffersToSchemaV2(App.state);
       // Record the cloud head as our lineage so later CAS pushes compare
       // correctly (manual pull is a pull-adopt path like the others).
       App.state._baseRevision = revisionOf(data);
@@ -3197,6 +3532,8 @@ const Sync = {
           // is the only signal.
           const adoptCloud = () => {
             App.state = remote;
+            // Cloud payload may predate v2 — migrate before persist/render.
+            migrateOffersToSchemaV2(App.state);
             App.state._baseRevision = cloudHead;
             this.markClean();
             try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
@@ -3299,6 +3636,10 @@ const Sync = {
   // _lastModified, so other devices pull it on their next sync).
   async restoreState(state) {
     App.state = state;
+    // A restored cloud-history revision may predate schema v2 — migrate before
+    // it becomes the pushed/rendered truth (idempotent: a caller that already
+    // migrated, e.g. restorePreV2Backup, gets a no-op here).
+    migrateOffersToSchemaV2(App.state);
     // A restore is an explicit "make THIS the truth" action, so clear any
     // inherited lineage and force the push past the CAS check — otherwise a
     // cloud that looks newer could decline the restore itself. The forced
@@ -4208,6 +4549,11 @@ const App = {
         normalizeOfferStatus(o); migrateDdIds(o);
         migrateDebitRequirement(o); reconcileDebitWithinDays(o);
       });
+      // Schema v2: add the requirements[] layer + churn/fee/promo scalar fields
+      // and derive rows from the now-normalized legacy fields. One-time full-
+      // state backup to 'yv-backup-pre-v2' happens inside (before first mutation);
+      // no save/schedulePush here — persistence waits for the next user save.
+      migrateOffersToSchemaV2(this.state);
       // Seed the manifestVersion high-water mark from the loaded state so the
       // feed version never regresses below what a prior session already shipped.
       _manifestHwm = Number(this.state._manifestVersion) || 0;
@@ -6523,6 +6869,7 @@ function renderSettings() {
         </label>
         <button class="btn btn-secondary" data-action="reset-sample">Reset to sample data</button>
         <button class="btn btn-secondary btn-danger" data-action="clear-all">Clear all data</button>
+        ${hasPreV2Backup() ? `<button class="btn btn-outline-danger" data-action="restore-pre-v2">Restore pre-v2 backup</button>` : ''}
       </div>
     </section>
 
@@ -8101,6 +8448,15 @@ function readOfferForm(idArg, isEdit) {
   };
 
   const offer = {
+    // v2 scalar defaults FIRST, then the prior offer over them: unknown / schema-
+    // v2 keys (requirements[], churn/fee/promo, last_edited) on the prior survive
+    // a form save, AND any v2 scalar the prior predates (an offer last written
+    // before v2, e.g. one adopted from an older cloud/import) is backfilled rather
+    // than left undefined. The fixed field reads below overwrite every KNOWN
+    // field, so both spreads are inert for them — minimal-diff, no behavior change
+    // for known fields. requirements[] is filled by syncRequirementsWithLegacy().
+    ...schemaV2Defaults(),
+    ...(prior || {}),
     id: idArg,
     bankName: (data.bankName || '').trim(),
     offerName: (data.offerName || '').trim(),
@@ -8127,9 +8483,15 @@ function readOfferForm(idArg, isEdit) {
     notes: data.notes || '',
     docUrl: data.docUrl || '',
     entityUsed: data.entityUsed || '',
-    emailUsed: data.emailUsed || ''
+    emailUsed: data.emailUsed || '',
+    // Schema v2: stamp the edit time on every save (overwrites any spread-in
+    // prior value). Migrated offers carry last_edited:null until first edited.
+    last_edited: new Date().toISOString()
   };
   normalizeOfferStatus(offer); // sync the legacy shadow status
+  // Schema v2: refresh the derived requirement rows from the freshly-read legacy
+  // fields, preserving done/done_date/notes on surviving rows and any user rows.
+  syncRequirementsWithLegacy(offer);
   return offer;
 }
 
@@ -8681,7 +9043,8 @@ function onClick(e) {
 
     case 'export-json': exportJson(); break;
     case 'reset-sample': if (confirm('Replace your data with sample data?')) { App.state = seedSampleData(App.defaultState()); App.save(); render(); toast('Sample data loaded'); } break;
-    case 'clear-all': if (confirm('Erase ALL data? This cannot be undone.')) { App.state = App.defaultState(); App.save(); render(); toast('All data cleared'); } break;
+    case 'clear-all': if (confirm('Erase ALL data? This cannot be undone.')) { App.state = App.defaultState(); clearPreV2Backup(); App.save(); render(); toast('All data cleared'); } break;
+    case 'restore-pre-v2': if (confirm('Restore the backup taken before the schema-v2 upgrade? This replaces your current data with that snapshot and reloads. Your current data is not separately kept, so export first if unsure.')) { restorePreV2Backup(); } break;
     case 'copy-diag': copyText(diagReportText()).then(() => toast('Diagnostics copied')).catch(() => toast('Could not copy — select the text manually', 'danger')); break;
     case 'clear-diag': clearDiagLog(); render(); toast('Diagnostics cleared'); break;
 
@@ -9083,6 +9446,8 @@ async function saveSyncConfigFromForm() {
       // Adopt the cloud state — this device joins the existing sync. Record
       // the cloud head as our lineage so later CAS pushes compare correctly.
       App.state = remote;
+      // Cloud payload may predate v2 — migrate before persist/render.
+      migrateOffersToSchemaV2(App.state);
       App.state._baseRevision = revisionOf(data);
       Sync.markClean();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(App.state)); } catch {}
@@ -9144,6 +9509,9 @@ function importJsonFile(file) {
       const parsed = JSON.parse(e.target.result);
       if (!parsed.settings || !Array.isArray(parsed.offers)) throw new Error('Invalid shape');
       App.state = parsed;
+      // Imported JSON may be a pre-v2 export — migrate before save/render so the
+      // requirements[] layer + scalars exist (idempotent; a v2 import is a no-op).
+      migrateOffersToSchemaV2(App.state);
       App.save();
       render();
       toast('Imported');
@@ -9188,7 +9556,14 @@ function seedSampleData(state) {
       notes: 'Hold period is 60 days from account open. Funding later shortens the actual lock.',
       docUrl: '',
       entityUsed: 'Collin Rekowski (Ind - SSN)',
-      emailUsed: 'collinrekowski1@gmail.com'
+      emailUsed: 'collinrekowski1@gmail.com',
+      // Schema-v2 churnability example: re-eligible 12 months after the bonus
+      // posts. Intentionally left otherwise legacy-shaped (no requirements[]) so
+      // it still exercises the v2 migration + derivation on load.
+      churnable: true,
+      churn_wait_months: 12,
+      churn_anchor: 'bonus_received',
+      churn_notes: 'US Bank Smartly — reopen allowed 12 months after prior bonus posts.'
     },
     {
       id: uid('off'),
@@ -9308,7 +9683,15 @@ function seedSampleData(state) {
       notes: 'Mostly DD requirement',
       docUrl: '',
       entityUsed: '',
-      emailUsed: ''
+      emailUsed: '',
+      // Schema-v2 promoted-fields example: a monthly service fee waived by a
+      // qualifying DD, plus the enrollment promo code. Left legacy-shaped
+      // otherwise (no requirements[]) so it also exercises v2 migration on load.
+      promo_code: 'PNC400',
+      monthly_fee: 7,
+      fee_waiver_condition: 'Waived with $500+ in monthly direct deposits.',
+      churnable: false,
+      churn_notes: 'PNC Virtual Wallet — one bonus per customer; not churnable.'
     }
   ];
 
