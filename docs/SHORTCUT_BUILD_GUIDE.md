@@ -40,6 +40,35 @@ Documented as destructive with a mandatory confirm. In an unattended 6 AM automa
 | Deletes run silently in background | **Remove Reminders always prompts** — retire items unattended by marking them **complete** (Edit Reminder → Is Completed), demote real deletion to manual F′ |
 | Update path uncertain / may require remove+re-add | **"Edit Reminder" exists** — clean in-place update |
 
+### Finding 9 — Four new `kind` values (v2026.07.08) — no Shortcut changes needed
+
+As of app **v2026.07.08**, the feed's `items[]` can carry four additional `kind`
+values. **The envelope is still `schema: 2` and every item is still the same
+shape — `{ id, kind, title, dueDate, notes }`.** Nothing about how this guide
+reads an item changed: the upsert loop (Section E) pulls `id`, `title`,
+`dueDate`, `notes` by name and never branches on `kind`, so these flow through
+the existing generic handling and land in Reminders exactly like the older kinds.
+**If your Shortcut is already built to this guide, you do NOT need to touch it** —
+new kinds simply appear as new reminders, and each retires via the same
+`removed[]` tombstone loop (Section F) when its condition lapses.
+
+The new kinds, their id patterns, and when each emits:
+
+| `kind` | `id` pattern | Emitted when |
+|---|---|---|
+| `requirement-deadline` | `yv-offer-<offerId>-req-<rowId>` | A **user-added** requirement row (e-statements, promo code, extra spend, …) on a pursued offer has a computable deadline and isn't done yet. Derived rows (funding/DD/debit) do **not** emit this — they already emit `deposit-deadline`/`dd-initiate`/`debit-deadline`, so there's no double-booking. |
+| `expected-bonus-window` | `yv-offer-<offerId>-bonuswindow` | The offer is in the **Waiting** stage (`subStatus` = met-waiting): requirements are met and you're waiting for the bonus to post. `dueDate` is the **late edge** of the expected window, so a reminder fires if the bonus hasn't shown up by then. |
+| `safe-to-close` | `yv-offer-<offerId>-safeclose` | The account is still **open** and at/past requirements-met (earned or met-waiting), and a safe-to-close date is computable (funds released, bonus posted/expected, ETF window + any unmet deadlines cleared). `dueDate` is the earliest date it's safe to close. |
+| `churn-eligible` | `yv-offer-<offerId>-churn` | The offer is marked **churnable**, has a cooling-off period + its anchor date, and its re-eligibility date is within the look-ahead window. `dueDate` is the date you can earn it again. |
+
+**Optional kind-specific filtering (only if you want it):** all four are
+informational except `requirement-deadline`, which is an action item. If you'd
+rather route them — e.g. drop the informational ones into a separate "Yield
+Vector — FYI" list, or skip them entirely — add an **"If" → `kind` is
+`<value>`** check at the top of the upsert loop and branch there. This is purely
+a personal preference; the default all-kinds-in-one-list behavior is correct and
+needs no edit.
+
 ---
 
 # Part 2 — The build guide (one action per step)

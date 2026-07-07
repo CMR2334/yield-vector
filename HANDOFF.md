@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 64)
+## Current state (as of 2026-07-07, Round 66)
 
-- `index.html` ≈ 9,300 lines, single-file PWA. `APP_VERSION` = `2026.07.07a`
+- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08a`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -28,6 +28,16 @@ grows past ~8 entries, keeping the newest 3–4 live.
   changes pending review before commit. No stable- tag yet — owner hasn't
   confirmed-good. Sync guard is bilateral once both devices run ≥ 2026.07.05
   (confirmed on the owner's phone via diagnostics).
+- **Bonusflow run (R66, 2026-07-07):** the overnight orchestrated run (steps
+  2–11 of run `2026-07-07-bonusflow`) shipped schema v2 + migration/backup,
+  the requirements engine, the derived lifecycle pipeline, churnability, the
+  DoC paste-import parser (+ gated v2 URL-import Worker scaffold), offer
+  templates, freshness/sort UI, and an aesthetics sweep — all committed locally
+  (`46c0c49`→`f336a2e`; baseline tag `checkpoint-2026-07-07-pre-bonusflow`).
+  Step 11 (this entry) ran the end-to-end verification battery + docs + version
+  bump; the one issue verification surfaced (inline card status-change didn't
+  stamp `closed_date`) was fixed pre-push via a shared `reconcileClosedDate`
+  helper. See the R66 log entry for the full feature list.
 - **Field-box vertical rhythm (R61):** `.field-box` `gap` 6px (was 2px),
   vertical padding 10px (was 12px) — box height is unchanged for single-line
   fields, but the label now visibly separates from its value instead of
@@ -151,6 +161,63 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate step 11 — verification + docs)
+**Round 66 — Bonusflow run verification, documentation & version bump**
+
+Final step of the overnight `2026-07-07-bonusflow` run (steps 2–10 shipped the
+features locally, `46c0c49`→`f336a2e`; baseline tag
+`checkpoint-2026-07-07-pre-bonusflow`). This step ran the full verification
+battery, wrote the four doc updates, and bumped `APP_VERSION`
+`2026.07.07b` → `2026.07.08a`. No feature code changed here; the only
+`index.html` edit is the version constant (~line 2764).
+
+- **What the run shipped** (verified this step): schema v2 + one-time migration
+  (`migrateOffersToSchemaV2`, derives `requirements[]` from legacy fields,
+  seeds v2 scalars, snapshots `yv-backup-pre-v2`, idempotent) + Settings restore
+  button; the requirements engine (modal rows with per-type money/count inputs,
+  forward+reverse write-through, card checklist with done-toggle + strikethrough
+  + resort, `requirement-deadline` feed kind); the derived 4-stage lifecycle
+  pipeline (`meeting→waiting→earned→closed`) with expected-bonus window +
+  `safeToCloseDate` + `expected-bonus-window`/`safe-to-close` feed kinds and the
+  "mark waiting" auto-suggest; churnability (`churnEligibleDate`, 3 anchors,
+  clamp-safe month math, overview "Upcoming churn dates" section, `churn-eligible`
+  feed kind); DoC paste import v1 (glance parser + preview/confirm, 5 fixtures);
+  gated v2 URL-import Worker scaffold (`cloudflare/`, Settings-gated); offer
+  templates (whitelist strip, searchable picker); freshness chips + 4-mode sort
+  + updated stamp + monthly-fee detail; aesthetics sweep.
+- **Verification results:** `node --check` on the extracted inline JS + on
+  `cloudflare/doc-import-worker.js` both clean. Preview (`yield-vector-static`,
+  4173): console clean on load + across all 5 views. Migration: legacy-shaped
+  state → offers migrated, backup created, second reload byte-identical
+  (double-migrate diff = 0), restore round-trips + re-migrates. Feed contract:
+  envelope EXACTLY `{schema:2, generatedAt, manifestVersion, feedStatus,
+  lastGoodGeneratedAt, items, removed}`, every item EXACTLY `{id,kind,title,
+  dueDate,notes}`, manifestVersion strictly monotonic across 3 computes, kinds ⊆
+  the 9 pre-run + 4 new, each new kind emits only under its documented condition,
+  tombstones appear in `removed` (reason `superseded`) on trigger-removal and
+  clear on re-trigger. `testDocParser` 44/44 across all 5 fixtures; E2E paste
+  fixture 03 → preview → apply → save verified; garbage graceful; >200KB
+  truncation notice present. Churn: 3 anchors + Jan-31/leap/Aug-31 month-end
+  clamp all correct. Templates: both save entry points, dedupe confirm-replace,
+  picker search (incl. no-match), Use→prospect→save, delete→affordance-hides,
+  DoC-checkbox path; saved-template JSON carries ZERO personal keys. Cross-cutting:
+  localStorage keys unchanged except the documented `yv-backup-pre-v2` (docWorker
+  URL/secret ride inside the existing sync-config key, device-local); ZERO
+  external network on load (only same-origin `dd-methods.json`); mobile 380px —
+  every view + the offer modal, no horizontal scroll.
+- **Fixed during verification (do-not-redo context):** the INLINE offer-card
+  "Offer status" dropdown handler (`onChange` `change-status`, ~line 12359)
+  originally set `subStatus` + `accountStatus` + `normalizeOfferStatus` but did
+  NOT stamp/clear `closed_date` the way the modal save path does — so a
+  card-dropdown close left `closed_date` null (undated "Account closed."
+  caption; an `account_closed`-anchored churnable offer couldn't compute
+  eligibility until re-saved via the modal). Fix shipped in this run: the
+  stamp/clear logic was extracted into a shared `reconcileClosedDate(offer,
+  priorAccountStatus)` helper (~line 5529) called by BOTH the modal save path
+  (`readOfferForm`) and the inline handler — do not reintroduce per-path copies;
+  any new status-mutation path must call the same helper. Verified live:
+  dropdown close stamps today, dropdown reopen clears, modal path unchanged.
 
 ### 2026-07-06 — Session J continued (claude-fable-5, planner direct fix)
 **Round 65 — Uppercase-label letterspacing normalized app-wide (owner re-report)**

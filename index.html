@@ -2761,7 +2761,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.07b';
+const APP_VERSION = '2026.07.08a';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -5511,6 +5511,27 @@ function lifecycleCaption(offer) {
         ? `Account closed ${formatDateDisplay(offer.closed_date)}.`
         : 'Account closed.';
     default: return '';
+  }
+}
+
+// Lifecycle (F3): keep offer.closed_date consistent with an account-status
+// transition. SHARED by both status-change paths — the modal save
+// (saveOfferFromForm/readOfferForm) and the inline offer-card "Offer status"
+// dropdown (onChange 'change-status') — so the two can never drift.
+//   • Reopen (prior closed → now open): the closure is void, so CLEAR any stale
+//     closed_date. The churn step anchors on closed_date and must not read a
+//     date from a closure that was undone.
+//   • Close (now closed, non-pre-account): stamp closed_date if empty. Never
+//     overwrites an existing date (a re-save of an already-closed offer keeps
+//     the original close date).
+// Mutates offer in place; no-op for a transition that isn't a close or reopen.
+// `priorAccountStatus` is the offer's accountStatus BEFORE this change.
+function reconcileClosedDate(offer, priorAccountStatus) {
+  if (!offer) return;
+  if (priorAccountStatus === 'closed' && offer.accountStatus === 'open') {
+    offer.closed_date = null;
+  } else if (offer.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(offer.subStatus) && !offer.closed_date) {
+    offer.closed_date = isoDate(TODAY);
   }
 }
 
@@ -11626,17 +11647,11 @@ function readOfferForm(idArg, isEdit) {
   normalizeOfferStatus(offer); // sync the legacy shadow status
   // Lifecycle (F3): keep closed_date consistent with the account state on the
   // save path (no migration needed — this fires on the status change itself).
-  //   • Reopen (prior closed → now open): the closure is void, so CLEAR any
-  //     stale closed_date. The churn step anchors on closed_date and must not
-  //     read a date from a closure that was undone.
-  //   • Close (now closed, non-pre-account): stamp closed_date if empty. Never
-  //     overwrites an existing date (a re-save of an already-closed offer keeps
-  //     the original close date).
-  if (prior && prior.accountStatus === 'closed' && offer.accountStatus === 'open') {
-    offer.closed_date = null;
-  } else if (offer.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(offer.subStatus) && !offer.closed_date) {
-    offer.closed_date = isoDate(TODAY);
-  }
+  // Shared with the inline 'change-status' handler via reconcileClosedDate so
+  // the close/reopen semantics can't drift. `prior` is undefined for a NEW
+  // offer → the reopen branch can't fire, and a brand-new closed offer still
+  // stamps (matches the pre-helper behavior exactly).
+  reconcileClosedDate(offer, prior && prior.accountStatus);
   // Schema v2 (step 3): assemble requirements[] before the derived sync.
   //   • User rows come from the modal's hidden #f-user-reqs payload — that's
   //     the authoritative latest state of every user-added/edited row (their
@@ -12347,6 +12362,7 @@ function onChange(e) {
     App.update(s => {
       const o = s.offers.find(x => x.id === id);
       if (o) {
+        const priorAccount = o.accountStatus; // capture BEFORE the flip
         o.subStatus = newSub;
         // Auto-set account status from the offer status, BOTH directions
         // (open for approved/on-track/met-waiting/earned/didnt-track;
@@ -12354,6 +12370,12 @@ function onChange(e) {
         // classifier, matching the modal's live auto-open/auto-close.
         o.accountStatus = defaultAccountForSub(newSub);
         normalizeOfferStatus(o);
+        // Lifecycle (F3): stamp/clear closed_date on the close/reopen transition,
+        // via the SAME helper the modal save path uses (reconcileClosedDate) so
+        // the two never drift. Without this, closing an offer from the card left
+        // closed_date null → no dated caption + an account_closed-anchored
+        // churnable offer couldn't compute eligibility until re-saved in the modal.
+        reconcileClosedDate(o, priorAccount);
       }
     });
     return;

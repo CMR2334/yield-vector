@@ -10,9 +10,14 @@ A single-file PWA for planning and tracking bank account opening bonuses (credit
 ## What it does
 
 - **Offer tracking** — add bonus offers with their funding requirements, hold periods, and expiration dates
+- **Requirements checklist** — per-offer requirement rows (spend, deposits, transactions, e-statements, promo codes, …) with computed deadlines that track the sign-up date; check them off on the card as you complete them
+- **Lifecycle pipeline** — each open offer shows a Meeting → Waiting → Earned → Closed strip with an expected-bonus window and a "safe to close" date derived from its requirements and hold period
+- **Churn tracking** — mark an offer churnable, set a cooling-off period, and see when you can earn it again; upcoming re-eligibility dates roll up on the Overview
 - **Cash flow projection** — day-by-day chart showing available capital, tied-up capital, and buffer floor
 - **Timeline view** — horizontal bar chart of all active commitments, color-coded by status
 - **Optimizer** — finds feasible bonus sequences within your capital budget (requires zero shortfall days)
+- **DoC import** — paste a Doctor of Credit post to auto-fill an offer for your review; an optional self-hosted Worker adds URL import (see below)
+- **Offer templates** — save an offer's terms (personal dates/notes stripped) as a reusable template and start new offers from it
 - **Cloud sync** — state synced via GitHub Gist; last-writer-wins conflict resolution
 - **iOS Reminders** — structured `_feed` on every Gist push; Apple Shortcut syncs deadlines to Reminders.app
 - **PWA** — installable on iPhone/Mac, works offline
@@ -107,7 +112,7 @@ When working from a Claude Code worktree, `cd` to the main repo path first so th
 ## Pending items
 
 - **iOS Reminders Shortcut** — the JSON feed is fully wired and stamped on every Gist push. The Shortcut must be built once on-device (~15 min); follow [SHORTCUT_SETUP.md](SHORTCUT_SETUP.md).
-- **DoC URL ingestion** — paste a Doctor of Credit URL to auto-fill an offer card. Requires either a small backend or client-side LLM extraction (Haiku ~$0.01/offer). See Round 4 in [HANDOFF.md](HANDOFF.md) for the options analysis.
+- **DoC URL import (opt-in)** — pasting a Doctor of Credit post already works client-side with no setup. To also import straight from a URL, deploy the small Cloudflare Worker and paste its URL into Settings; the fetch UI stays hidden until then. Setup and cost notes: [cloudflare/README.md](cloudflare/README.md).
 
 ---
 
