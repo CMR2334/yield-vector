@@ -54,6 +54,15 @@ function ddWindowEndDate(offer) {
 // THE ONE SHARED ITEM BUILDER. Pure (no state mutation) so the render-time
 // list/count callers can invoke it freely; the feed layers tombstones and
 // manifestVersion on top.
+// Normalize a date value to its YYYY-MM-DD prefix ONLY when it validates as an
+// ISO date shape. Regex-only by design (matches the feed's original guard —
+// deliberately NOT parseDate, which would accept/normalize looser inputs).
+// Returns the 10-char date string, or null when the shape doesn't validate.
+function isoDateOnly(v) {
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
 function buildReminderItems(state) {
   const items = [];
   const nm = (o) => `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
@@ -83,8 +92,8 @@ function buildReminderItems(state) {
     // applied (once confirmed the deadline no longer matters). Work items and
     // withdrawal below keep the stricter committed/capital-live gates.
     if (o.offerExpirationDate && !CONFIRMED_OFFER_STATUSES.has(o.status)) {
-      const due = o.offerExpirationDate.slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+      const due = isoDateOnly(o.offerExpirationDate);
+      if (due) items.push({
         id: `yv-offer-${o.id}-expires`,
         ownerId: o.id, kind: 'offer-expires', dueDate: due, isWork: false,
         title: `${name} — offer expires`,
@@ -110,8 +119,8 @@ function buildReminderItems(state) {
     const fundsLump = o.offerType !== 'direct-deposit';
     const dd = fundsLump ? depositDeadline(o) : null;
     if (dd && committed) {
-      const due = dd.slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+      const due = isoDateOnly(dd);
+      if (due) items.push({
         id: `yv-offer-${o.id}-deposit`,
         ownerId: o.id, kind: 'deposit-deadline', dueDate: due, isWork: true,
         title: `${name} — fund ${formatCompactCurrency(o.requiredFundingAmount)}`,
@@ -128,8 +137,8 @@ function buildReminderItems(state) {
     if (committed && (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd')) {
       for (const dep of (o.directDeposits || [])) {
         if (!dep || !dep.id || !dep.plannedDate) continue;
-        const due = String(dep.plannedDate).slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+        const due = isoDateOnly(dep.plannedDate);
+        if (!due) continue;
         items.push({
           id: `yv-${o.id}-dd-${dep.id}`,
           ownerId: o.id, kind: 'dd-initiate', dueDate: due, isWork: true,
@@ -145,8 +154,8 @@ function buildReminderItems(state) {
       // themselves, so isWork:false.
       const winEnd = ddWindowEndDate(o);
       if (winEnd) {
-        const due = winEnd.slice(0, 10);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+        const due = isoDateOnly(winEnd);
+        if (due) items.push({
           id: `yv-offer-${o.id}-dd-window`,
           ownerId: o.id, kind: 'dd-window-end', dueDate: due, isWork: false,
           title: `${name} — all DDs complete by`,
@@ -163,8 +172,8 @@ function buildReminderItems(state) {
     // so it emits nothing until a sign-up date AND a day-count both exist.
     const debitDue = committed ? debitDeadlineISO(o) : '';
     if (debitDue) {
-      const due = String(debitDue).slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      const due = isoDateOnly(debitDue);
+      if (due) {
         const cnt = Number(o.debitRequirement.count) || 0;
         items.push({
           id: `yv-offer-${o.id}-debit`,
@@ -200,8 +209,8 @@ function buildReminderItems(state) {
         // on `done`), so a completed requirement tombstones exactly as before.
         const dlISO = requirementDeadlineISO(o, r);
         if (!dlISO) continue;
-        const due = dlISO.slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+        const due = isoDateOnly(dlISO);
+        if (!due) continue;
         const label = requirementDisplayLabel(r);
         const summary = requirementSummary(r);
         items.push({
@@ -225,8 +234,8 @@ function buildReminderItems(state) {
     // have no live account to release from).
     const we = withdrawalEligibleDate(o);
     if (we && capitalLive) {
-      const due = we.slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+      const due = isoDateOnly(we);
+      if (due) items.push({
         id: `yv-offer-${o.id}-withdraw`,
         ownerId: o.id, kind: 'withdrawal', dueDate: due, isWork: false,
         title: `${name} — withdraw ${formatCompactCurrency(o.requiredFundingAmount)}`,
@@ -245,8 +254,8 @@ function buildReminderItems(state) {
     if (lifecycleStage(o) === 'waiting') {
       const win = expectedBonusWindow(o);
       if (win && win.endISO) {
-        const due = win.endISO.slice(0, 10);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+        const due = isoDateOnly(win.endISO);
+        if (due) items.push({
           id: `yv-offer-${o.id}-bonuswindow`,
           ownerId: o.id, kind: 'expected-bonus-window', dueDate: due, isWork: false,
           title: `${name} — bonus expected by`,
@@ -268,8 +277,8 @@ function buildReminderItems(state) {
     if (o.accountStatus === 'open' && (o.subStatus === 'earned' || o.subStatus === 'met-waiting')) {
       const stc = safeToCloseDate(o);
       if (stc) {
-        const due = stc.slice(0, 10);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(due)) items.push({
+        const due = isoDateOnly(stc);
+        if (due) items.push({
           id: `yv-offer-${o.id}-safeclose`,
           ownerId: o.id, kind: 'safe-to-close', dueDate: due, isWork: false,
           title: `${name} — safe to close`,
@@ -302,8 +311,8 @@ function buildReminderItems(state) {
     if (!elig) continue;
     const daysOut = daysBetween(TODAY, parseDate(elig));
     if (daysOut > CHURN_FEED_LOOKAHEAD_DAYS || daysOut < -CHURN_FEED_PAST_GRACE_DAYS) continue;
-    const due = elig.slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+    const due = isoDateOnly(elig);
+    if (!due) continue;
     const name = nm(o);
     const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
     const months = Number(o.churn_wait_months);
@@ -322,8 +331,8 @@ function buildReminderItems(state) {
     if (!c.id) continue;
     if (c.status === 'cancelled' || c.status === 'completed') continue;
     if (!c.endDate) continue;
-    const due = String(c.endDate).slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) continue;
+    const due = isoDateOnly(c.endDate);
+    if (!due) continue;
     items.push({
       id: `yv-cmt-${c.id}-end`,
       ownerId: c.id, kind: 'commitment-end', dueDate: due, isWork: false,
