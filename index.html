@@ -2855,13 +2855,30 @@ table.data-table {
 </div>
 
 <script type="module">
-/* --- module imports (run 2026-07-08-module-split-efficiency step 3 P2) --- */
+/* --- module imports (run 2026-07-08-module-split-efficiency step 3 P3) --- */
+/* Named imports consumed by the bootstrap exposure + init below. */
 import { parseDocPost } from './js/doc-parser.js';
 import { App } from './js/app-state.js';
 import { Sync } from './js/sync-pwa.js';
 import { render } from './js/render-shell-overview.js';
 import { showOfferModal } from './js/modals-forms.js';
 import { testDocParser, testDocParserRegressions } from './js/doc-import-templates.js';
+/* Side-effect imports — directly root the remaining 11 modules so the full
+   17-module graph is fetched from the HTML entry (not only transitively),
+   keeping the service-worker precache and the offline module set in lockstep
+   with the import map. Module top levels are pure declarations (design §4),
+   so evaluation order is behaviour-neutral. */
+import './js/runtime-status.js';
+import './js/requirements-templates.js';
+import './js/migrations-catalogs.js';
+import './js/date-format-core.js';
+import './js/dd-widgets.js';
+import './js/offer-model.js';
+import './js/projection-optimizer.js';
+import './js/reminders.js';
+import './js/render-main-views.js';
+import './js/ui-utils.js';
+import './js/events-actions-data.js';
 /* --- end module imports --- */
 /* ============================================================
    BOOTSTRAP EXPOSURE — console + verification harness only
@@ -2886,6 +2903,27 @@ window.addEventListener('DOMContentLoaded', () => App.init());
 document.addEventListener('click', (e) => {
   if (e.target && e.target.id === 'fab-add') showOfferModal();
 });
+
+/* ============================================================
+   SERVICE WORKER (Path B — offline capability; design §1 + contract §5d)
+   Registers ./sw.js, which precaches index.html + all 17 versioned module
+   URLs and serves them network-first with a cache fallback, so an offline
+   reload boots the split app from Cache Storage. On controllerchange a
+   freshly-activated worker takes over: reload ONCE (once-flag guards against
+   reload loops) so the page never runs under a stale controller — the iOS
+   standalone-PWA case. Registration failures are swallowed (no console noise).
+   ============================================================ */
+if ('serviceWorker' in navigator) {
+  let _swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swReloaded) return;          // once-flag: never loop reloads
+    _swReloaded = true;
+    location.reload();
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 
 </script>
 </body>
