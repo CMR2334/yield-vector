@@ -1,10 +1,14 @@
 # DoC import fixtures — synthetic sample posts
 
-These five files are **synthesized** test inputs for the Phase 6 deterministic
+These **seven** files are **synthesized** test inputs for the deterministic
 "glance parser" (`parseDocPost` in `index.html`). They exercise the parser's
 glance-list extraction, recency reconciliation, churn-hint detection, and all
 eight corpus quirks identified in the assessment
-(`docs/assessments/2026-07-05/report.md`, Part I).
+(`docs/assessments/2026-07-05/report.md`, Part I). Files `06`–`07` were added in
+the step-4a parser-calibration run to cover the two failure classes a real
+31-post corpus surfaced: **tier ladders** (P1) and **delta-update staleness**
+(P2). Their expectations are asserted in-app by `testDocParser` (keys `'06'`,
+`'07'`) alongside `01`–`05`.
 
 ## Provenance
 
@@ -14,7 +18,7 @@ eight corpus quirks identified in the assessment
   stale glance values.
 - **Content is entirely invented.** Every bank, dollar amount, date, promo code,
   and requirement is fictional (banks like "Meridian Trust Bank", "Cascade
-  Financial", "Harbor National Bank", "Relayline Business Banking", "Summit
+  Commerce Bank", "Granite Peak Bank", "Relayline Business Banking", "Summit
   Brokerage"). **No text is copied from any real Doctor of Credit post.** These
   exist only to give the parser a deterministic, self-contained target — they are
   not a redistribution of DoC content.
@@ -31,6 +35,8 @@ eight corpus quirks identified in the assessment
 | `03-dual-bonus-updates.html` | HTML | **Quirk 3** combined dual-bonus total; **quirk 4** `<del>` strikethrough; **quirk 5+7** unsorted `Update` paragraphs (latest date wins), extended expiration |
 | `04-business-debit-promo.html` | HTML | **Quirk 6** fuzzy labels ("Direct deposit needed", "Bonus code"); **quirk 8** fintech post omits ChexSystems + leads with a non-dated status line; debit txns; fee waiver |
 | `05-brokerage-tiers-churn.txt` | plain text | Text (non-HTML) path; churn re-run window + account-closed anchor; spend + transactions → user rows; funding + hold; **`$50k` thousands shorthand** and a **weeks** bonus-posting window (×7) |
+| `06-tiered-ladder.html` | HTML | **P1** deposit-tier ladder (4 bullet tiers → top-level `tiers[]`; ≥2 tiers force `signupBonusAmount` to **low** confidence + `note_tiered`); **P0** "Credit card funding" row → `cc_funding_note`, never `requiredFundingAmount`; tier-derived funding = lowest deposit tier |
+| `07-delta-updates.html` | HTML | **P2** date-segmented delta reconciliation (newest `Update 5/20/26` **lowers** the bonus 350→250, **extends** expiration to 9/30/26, and changes the promo code to SUMMER250 — each supersedes the stale glance box **and** an older 2/2/26 update); **P4** "Yes, no minimum mentioned" ⇒ `ddRequired: true`; **P4** "through July 7, 2026" not read as a `$2026` bonus |
 
 ### The eight quirks → where each is exercised
 
@@ -128,10 +134,50 @@ range it keeps the high end and attaches a "Range …" note.
 | spendAmount | 2000 (→ user row, type `spend`) | M |
 | transactionsCount | 3 (→ user row, type `transactions`) | M |
 
+### 06-tiered-ladder.html  *(step-4a P1 — tier ladder)*
+Deposit ladder: `$500 @ $10k · $900 @ $25k · $1,500 @ $75k · $3,000 @ $250k`.
+| Key | Value | Conf |
+|-----|-------|------|
+| signupBonusAmount | 3000 (glance "up to $3,000" headline) | **L** (forced low — tiered) |
+| _tiers *(meta: `res.tiers.length`)* | 4 | — |
+| requiredFundingAmount | 10000 (lowest deposit tier) | M |
+| ddRequired | false | H |
+| offerExpirationDate | 2026-12-31 | H |
+| early_termination_fee | 0 | H |
+| cc_funding_note | "Card funding … up to $500" (→ note, **not** funding) | M |
+
+The top-level `tiers[]` array is returned **alongside** `fields` (never inside
+it) and is **not** rendered as preview rows this step — step 4b owns the tier
+picker. `signupBonusAmount` is forced to low confidence (default-unchecked) so a
+tiered headline is never auto-applied.
+
+### 07-delta-updates.html  *(step-4a P2 — delta staleness)*
+Two prepended updates (unsorted); the newest (5/20/26) supersedes the stale
+glance box **and** the older 2/2/26 update on three fields.
+| Key | Value | Conf |
+|-----|-------|------|
+| signupBonusAmount | 250 (newest update lowered it from 350) | — (reconciled) |
+| offerExpirationDate | 2026-09-30 (newest update; beats glance 1/31/26 + older 7/7/26 update) | M (reconciled) |
+| promo_code | SUMMER250 (newest update; supersedes WINTER350) | M (reconciled) |
+| ddRequired | true (P4: "Yes, no minimum mentioned" not flipped to false) | H |
+| monthly_fee | 12 (first `$`, not the $1,000 card-funding cap) | H |
+| early_termination_fee | 30 | H |
+| etf_window_days | 180 | M |
+| daysAfterSignupAllowedBeforeDeposit | 90 | M |
+| cc_funding_note | "Card funding … up to $1,000" (→ note) | M |
+| churnable | true | M |
+| churn_wait_months | 12 | M |
+
+P4 year-as-money guard: the older update's "Extended until July 7, 2026" is a
+date, so `2026` is **never** read as a `$2,026` bonus.
+
 ## Regression testing
 
 A dev-only console hook `testDocParser(rawText, fixtureKey)` lives in
 `index.html`. Paste a fixture's text and call e.g. `testDocParser(<text>, '03')`
 — it asserts the extracted fields against a compact embedded expected map and
 prints pass/fail counts. `fixtureKey` is the leading number of the filename
-(`'01'`…`'05'`). It performs no network or file IO.
+(`'01'`…`'07'`). It performs no network or file IO. Keys prefixed with `_` in the
+expected map (e.g. `_tiers`, `_signupBonusConfidence`) are **meta-assertions** on
+the result *shape* (`res.tiers.length`, the headline bonus's forced confidence),
+not `fields.<key>` lookups.
