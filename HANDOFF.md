@@ -19,7 +19,23 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ## Current state (as of 2026-07-08, Round 70)
 
-- **R70 (working-tree, uncommitted):** removed the Overview "At a glance" panel and added
+- **R71 (handoff, nothing new on disk beyond docs):** the module-split run is PARKED at its
+  plan gate awaiting a fresh session. Authoritative handoff (mission, exact phase, amended
+  contract, first action, verify commands) = the **FRESH-SESSION HANDOFF** section at the top of
+  `.claude/orchestrator/runs/2026-07-08-module-split-efficiency.md` — read that before anything.
+  Key facts: v2026.07.08e committed+pushed = `447c57f`; fixtures 67/67 + pins 20/20 green;
+  Codex audit step done → 17-module map in `docs/assessments/2026-07-08-module-split-design.md`
+  (untracked; amendment COMPLETE — 522-line contract, P0→leaves→atomic-SCC→shell, one
+  sanctioned setter `seedManifestHwm`); offline decision = Path B
+  minimal network-first SW; plan gate caught 2 P1 bootability issues (cross-module `_manifestHwm`
+  rebind; DOM/state SCC needs one atomic phase); NO heartbeat/auto-resume exists (cron cancelled
+  by owner) — continuation requires a manual nudge. ZERO module code written yet.
+  **RESUMED 07-08 ~09:2x (fresh session):** amendment independently verified (marker grep = 8;
+  P0→P1→P2→P3 table confirmed), baseline green (syntax OK, fidelity 67/67, pins 20/20),
+  split-contract commit + tag `checkpoint-2026-07-08-pre-modules` pushed, step-3 P0 dispatched
+  to the executor. Codex outage root-cause corrected: 5h usage window at 0% (not credits),
+  reset ≈09:52 — review-after routes through Codex again.
+- **R70 (committed+pushed `447c57f`):** removed the Overview "At a glance" panel and added
   per-action completion on the Upcoming-actions list — a quiet done control per row,
   `state.action_done` map (+ requirement-row write-through), completed items linger greyed
   7 days then drop, feed excludes+tombstones completed actions (Shortcut auto-completes the
@@ -30,7 +46,7 @@ grows past ~8 entries, keeping the newest 3–4 live.
   capFirst-except-promo, tier-radio centering, card-foot link stacked below the Updated stamp).
   `APP_VERSION` → `2026.07.08e`. See the R70 log entry. **Owner action:** redeploy the Cloudflare
   Worker to unlock the higher-quality title fill (old worker still works via the slug fallback).
-- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08e`
+- `index.html` ≈ 15,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08e`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -187,6 +203,21 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-08 — Session (claude-fable-5 planner, handoff round)
+**Round 71 — Module-split run parked; durable handoff written**
+- No app code changed this round. Wrote the FRESH-SESSION HANDOFF section (12 points:
+  mission, exact phase, done/not-done, amended split contract, first action, read-first /
+  avoid lists, verify commands, git state, audit-output locations, no-heartbeat warning)
+  into `.claude/orchestrator/runs/2026-07-08-module-split-efficiency.md` — that section
+  is the single entry point for whoever picks this up.
+- Why: owner requested a clean stop before implementation; heartbeat cron cancelled, so
+  a cutoff mid-split would otherwise strand undocumented in-flight state.
+- Do-not-redo: the plan-gate P1s are REAL (imported-binding reassignment SyntaxError;
+  SCC has no valid incremental extraction order) — do not attempt the original P4–P8
+  phase table; the atomic-SCC restructure in the handoff §5 is the binding contract.
+- Pending follow-ups: verify the design-doc amendment landed (handoff §6), owner Worker
+  redeploy, Codex credits, then step-3 execution.
 
 ### 2026-07-08 — Session (opus-4-8[1m], /orchestrate executor — action tracking)
 **Round 70 — Remove "At a glance"; add per-action completion + feed/reverse-channel wiring; chart-legend 2-col grid; tier ROI chips; DoC URL-importer live-test fixes (title fill, hold anchor, waiver bullets, capFirst, tier-radio, card-foot); v2026.07.08e**
