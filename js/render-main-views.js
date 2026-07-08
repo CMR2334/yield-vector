@@ -1,5 +1,5 @@
 import { App } from './app-state.js';
-import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrency, formatCurrency, formatDateDisplay, formatDateLong, formatDateMedium, formatDateShort, formatMoneyInput, formatDollarInput, formatPercent, isoDate, parseDate, startOfDay } from './date-format-core.js';
+import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrency, formatCurrency, formatDateDisplay, formatDateLong, formatDateMedium, formatDateShort, formatLocalDateTime, formatMoneyInput, formatDollarInput, formatPercent, isoDate, parseDate, startOfDay } from './date-format-core.js';
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
@@ -1096,7 +1096,7 @@ function renderDiagnostics() {
 }
 
 function formatDiagTime(iso) {
-  try { const d = new Date(iso); return d.toLocaleString(); } catch { return iso || ''; }
+  return formatLocalDateTime(iso, { guard: false, fallback: iso || '' });
 }
 
 /* Plain-text report for the clipboard — version + environment header, then
@@ -1204,12 +1204,8 @@ function renderEventsTable() {
 function renderSyncSection() {
   const cfg = Sync.getConfig() || {};
   const configured = Sync.isConfigured();
-  const lastSyncText = Sync.lastSyncAt
-    ? new Date(Sync.lastSyncAt).toLocaleString()
-    : '—';
-  const stateMod = App.state && App.state._lastModified
-    ? new Date(App.state._lastModified).toLocaleString()
-    : '—';
+  const lastSyncText = formatLocalDateTime(Sync.lastSyncAt);
+  const stateMod = formatLocalDateTime(App.state && App.state._lastModified);
   const statusColor = {
     synced: 'var(--success)',
     syncing: 'var(--warning)',

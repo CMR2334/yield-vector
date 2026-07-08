@@ -244,6 +244,20 @@ function relativeDays(d) {
   return `${-n} days ago`;
 }
 
+// Local-timezone date-time display, unifying the `new Date(v).toLocaleString()`
+// idiom (diagnostics timestamp, sync "last synced" / "state modified", and the
+// sync-history revision rows). `fallback` is what an absent value shows. `guard`
+// (on by default) short-circuits a falsy `v` to `fallback` BEFORE constructing a
+// Date — the sync displays historically pre-checked truthiness (falsy → '—').
+// The diagnostics timestamp passes guard:false so a falsy value keeps its
+// original native output (e.g. `new Date('')` → "Invalid Date") instead of the
+// fallback, exactly as its prior try/catch-only form did; the catch stays the
+// safety net it always was (toLocaleString does not throw for valid input).
+function formatLocalDateTime(v, { fallback = '—', guard = true } = {}) {
+  if (guard && !v) return fallback;
+  try { return new Date(v).toLocaleString(); } catch { return fallback; }
+}
+
 /* ============================================================
    CURRENCY FORMATTING
    ============================================================ */
@@ -377,4 +391,4 @@ function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, _isoFromYMD, formatMoneyInput, formatDollarInput, parseMoneyInput, uid };
+export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatLocalDateTime, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, _isoFromYMD, formatMoneyInput, formatDollarInput, parseMoneyInput, uid };

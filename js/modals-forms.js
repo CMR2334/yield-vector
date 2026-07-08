@@ -1,5 +1,5 @@
 import { App } from './app-state.js';
-import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, formatMoneyInput, isUsBankHoliday, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
+import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, formatLocalDateTime, formatMoneyInput, isUsBankHoliday, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
 import { _docUserChecks, docImportUpdateApplyCount, docTierSelect, filterTemplateList, renderTemplatePicker } from './doc-import-templates.js';
 import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
@@ -1686,7 +1686,7 @@ async function showSyncHistoryModal() {
         ${rows.map((r, idx) => `
           <div class="sync-hist-row">
             <div class="sync-hist-meta">
-              <div class="sync-hist-when">${r.when ? new Date(r.when).toLocaleString() : '—'}${idx === 0 ? ' <span class="chip chip-muted" style="margin-left:6px;">current</span>' : ''}</div>
+              <div class="sync-hist-when">${formatLocalDateTime(r.when)}${idx === 0 ? ' <span class="chip chip-muted" style="margin-left:6px;">current</span>' : ''}</div>
               <div class="sync-hist-counts">${r.ok ? `${r.offers} offer${r.offers === 1 ? '' : 's'} · ${r.commits} commitment${r.commits === 1 ? '' : 's'} · ${r.events} event${r.events === 1 ? '' : 's'}` : 'could not read this revision'}</div>
             </div>
             ${r.ok ? `<button class="btn btn-secondary btn-sm" data-action="sync-restore" data-version="${r.version}">Restore</button>` : ''}
