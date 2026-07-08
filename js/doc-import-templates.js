@@ -1,5 +1,5 @@
 import { App } from './app-state.js';
-import { formatCompactCurrency, formatDateDisplay, formatDateMedium, formatMoneyInput, parseMoneyInput, uid } from './date-format-core.js';
+import { formatCompactCurrency, formatDateDisplay, formatDateMedium, formatMoneyInput, formatDollarInput, parseMoneyInput, uid } from './date-format-core.js';
 import { parseDocPost } from './doc-parser.js';
 import { generateDdDatesFromRequirement, readUserReqsFromForm, refreshLifecycleStrip, refreshRequirementsSection, showOfferModal, writeUserReqsToForm } from './modals-forms.js';
 import { displayOfferName, makeRequirementRow, requirementSummary, templateToOffer } from './requirements-templates.js';
@@ -63,7 +63,7 @@ function _docSetInput(sel, value, kind) {
 function _docCurrentInput(sel, kind) {
   const el = _docEl(sel);
   if (!el || el.value == null || String(el.value).trim() === '') return '';
-  if (kind === 'money') { const n = parseMoneyInput(el.value); return n == null ? '' : '$' + formatMoneyInput(n); }
+  if (kind === 'money') { const n = parseMoneyInput(el.value); return formatDollarInput(n, { fallback: '' }); }
   return String(el.value).trim();
 }
 // Add (or update) a user requirement row of `type` with amount/count into the
@@ -115,7 +115,7 @@ function _docWireDdModel() {
 const DOC_FIELD_MAP = [
   { key: 'bankName', label: 'Bank name', format: v => v, current: () => _docCurrentInput('#f-bank'), apply: v => _docSetInput('#f-bank', v) },
   { key: 'offerName', label: 'Offer name', format: v => v, current: () => _docCurrentInput('#f-offer'), apply: v => _docSetInput('#f-offer', v) },
-  { key: 'signupBonusAmount', label: 'Bonus amount', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-bonus', 'money'), apply: v => _docSetInput('#f-bonus', v, 'money') },
+  { key: 'signupBonusAmount', label: 'Bonus amount', format: v => formatDollarInput(v), current: () => _docCurrentInput('#f-bonus', 'money'), apply: v => _docSetInput('#f-bonus', v, 'money') },
   { key: 'offerExpirationDate', label: 'Expiration date', format: v => formatDateDisplay(v), current: () => _docCurrentInput('#f-expires'), apply: v => _docSetInput('#f-expires', v, 'date') },
   { key: 'ddRequired', label: 'Direct deposit required', format: v => v ? 'Yes' : 'No',
     current: () => { const t = (( _docForm() || {}).querySelector ? _docForm().querySelector('[name="offerType"]:checked') : null); return t ? ({ 'new-funds-held': 'New funds held', 'direct-deposit': 'Direct deposit', 'held-and-dd': 'Held + DD' }[t.value] || '') : ''; },
@@ -126,7 +126,7 @@ const DOC_FIELD_MAP = [
       const cur = (_docEl('[name="offerType"]:checked') || {}).value;
       if (cur === 'new-funds-held') { const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }
     } },
-  { key: 'requiredFundingAmount', label: 'Funding amount', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-funding', 'money'), apply: v => _docSetInput('#f-funding', v, 'money') },
+  { key: 'requiredFundingAmount', label: 'Funding amount', format: v => formatDollarInput(v), current: () => _docCurrentInput('#f-funding', 'money'), apply: v => _docSetInput('#f-funding', v, 'money') },
   { key: 'daysAfterSignupAllowedBeforeDeposit', label: 'Deposit/DD window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-deposit'), apply: v => _docSetInput('#f-days-deposit', v) },
   { key: 'daysFundsMustRemain', label: 'Hold period (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-remain'), apply: v => _docSetInput('#f-days-remain', v) },
   // Hold ANCHOR (R70). Only emitted by the parser for an opening-anchored day-span
@@ -139,9 +139,9 @@ const DOC_FIELD_MAP = [
     current: () => { const y = _docEl('#debit-yes'); return (y && y.checked) ? _docCurrentInput('#f-debit-count') : ''; },
     apply: v => { const y = _docEl('#debit-yes'); if (y) { y.checked = true; y.dispatchEvent(new Event('change', { bubbles: true })); } _docSetInput('#f-debit-count', v); } },
   { key: 'debitWithinDays', label: 'Debit window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-debit-within'), apply: v => _docSetInput('#f-debit-within', v) },
-  { key: 'monthly_fee', label: 'Monthly fee', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-monthly-fee', 'money'), apply: v => _docSetInput('#f-monthly-fee', v, 'money') },
+  { key: 'monthly_fee', label: 'Monthly fee', format: v => formatDollarInput(v), current: () => _docCurrentInput('#f-monthly-fee', 'money'), apply: v => _docSetInput('#f-monthly-fee', v, 'money') },
   { key: 'fee_waiver_condition', label: 'Fee waiver condition', format: v => v, current: () => _docCurrentInput('#f-fee-waiver'), apply: v => _docSetInput('#f-fee-waiver', v) },
-  { key: 'early_termination_fee', label: 'Early termination fee', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-etf', 'money'), apply: v => _docSetInput('#f-etf', v, 'money') },
+  { key: 'early_termination_fee', label: 'Early termination fee', format: v => formatDollarInput(v), current: () => _docCurrentInput('#f-etf', 'money'), apply: v => _docSetInput('#f-etf', v, 'money') },
   { key: 'etf_window_days', label: 'ETF window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-etf-window'), apply: v => _docSetInput('#f-etf-window', v) },
   { key: 'promo_code', label: 'Promo code', format: v => v, current: () => _docCurrentInput('#f-promo-code'), apply: v => _docSetInput('#f-promo-code', v) },
   { key: 'bonus_post_min_days', label: 'Bonus posting min (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-bonus-post-min'), apply: v => _docSetInput('#f-bonus-post-min', v) },
@@ -165,7 +165,7 @@ const DOC_FIELD_MAP = [
   { key: 'bonus_posting_notes', label: 'Bonus posting (→ notes)', format: v => v, current: () => '',
     apply: v => _docAppendNote('Bonus posting: ' + v) },
   // Row-only requirement types (no legacy field): land in #f-user-reqs.
-  { key: 'spendAmount', label: 'Spend requirement', format: v => '$' + formatMoneyInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
+  { key: 'spendAmount', label: 'Spend requirement', format: v => formatDollarInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
   { key: 'transactionsCount', label: 'Transactions requirement', format: v => v + '×', current: () => '', apply: v => _docAddUserReq('transactions', { count: v, label: 'Transactions' }) },
   // Notes-only (points bonus, quirk 1): appended to the Notes textarea.
   { key: 'bonusPointsNote', label: 'Points bonus (→ notes)', format: v => v, current: () => '',
@@ -210,9 +210,9 @@ function _docTierKindNoun(kind) {
 function _docTierThresholdLabel(t) {
   if (!t) return '';
   const noun = _docTierKindNoun(t.threshold_kind);
-  const lo = '$' + formatMoneyInput(t.threshold_min);
+  const lo = formatDollarInput(t.threshold_min);
   if (t.threshold_max != null && Number.isFinite(t.threshold_max)) {
-    return `${noun} ${lo}–$${formatMoneyInput(t.threshold_max)}`;
+    return `${noun} ${lo}–${formatDollarInput(t.threshold_max)}`;
   }
   return `${noun} ${lo}+`;
 }
@@ -359,7 +359,7 @@ function _docRenderTierGroup(result, sel) {
   const rows = tiers.map((t, i) => {
     const checked = (sel === i) ? 'checked' : '';
     const threshold = escapeHtml(_docTierThresholdLabel(t));
-    const bonus = escapeHtml('$' + formatMoneyInput(t.bonus));
+    const bonus = escapeHtml(formatDollarInput(t.bonus));
     const target = escapeHtml(_docTierThresholdTargetDesc(t));
     const snip = String(t.snippet || '').slice(0, 120);
     const snipLine = snip ? `<span class="doc-tier-snippet">"${escapeHtml(snip)}"</span>` : '';
@@ -808,7 +808,7 @@ function docImportApply() {
       catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: dd wire'); }
     }
     try {
-      const prov = `Tier selected: ${_docTierThresholdLabel(t)} → $${formatMoneyInput(t.bonus)}` + (t.snippet ? ` — ${String(t.snippet).slice(0, 120)}` : '');
+      const prov = `Tier selected: ${_docTierThresholdLabel(t)} → ${formatDollarInput(t.bonus)}` + (t.snippet ? ` — ${String(t.snippet).slice(0, 120)}` : '');
       _docAppendNote(prov);
     } catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: tier note'); }
   }

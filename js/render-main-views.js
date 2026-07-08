@@ -1,5 +1,5 @@
 import { App } from './app-state.js';
-import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrency, formatCurrency, formatDateDisplay, formatDateLong, formatDateMedium, formatDateShort, formatMoneyInput, formatPercent, isoDate, parseDate, startOfDay } from './date-format-core.js';
+import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrency, formatCurrency, formatDateDisplay, formatDateLong, formatDateMedium, formatDateShort, formatMoneyInput, formatDollarInput, formatPercent, isoDate, parseDate, startOfDay } from './date-format-core.js';
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
@@ -462,7 +462,7 @@ function renderOfferCard(o) {
         <div class="offer-stat">
           <span class="offer-stat-label">Bonus</span>
           <span class="offer-stat-value success">${formatCompactCurrency(o.signupBonusAmount)}</span>
-          ${(o.monthly_fee != null && o.monthly_fee !== '' && Number(o.monthly_fee) > 0) ? `<span class="offer-monthly-fee" title="Monthly account fee${o.fee_waiver_condition ? ' — ' + escapeAttr(o.fee_waiver_condition) : ''}">$${formatMoneyInput(o.monthly_fee)}/mo</span>` : ''}
+          ${(o.monthly_fee != null && o.monthly_fee !== '' && Number(o.monthly_fee) > 0) ? `<span class="offer-monthly-fee" title="Monthly account fee${o.fee_waiver_condition ? ' — ' + escapeAttr(o.fee_waiver_condition) : ''}">${formatDollarInput(o.monthly_fee, { suffix: '/mo' })}</span>` : ''}
         </div>
         <div class="offer-stat">
           <span class="offer-stat-label">Days tied up</span>

@@ -349,6 +349,15 @@ function formatMoneyInput(val) {
   return out;
 }
 
+// "$1,234" money-display string built on formatMoneyInput. {fallback} returns a
+// fixed string when v == null (for sites that guarded `x == null ? '' : …`);
+// {suffix} is appended after the amount (e.g. "/mo"). NOT formatCurrency /
+// formatCompactCurrency — those round/abbreviate differently.
+function formatDollarInput(v, { fallback = null, suffix = '' } = {}) {
+  if (fallback !== null && v == null) return fallback;
+  return '$' + formatMoneyInput(v) + suffix;
+}
+
 // Comma-grouped / $-prefixed money display string -> plain Number.
 // Strips $, spaces, commas. Returns null for empty (matching the
 // existing readOfferForm `num('')===null` contract); returns NaN for
@@ -368,4 +377,4 @@ function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, _isoFromYMD, formatMoneyInput, parseMoneyInput, uid };
+export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, _isoFromYMD, formatMoneyInput, formatDollarInput, parseMoneyInput, uid };
