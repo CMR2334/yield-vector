@@ -10,9 +10,10 @@ const { buildParser, REPO } = require('./parser-loader');
 const api = buildParser();
 const parseDocPost = api.parseDocPost;
 
-// The DOC_TEST_EXPECT map, copied verbatim from index.html (the ground truth the
-// app asserts against). Kept in-sync manually; a drift check below re-reads the
-// literal from index.html and compares key sets so this can't silently rot.
+// The DOC_TEST_EXPECT map, copied verbatim from js/doc-import-templates.js (the
+// ground truth the app asserts against; moved there in the P2 module split).
+// Kept in-sync manually; a drift check below re-reads the literal from that
+// module and compares key sets so this can't silently rot.
 const DOC_TEST_EXPECT = {
   '01': { bankName: 'Meridian Trust Bank', signupBonusAmount: 300, offerExpirationDate: '2026-09-30', ddRequired: true, monthly_fee: 0, early_termination_fee: 25, etf_window_days: 90, promo_code: 'PREMIER300', daysAfterSignupAllowedBeforeDeposit: 60, bonus_post_max_days: 30 },
   '02': { bonusPointsNote: '@present', signupBonusAmount: '@absent', offerExpirationDate: '2026-12-31', ddRequired: false, monthly_fee: 95, early_termination_fee: 0, churn_wait_months: 12 },
@@ -33,15 +34,16 @@ const FILES = {
 };
 const DIR = path.join(REPO, 'docs/fixtures/doc-samples');
 
-// Drift guard: confirm the literal in index.html still has the same fixture keys.
+// Drift guard: confirm the literal in js/doc-import-templates.js (where the app's
+// DOC_TEST_EXPECT lives since the P2 module split) still has the same fixture keys.
 (function driftGuard() {
-  const html = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
-  const m = html.match(/const DOC_TEST_EXPECT = \{([\s\S]*?)\n\};/);
+  const src = fs.readFileSync(path.join(REPO, 'js', 'doc-import-templates.js'), 'utf8');
+  const m = src.match(/const DOC_TEST_EXPECT = \{([\s\S]*?)\n\};/);
   if (!m) { console.warn('WARN: could not locate DOC_TEST_EXPECT literal for drift guard'); return; }
   const keysInFile = [...m[1].matchAll(/^\s*'(\d\d)':/gm)].map(x => x[1]);
   const mine = Object.keys(DOC_TEST_EXPECT);
   const missing = keysInFile.filter(k => !mine.includes(k));
-  if (missing.length) throw new Error('DOC_TEST_EXPECT drift: index.html has fixtures ' + missing.join(',') + ' not in fidelity-check');
+  if (missing.length) throw new Error('DOC_TEST_EXPECT drift: js/doc-import-templates.js has fixtures ' + missing.join(',') + ' not in fidelity-check');
 })();
 
 let pass = 0, fail = 0; const failures = [];
