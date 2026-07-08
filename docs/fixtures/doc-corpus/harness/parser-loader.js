@@ -45,7 +45,9 @@ const NEEDED = [
   'docFirstDollar', 'docScanChurn', 'parseDocPost',
   // calibration-run additions (funding-label guard, date segmentation, tiers):
   'docIsCardFundingLabel', 'docDateSegments', 'docReconcileScalar', 'docScanTiers',
-  'docChurnAnchor'
+  'docChurnAnchor',
+  // R70 additions (waiver colon+bullets append):
+  'docCapText', 'docBulletsAfterClause'
 ];
 
 function extractFn(name, body, optional) {

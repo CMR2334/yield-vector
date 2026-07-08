@@ -129,6 +129,8 @@ Open **Shortcuts** → **+** → name it **Yield Vector Sync**. Add actions in o
 
 ### F. Retire tombstoned reminders (RECOMMENDED: mark complete, not delete)
 > **Why mark-complete instead of delete.** Per Finding 5, **"Remove Reminders" always prompts for confirmation**, so a true delete can't run unattended at 6 AM — the dialog blocks the loop. **"Edit Reminder" setting Is Completed = true has NO confirmation prompt** (it's an ordinary field edit — see Finding 1's field list, which includes **Is Completed**), so it runs fully unattended. A completed reminder drops out of the Reminders default view (it moves to "Completed"), so marking-complete gives the same "it's gone from my list" result as a delete, but reliably and automatically. Actual deletion is demoted to the optional manual cleanup in **F′** below. The feed's tombstone TTL (90 days) is comfortably long enough that a late manual purge never loses an id.
+>
+> **App-side action completions arrive here too (v2026.07.08e+, no change needed).** When you tick an "Upcoming action" done **in the Yield Vector app** (or the app consumes a reverse-channel completion — Section I), that item is dropped from the feed and appears in `removed[]` exactly like a deleted item. This loop already marks the matching reminder complete — so **completing an action in the app automatically completes its reminder on your phone**, with zero additions to this Shortcut. The `kind` set also grew (`requirement-deadline`, `expected-bonus-window`, `safe-to-close`, `churn-eligible`); you need no changes because every loop above matches on the item **id/URL**, never on `kind`.
 36. **"Repeat with Each"** → input `RemovedItems`. Steps 37–42 inside.
 37. **"Get Dictionary Value"** → `id` of Repeat Item → rename `RemID`.
 38. **"Text"** → `https://yieldvector.local/id/` + `RemID` → rename `RemURL`.
@@ -160,6 +162,31 @@ Open **Shortcuts** → **+** → name it **Yield Vector Sync**. Add actions in o
 ### H. Failure-only notification
 56. **"Get Dictionary from Input"** on Step 55's output → **"Get Dictionary Value"** for `id` → **"Count"** Items → **"If"** count **is** `0` → inside: **"Show Notification"** → Title `Yield Vector`, body `Heartbeat PATCH failed — check PAT/Gist.` End If.
 57. **Done.**
+
+### I. (OPTIONAL) Reverse channel — report *phone-side* completions back to the app
+> **You only need this if you want to tick a reminder complete ON YOUR PHONE and have the app show that action as done.** The reverse of Section F. If you always complete actions in the app, skip this entirely — Section F already syncs app→phone, and **the app behaves identically whether or not this file exists.** This is scaffolding you opt into; it is not required for the planner to work.
+
+**How it works.** The app, on every sync **pull**, looks for a **sibling file** `yv-completions.json` in the same Gist. If present, it reads an append-only list of `{ id, completedAt }` entries and applies each `(id, completedAt)` event **at most once** — idempotency is a per-event ledger keyed on the id + the parsed timestamp, so a malformed or far-future `completedAt` can't stall the channel and a backdated / offline-queued entry still applies. The app **never writes or prunes this file**, so re-reading a growing file is safe. A `requirement-deadline` id writes through to that requirement's done-state; another **completable** action id marks that action done. Ids that aren't completable actions — a commitment release or a cash-flow event (inflow/outflow), or an id the app doesn't currently recognize — are **logged and skipped** (they never suppress a feed item); malformed timestamps are skipped too. Applying a completion then tombstones the item on the app's next push — so a phone-side tick and an app-side tick converge on the same state.
+
+**File contract** (the Shortcut owns this file; the app is read-only):
+```json
+{ "completions": [
+    { "id": "yv-offer-<offerId>-deposit", "completedAt": "2026-07-08T14:03:00Z" },
+    { "id": "yv-offer-<offerId>-req-<rowId>", "completedAt": "2026-07-08T14:05:00Z" }
+] }
+```
+`id` is the feed item's `id` (the same value you stored as the reminder **URL**'s `…/id/<id>` suffix — strip the prefix back off). `completedAt` must be a **parseable** ISO‑8601 timestamp — a UTC `Z` form or an offset form (`…T14:03:00-05:00`) both work; a value that doesn't parse (e.g. `pending`) is skipped, not applied. Each distinct `(id, completedAt)` pair is applied once regardless of order, so appending in any sequence — including a late/backdated entry — is safe.
+
+**Auth reality (honest):** this needs **no new credential** — it reuses the **same PAT with `gist` scope** you already created in **P4** and already use for the Section G heartbeat PATCH. You are simply PATCHing a second file in the same Gist.
+
+**Shortcut steps (append-only; add after Section F):**
+1. **"Find Reminders"** → List `Yield Vector`, filter **Is Completed = true** and **Completion Date is in the last 1 day** (matches your run cadence). Rename `JustCompleted`.
+2. **"Get Contents of URL"** → `GET https://api.github.com/gists/<your-gist-id>` (Header `Authorization` = `token <YOUR_PAT>`) → read `files.yv-completions.json.content` if it exists → parse to `ExistingCompletions` (empty list if the file is absent).
+3. **"Repeat with Each"** `JustCompleted`: read the reminder **URL**, strip the `https://yieldvector.local/id/` prefix to recover `<id>`, build `{ "id": "<id>", "completedAt": "<Now ISO>" }`, and **append** it to `ExistingCompletions`.
+4. Build body `{"files":{"yv-completions.json":{"content":"<the stringified {completions:[…]} object>"}}}` → rename `CompletionsBody`.
+5. **"Get Contents of URL"** → `PATCH https://api.github.com/gists/<your-gist-id>` (Headers `Authorization` = `token <YOUR_PAT>`, `Accept` = `application/vnd.github+json`) → **Request Body: File** → `CompletionsBody`.
+
+> **Security note.** The `yv-completions.json` file is a **trusted input** to the app: anything listed there is applied to your planner (marked done). Because it lives in the **same private Gist** as your capital data and is written with **your own** `gist`-scoped PAT, the trust boundary is unchanged from the heartbeat you already run. Keep the Gist **private** and the **PAT** secret (a leaked `gist`-scope token can read/write only your Gists, but that already includes your financial planner file). The app hard-limits the blast radius: it only ever *marks actions done* from this file — it never creates, deletes, or edits offers/amounts/dates from it, and unknown ids are silently ignored.
 
 ### First manual run
 Run it once by hand. Grant when prompted: Reminders access; network access to `gist.githubusercontent.com` and `api.github.com`. Confirm reminders appear in the Yield Vector list. Section F now marks retired items **complete** (no prompt); a delete-confirmation prompt appears only if you run the optional **F′** manual cleanup.

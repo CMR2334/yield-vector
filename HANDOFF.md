@@ -17,9 +17,20 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 69)
+## Current state (as of 2026-07-08, Round 70)
 
-- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08d`
+- **R70 (working-tree, uncommitted):** removed the Overview "At a glance" panel and added
+  per-action completion on the Upcoming-actions list — a quiet done control per row,
+  `state.action_done` map (+ requirement-row write-through), completed items linger greyed
+  7 days then drop, feed excludes+tombstones completed actions (Shortcut auto-completes the
+  reminder), and an app-side reverse channel that consumes an optional `yv-completions.json`
+  Gist file (phone→app). Same round also: chart legends → tight 2-col grid; tier-picker ROI
+  chips; and a **DoC URL-importer live-test batch** (Worker `title` fill + client slug fallback,
+  clawback-critical hold-anchor fix "days X through day Y"→Y/opening, waiver colon+bullets append,
+  capFirst-except-promo, tier-radio centering, card-foot link stacked below the Updated stamp).
+  `APP_VERSION` → `2026.07.08e`. See the R70 log entry. **Owner action:** redeploy the Cloudflare
+  Worker to unlock the higher-quality title fill (old worker still works via the slug fallback).
+- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08e`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -176,6 +187,143 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-08 — Session (opus-4-8[1m], /orchestrate executor — action tracking)
+**Round 70 — Remove "At a glance"; add per-action completion + feed/reverse-channel wiring; chart-legend 2-col grid; tier ROI chips; DoC URL-importer live-test fixes (title fill, hold anchor, waiver bullets, capFirst, tier-radio, card-foot); v2026.07.08e**
+(Owner: the At-a-glance panel "doesn't seem fully necessary" — he wants to TRACK actions performed/pending, tick them done, ideally reactive to iOS Reminders completions, with completed items showing status instead of lingering as if unactioned. Single working-tree release; DO NOT COMMIT — pending the planner's review.)
+- **[Investigation — At-a-glance consumers]** `computeActionsRequired` had EXACTLY ONE
+  consumer: the At-a-glance "Actions required" cell (grep-confirmed — every other hit is
+  its def or a doc comment). The other snap cells were inline `.filter().length` reads of
+  `offers/commitments/events`, no shared helper. So removing the panel orphaned only
+  `computeActionsRequired`; I removed it too and updated the builder's RECONCILIATION-
+  INVARIANT comment. The prior **[P1] "past-dated work items inflate Actions required"**
+  miscount is therefore **fully mooted** — nothing else counts work items (the current
+  `it.dueDate < todayISO` guard had already fixed it in-place; now the surface is gone).
+  Shared constants `WORKING_SUB_STATUSES`/`CONFIRMED_OFFER_STATUSES` are used elsewhere
+  (buildReminderItems) and were left intact; `expectedBonusTotal` still feeds the
+  "Selected bonuses" stat card, so its computation stayed.
+- **[1] Removed the At-a-glance `<aside>`** + its entire `.snapshot-*`/`.snap*` CSS block
+  (no orphan CSS) + the `.overview-aside` media rules. `.overview-main` (Upcoming actions)
+  now spans the full 3-col grid — the owner's action surface gets the whole width.
+- **[2] Per-action completion.** New root key `state.action_done = { [feedItemId]: doneISO }`
+  (defaulted in `defaultState`; tolerant guard in `migrateOffersToSchemaV2`, templates-style).
+  Each Upcoming-actions row on a **completable** kind (`ACTION_COMPLETABLE_KINDS`) gets a
+  quiet circle control (`.action-check`, checklist idiom). **Semantics by kind:**
+  `requirement-deadline` **writes through** to the requirement row's `done`/`done_date`
+  (two-way — same source of truth as the offer-card checklist; reuses `toggleRequirementDone`),
+  so it is NOT stored in `action_done`. Every other completable kind
+  (deposit/dd-initiate/dd-window-end/debit/withdrawal/churn-eligible/expected-bonus-window/
+  safe-to-close/offer-expires) toggles `action_done[id]`. Pure capital-flow rows
+  (commitment-end/inflow/outflow) get **no** control (not "actions the owner performs").
+  `ACTION_DONE_LINGER_DAYS = 7`: completed rows stay greyed/struck with "Done M-D-YYYY",
+  sorted to the list bottom, then drop; id stability prevents resurrection.
+- **[3] Feed integration (envelope FROZEN).** `buildReminderItems` now annotates every item
+  with `done`/`doneDate` (requirement rows read their own flag — done rows are no longer
+  skipped, they emit annotated; other kinds read `action_done`). `computeReminderFeed`
+  filters `built → emitted = built.filter(!done)` for `items[]`, `liveIds`, and `_feedEmitted`,
+  so a completed action leaves the live set and the **existing tombstone diff** retires it
+  into `removed[]` — the iOS Shortcut's existing Section-F mark-complete loop then completes
+  the reminder. Mirrors the requirement-done precedent exactly. **Byte-frozen when nothing is
+  completed** (verified: fresh-seed feed item-id set unchanged; complete→tombstone→
+  un-complete→resurrect cycle verified in-browser).
+- **[4] Reverse channel — app side FULLY implemented (auth reality: the Shortcut ALREADY has
+  write auth).** The build guide's P4 PAT (`gist` scope) + Section-G heartbeat PATCH prove the
+  Shortcut can write the Gist; and the app's own Sync pull already fetches the whole Gist file
+  list (`ghGet .../gists/<id>` → `data.files`), holding the same gist-id+PAT. So consuming a
+  sibling `yv-completions.json` costs no new fetch and no new credential. New async
+  `applyRemoteCompletions(state, files)` reads that file on pull (hooked at the tail of
+  `Sync.safeSync`), applies `{id, completedAt}` entries newer than a high-water timestamp
+  `state._completionsHwm` (idempotent; app never writes/prunes the file), routes req-ids to
+  write-through and others to `action_done`, ignores unknown ids, and is a **no-op when the
+  file is absent** (app behaves identically). On apply it `save()`s + pushes so the item
+  tombstones. Guide gains an **optional Section I** (phone→app) with the file contract, the
+  PAT reuse, and a security note; Section F notes app-side completions arrive as tombstones.
+- **[5] Display-name strip (deferred item).** `renderActionRow` wraps the title in
+  `displayOfferName(item.name)` (display-side only; feed payload untouched) so "…$600"
+  suffixes drop from the list (verified: "BMO — Premier Checking", not "…$600").
+- **[6] Chart legends → tight 2-column grid (owner correction of R69 Item D — "back to
+  stacked but tighter").** `.chart-legend` (shared hero + timeline) goes from the R69
+  flex-wrap row to a content-sized 2-col grid (`grid-template-columns: max-content
+  max-content; justify-content: start`) so the columns sit adjacent (col 2 at ~131px), NOT
+  the pre-R69 `1fr 1fr` half-card spread: hero 6 items → 2×3, timeline 4 items → 2×2.
+  `column-gap 18px`/`row-gap 6px`; a `≤340px` media query collapses to 1 col as a pure
+  ultra-narrow safety net (2 cols total ~250px, so they stay 2-up at 380px, verified both
+  desktop 1280px and 380px, no overflow).
+- **[7] Tier-picker annualized-return chips.** `_docRenderTierGroup` adds a muted
+  `.doc-tier-roi` chip after each tier's bonus: `rate = bonus/threshold_min`, annualized by
+  `365/lockDays`, `lockDays = tier.hold_days ?? offer-level daysFundsMustRemain` → "≈N%/yr";
+  no hold anywhere → plain "N% ROI (no hold data)". Guarded (`threshold_min>0`,`lockDays>0`);
+  compact `_docFmtPct` (int ≥10, one decimal below); render-only (parser untouched). Sanity
+  on the BofA-modeled `06-tiered-ladder.html`: as-parsed it has no captured hold → chips read
+  5% / 3.6% / 2% / 1.2% ROID; with the offer hold present (60d ≈ its days-31–90 window) they
+  annualize to ≈30 / ≈22 / ≈12 / ≈7.3 %/yr — small tier ~4× the top, as expected. (The real
+  BofA corpus post body isn't committed — copyright — so the synthetic fixture was the check.)
+- **Gates:** `node --check` (extracted script) PASS; in-browser E2E on the owner's real
+  state (deep-copied / snapshot-restored, sync unconfigured so local-only) — complete→feed
+  excl+tombstone, un-complete→resurrect, byte-frozen baseline, linger today vs drop @8d,
+  requirement write-through excludes from feed, reverse-channel apply+idempotent+absent-noop+
+  req-routing+unknown-ignored, real delegated click persists `action_done`, greyed/struck
+  render (opacity .6, line-through, green check), reload-survival, mobile 380px (grid
+  `48px 190px 22px`, no h-overflow, control present on completable / absent on inflow),
+  churn untouched, no console errors, At-a-glance fully gone. **[6]** legends computed
+  `display:grid`, hero `113/111px` 2×3, timeline `78/88px` 2×2, col 2 at 131px at both 1280px
+  and 380px, no overflow. **[7]** tier chips render the values above with no row overflow at
+  380px; `testDocParserRegressions` 13/13; feed byte-identical (11 items / 0 removed / keys
+  `id,kind,title,dueDate,notes`). Owner state restored to original 9811 bytes (`action_done`
+  absent) after testing. `APP_VERSION` → 2026.07.08e.
+- **DoC URL-importer live-test batch (still v2026.07.08e; owner deployed the Worker and hit
+  real bugs).** Six items + a clawback-critical hold-anchor addendum. **[i1]** tier radio
+  `align-items: center` (vertically centered vs the multi-line row body; verified centerOffset 0).
+  **[i2]** waiver colon+bullets: `docBulletsAfterClause`/`docCapText` append a dropped bullet
+  list ("… you must:" + `<ul>`) joined "; or ", cap ~260 — the owner's exact BofA waiver now
+  captures all 3 conditions. **[i3]** `_docSetInput` capFirst on applied prose (`_docCapFirst`),
+  EXCLUDING promo/URL/`<select>`-enum/machine tokens (promo `q3bus26` passes through). **[i4]**
+  Worker gains additive `title` (`extractTitle`: og:title→`<title>`→`<h1>`, "- Doctor of Credit"
+  stripped); client `docImportFetch` prepends `title` (or `_docSlugTitle(url)` at LOW conf for an
+  OLD worker) when the body yields no bank/offer name, then adopts only the name fields. README
+  changelog notes the redeploy. **[i5 + ADDENDUM — clawback]** the hold parser missed "days 31
+  through **day** 90" and computed 60/funded (a ~30-day under-hold); now a day-span → `daysFundsMustRemain
+  = Y` (through-day) + `lockStartsFrom='open date'`, matching corpus GOLD (`01.json` hold_days=90 =
+  "total days from opening"). New `lockStartsFrom` `DOC_FIELD_MAP` entry; the tier ROI chip
+  subtracts the deposit window for opening-anchored holds (90−30=60 → ≈30%/yr top). `plannedSignupDate`
+  checked: it is the new-offer modal DEFAULT (`isoDate(addDays(TODAY,7))` → 7-15-2026), NOT written
+  by the importer (absent from `DOC_FIELD_MAP`) — reported, not changed. **[i6]** "DoC ↗" link
+  STACKS below the "Updated" stamp (`.offer-card-foot` column + `flex-end`; order `${stamp}${doc}`).
+  Fixture 06 + `DOC_TEST_EXPECT['06']` (+harness copy) updated; `parser-loader` NEEDED list gained
+  the 2 helpers.
+- **Gates (importer batch):** `node --check` app + Worker PASS; Worker `extractTitle` unit 5/5;
+  in-app `testDocParser` **67/67** (fixture 06 P12/F0) + `testDocParserRegressions` **18/18** (13+5);
+  node harness (jsdom `--no-save`, not committed) fidelity **67/67** + regressions **18/18**; corpus
+  score ≥84.9 **not runnable offline** (post bodies uncommitted, copyright) — but the change ALIGNS
+  with gold (90/opening), so `daysFundsMustRemain` can only improve; capFirst/title/slug are outside
+  `parseDocPost` (zero corpus effect). Preview E2E: [i1] radio center offset 0 (multi-line), [i2]
+  waiver full 3-condition string, [i3] capFirst incl. promo passthrough, [i4] mock round-trip with
+  title→bank+offer, without→slug bank at low-conf/unchecked, [i5] chips ≈30/22/12/7.3%/yr, [i6] foot
+  column/flex-end/stamp-above-link. Feed byte-identical (11/0). 380px no overflow. git status scoped
+  (index.html, cloudflare/{doc-import-worker.js,README.md}, docs/fixtures/{doc-samples/06,doc-corpus/harness/{fidelity-check,parser-loader}}.js, HANDOFF, CHANGELOG, SHORTCUT guide + 4 pre-existing + runs file).
+- **Release-review fixes (1 P2 + 3 P3, all in the R70 new code; still v2026.07.08e).**
+  **[P2]** `applyRemoteCompletions` dedup was a **lexicographic string compare** on
+  `completedAt` — a malformed/far-future/offset value could lift the HWM above all real
+  Z-timestamps and silently kill the channel, and backdated/offline-queued completions were
+  dropped. Replaced the single HWM with a **bounded per-event ledger** (`_completionsApplied`,
+  `id@epochMillis`, last 200): `Date.parse` epoch compare, NaN entries skipped + counted (a
+  `console.warn` diag note, not an app error), each event applied once regardless of order,
+  legacy `_completionsHwm` dropped on read; domain presence checks resist re-applying a locally
+  un-done completion. **[P3-1]** `action_done` growth bounded — `computeReminderFeed` prunes keys
+  not in the freshly BUILT id set (pre-exclusion, so done items' own ids stay) AND older than the
+  90-day tombstone TTL (grace stops flicker-prune); orphaned-offer keys drop within one compute
+  past TTL. **[P3-2]** reverse channel gates the `action_done` write on `ACTION_COMPLETABLE_KINDS`
+  (kind from the built items by id) — a phone-completed commitment-end/inflow/outflow (or unknown)
+  id is log-skipped, never suppressing its feed item. **[P3-3]** a BARE "days X through Y" (no
+  opening-context in the sentence) no longer asserts `lockStartsFrom='open date'` at HIGH — opening
+  cue → count=Y + open HIGH; bare span → count=Y HIGH but anchor LOW/default-unchecked (a bare span
+  at the funded default over-holds, never under-holds). `testDocParserRegressions` gained a
+  `wantConf` assertion + 2 bare-span pins (→ 20 pins). **Gates:** `node --check` app + Worker;
+  harness fidelity 67/67 + regressions 20/20; reverse-channel unit passes hostile `completedAt`
+  (malformed/far-future/offset/backdated) + non-completable + idempotency + un-do-resist +
+  migration; P3-1 prune + P3-3 confidence verified; feed byte-identical (11/0); owner state
+  untouched (9811 bytes). SHORTCUT guide Section I wording updated (per-event ledger, parseable
+  `completedAt`, completability log-skip). git status still scoped (same file set).
 
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor — owner UX batch)
 **Round 69 — 13 owner UX items across the offer card, modal, overview & charts; v2026.07.08d**

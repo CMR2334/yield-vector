@@ -202,17 +202,18 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
 }
 
-/* Overview unified grid: all 5 cells share the same 3-column track so
-   the right edge of Upcoming actions and Selected bonuses align exactly.
-   Stat cards occupy cols 1-3 naturally; Upcoming spans cols 1-2;
-   At-a-glance sits in col 3. */
+/* Overview unified grid: all cells share the same 3-column track so the stat
+   cards, Upcoming actions, and the churn section align on the same edges. Stat
+   cards occupy cols 1-3 naturally; Upcoming actions now spans the full width
+   (its former At-a-glance sibling was removed — the owner wanted action
+   tracking, not a static counter panel, in this space). */
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
   align-items: start;
 }
-.overview-main { grid-column: span 2; }
+.overview-main { grid-column: 1 / -1; }
 /* R69 (Item F): the churn card spans the same 2 columns as "Upcoming actions".
    MUST be declared here — before the media queries below — so the ≤720/≤480
    `grid-column` overrides win in source order (a later base rule elsewhere would
@@ -229,102 +230,15 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-tertiary);
 }
 @media (max-width: 720px) {
-  /* Stat cards stay 3-per-row; Upcoming, At-a-glance, and churn span full width */
+  /* Stat cards stay 3-per-row; Upcoming actions and churn span full width */
   .overview-main  { grid-column: 1 / -1; }
-  .overview-aside { grid-column: 1 / -1; }
   .churn-section  { grid-column: 1 / -1; }
 }
 @media (max-width: 480px) {
   .overview-grid  { grid-template-columns: 1fr; }
   .overview-main  { grid-column: auto; }
-  .overview-aside { grid-column: auto; }
   .churn-section  { grid-column: auto; }
 }
-
-.snapshot-card {
-  padding: var(--space-5);
-  background: var(--card);
-  border: 1px solid var(--border-soft);
-  box-shadow: var(--shadow-card);
-}
-.snapshot-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.snapshot-title::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border-soft);
-}
-.snapshot-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-}
-/* Each stat cell: subtle left accent stripe (color-coded per stat),
-   value above label, slightly more padding, and a hover lift so the
-   panel reads as a designed dashboard component rather than a flat
-   list of key/values. */
-.snap {
-  display: flex;
-  flex-direction: column-reverse;  /* value on top, label below */
-  gap: 2px;
-  padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--space-3) + 4px);
-  background: var(--card-soft);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-soft);
-  position: relative;
-  overflow: hidden;
-  transition: background 0.12s, transform 0.12s;
-}
-.snap::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 8px; bottom: 8px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent-mid);
-}
-.snap.snap-active::before  { background: #7c5fef; }
-.snap.snap-actions::before { background: #e87171; }
-.snap.snap-confirmed::before { background: #10b981; }
-.snap.snap-events::before    { background: #f59e0b; }
-.snap.snap-horizon::before   { background: #6b7280; }
-.snap.snap-buffer::before    { background: #d97706; }
-.snap.snap-bonus::before     { background: #10b981; }
-.snap-l {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.snap-v {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: var(--text);
-  font-feature-settings: 'tnum' 1;
-  line-height: 1.1;
-}
-.snap.snap-bonus .snap-v { color: var(--success); }
-/* R62: un-abbreviated money values (e.g. Bonus pool now shows the full
-   "$12,450" instead of "$12K") can run long in a half-width snap cell.
-   Step the font down one notch for long strings (≥8 glyphs, i.e. 6-digit
-   dollar amounts and up) so the full number fits without resizing the
-   card. Applied via a length-conditional class set at render time. */
-.snap-v.snap-v-sm { font-size: 16px; letter-spacing: -0.02em; }
 
 /* Sync indicator chip in the header — flatter & lighter than a pill:
    rounded-square radius, no shadow, very-light translucent background,
@@ -731,16 +645,25 @@ a { color: inherit; text-decoration: none; }
 .chart-tooltip .tt-row .label { opacity: 0.7; }
 
 .chart-legend {
-  /* R69 (Item D): the 2-column 1fr grid spread the legend chips across
-     half-widths, leaving an "excessively large" gap between the two columns.
-     A wrapping flex row sits them comfortably next to each other instead —
-     shared by the hero AND timeline legends so both charts stay consistent. */
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  /* R70 (owner correction of R69 Item D): back to a STACKED 2-COLUMN layout,
+     but tight. Columns are CONTENT-sized (max-content) and left-packed
+     (justify-content:start) so they sit comfortably adjacent — NOT the old
+     `1fr 1fr` that spread them to half-card-widths with an excessive gap, and
+     NOT a single-row wrap. Shared by the hero (6 items → 2×3) and timeline
+     (4 items → 2×2) legends. The two content columns total only ~250px, so they
+     stay 2-up at 380px (verified); collapse to 1 column is a pure safety net for
+     ultra-narrow (≤340px) viewports where even that would overflow. */
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  column-gap: 18px;
+  row-gap: 6px;
   margin-top: var(--space-4);
   font-size: 12px;
   color: var(--text-secondary);
+}
+@media (max-width: 340px) {
+  .chart-legend { grid-template-columns: max-content; }
 }
 .chart-legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -814,7 +737,7 @@ a { color: inherit; text-decoration: none; }
 
 .action-row {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: 56px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -842,11 +765,31 @@ a { color: inherit; text-decoration: none; }
   border-radius: 2px;
   background: var(--offer-color);
 }
+/* Per-action completion control — a quiet circle at the row's trailing edge,
+   matching the offer-card checklist idiom. Its own data-action toggles
+   completion; the row's open-target is unaffected because onClick dispatches
+   the innermost [data-action] ancestor. */
+.action-check {
+  width: 22px; height: 22px; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--border); border-radius: 50%;
+  background: transparent; color: var(--success);
+  font-size: 13px; line-height: 1; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.action-check:hover { border-color: var(--success); background: var(--success-soft); }
+.action-check.checked { background: var(--success); border-color: var(--success); color: #fff; }
+.action-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Completed rows: greyed + struck title, lingering ACTION_DONE_LINGER_DAYS
+   before they drop from the list entirely. */
+.action-row.done { opacity: 0.6; }
+.action-row.done .action-title { text-decoration: line-through; }
 
-/* Mobile: tighter columns, tag wraps under the title so nothing collides */
+/* Mobile: tighter columns, tag wraps under the title so nothing collides;
+   the completion circle stays at the trailing edge of the first row. */
 @media (max-width: 480px) {
   .action-row {
-    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-columns: 48px minmax(0, 1fr) auto;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
   }
@@ -857,6 +800,11 @@ a { color: inherit; text-decoration: none; }
     margin-top: 2px;
     font-size: 10px;
     padding: 2px 7px;
+  }
+  .action-row .action-check {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
   }
 }
 
@@ -1178,9 +1126,9 @@ a { color: inherit; text-decoration: none; }
 .offer-updated { margin-top: var(--space-2); font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-tertiary); text-align: right; }
 /* R69 (Item 2): a quiet DoC/source affordance on the card, shown only when the
    offer has a docUrl. Shares the card's smallest text tier (10px uppercase) and
-   sits on the same footer line as the Updated stamp — right-aligned, muted,
-   accent on hover. Never competes with real content. */
-.offer-card-foot { display: flex; align-items: baseline; justify-content: flex-end; gap: 10px; margin-top: var(--space-2); }
+   STACKS beneath the Updated stamp (R70 [6]) — both right-aligned, muted, accent
+   on hover. Never competes with real content. */
+.offer-card-foot { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-top: var(--space-2); }
 .offer-card-foot .offer-updated { margin-top: 0; }
 .offer-doc-link {
   flex: 0 0 auto;
@@ -1495,18 +1443,26 @@ a { color: inherit; text-decoration: none; }
 .doc-tier-sub { font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin: 4px 0 10px; }
 .doc-tier-opts { display: flex; flex-direction: column; gap: 6px; }
 .doc-tier-opt {
-  display: flex; align-items: flex-start; gap: 10px;
+  /* R70: radio vertically CENTERED against the row body (owner request) — was
+     flex-start + a 2px nudge, which floated the bubble at the top of a two-line
+     (threshold line + snippet) row. `center` keeps it centered whether the row
+     is one line or wraps to several. */
+  display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border: 1px solid var(--border-soft);
   border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .doc-tier-opt:hover { border-color: var(--accent-mid); }
-.doc-tier-radio { flex: 0 0 auto; margin-top: 2px; width: 15px; height: 15px; accent-color: var(--accent); }
+.doc-tier-radio { flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--accent); }
 .doc-tier-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
 .doc-tier-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
 .doc-tier-thresh { font-size: 13px; font-weight: 600; color: var(--text-strong); word-break: break-word; }
 .doc-tier-arrow { flex: 0 0 auto; color: var(--text-tertiary); }
 .doc-tier-bonus { font-size: 14px; font-weight: 700; color: var(--accent); }
+/* R70: muted annualized-return chip after the bonus (≈N%/yr, or plain ROI when
+   no hold data). Content-sized; rides the flex-wrap line so it never disturbs
+   the row at 380px. */
+.doc-tier-roi { font-size: 11px; font-weight: 600; color: var(--text-tertiary); white-space: nowrap; font-feature-settings: 'tnum' 1; }
 .doc-tier-target {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
   color: var(--text-tertiary);
@@ -2883,7 +2839,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.08d';
+const APP_VERSION = '2026.07.08e';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -3616,6 +3572,12 @@ function migrateOffersToSchemaV2(state) {
   // and idempotent — leaves an existing array untouched.
   state.templates = Array.isArray(state.templates) ? state.templates : [];
 
+  // Tolerant guard for the per-action completion map (same idiom as templates):
+  // an older payload never wrote it, so normalize a missing/corrupt value to {}
+  // before any code reads it. Root-level and idempotent.
+  state.action_done = (state.action_done && typeof state.action_done === 'object' && !Array.isArray(state.action_done))
+    ? state.action_done : {};
+
   // Is there any pre-v2 offer? (one lacking the requirements marker) — gate the
   // backup on real work so we don't snapshot an already-v2 state.
   const needsMigration = state.offers.some(o => o && !Array.isArray(o.requirements));
@@ -3861,6 +3823,12 @@ const EMAIL_OPTIONS = [
    ============================================================ */
 const SYNC_CONFIG_KEY = 'capital-planner-sync-config-v1';
 const SYNC_FILENAME = 'capital-planner.json';
+// Reverse channel (Reminders → app). A SIBLING file in the same Gist that the
+// iOS Shortcut appends to when it marks a reminder complete; the app only ever
+// READS it (never writes it) on pull. Kept separate from SYNC_FILENAME so the
+// Shortcut's writes never race the app's writes to capital-planner.json. Absent
+// file → the app behaves exactly as before (see applyRemoteCompletions).
+const REVERSE_COMPLETIONS_FILENAME = 'yv-completions.json';
 
 const Sync = {
   status: 'unconfigured',  // 'unconfigured' | 'syncing' | 'synced' | 'pending' | 'error'
@@ -4195,6 +4163,20 @@ const Sync = {
         this.lastSyncAt = Date.now();
         this.setStatus('synced');
       }
+
+      // REVERSE CHANNEL: consume the Shortcut's completions file if present.
+      // Runs after the state resolution above so it overlays onto whichever
+      // state won this sync. Non-fatal and idempotent (high-water mark); an
+      // absent file is a no-op. On a real apply, save() persists + schedules a
+      // push whose feed recompute tombstones the now-done item(s), and render()
+      // greys the row. (First-sync early-returns above skip this; those apply on
+      // the next steady-state sync — acceptable for a one-time bootstrap path.)
+      try {
+        if (await applyRemoteCompletions(App.state, data.files)) {
+          App.save();
+          render();
+        }
+      } catch (e) { logError(ErrCode.SYNC_PULL, e, 'applyRemoteCompletions'); }
     } catch (e) {
       this.setStatus('error', e.message);
       console.warn('safeSync failed', e);
@@ -4514,6 +4496,112 @@ async function ghFetch(url, token, method, body) {
     throw err;
   }
   return r.json();
+}
+
+/* REVERSE CHANNEL (Reminders → app). The iOS Shortcut, when it marks a reminder
+   complete, appends {id, completedAt} to REVERSE_COMPLETIONS_FILENAME — a
+   SIBLING file in the same Gist (the app's capital-planner.json is never touched
+   by it). Because the app already fetches the whole Gist file list on every pull
+   (ghGet → data.files), reading this file costs NOTHING extra and needs no new
+   auth: the app already holds the same PAT/gist-id the Shortcut uses.
+
+   Contract (additive, optional):
+     • file body: { "completions": [ { "id": "<feed item id>",
+                                       "completedAt": "<ISO8601>" }, ... ] }
+       (a bare array is also accepted). The app READS ONLY; the Shortcut owns
+       the file and is responsible for appends (and any pruning). `completedAt`
+       must PARSE as a timestamp (Date.parse) — offset forms ("…-05:00") and Z
+       both work; unparseable values ("pending") are skipped, not applied.
+     • idempotency: a bounded APPLIED-LEDGER of `id@epochMillis` keys
+       (state._completionsApplied, last 200). An event is applied at most once;
+       because dedup is per-EVENT (not a single high-water clock), a malformed or
+       far-future `completedAt` can NOT poison the channel, and a backdated /
+       offline-queued completion still applies (P2). Timestamps compare via
+       Date.parse epoch millis, never lexicographically. The legacy string
+       `_completionsHwm` (pre-fix) is migrated tolerantly to an epoch FLOOR
+       clamped to now (so a poisoned far-future value can't permanently gate).
+     • completability (P3-2): the write is gated on the SAME
+       ACTION_COMPLETABLE_KINDS the UI uses — kind is looked up from the freshly
+       built items by id. A requirement-deadline id writes through to its row;
+       another completable kind lands in state.action_done; a commitment-end /
+       inflow / outflow (or an id not currently built) is LOG-SKIPPED, never
+       suppressing its feed item.
+     • ABSENT FILE → exact no-op. The app behaves identically to today when the
+       Shortcut hasn't been upgraded to write it.
+   Returns true iff something to persist changed (a completion applied, or the
+   applied-ledger grew) so the caller persists + pushes and the feed tombstones
+   the item exactly as a local completion does. */
+async function applyRemoteCompletions(state, files) {
+  if (!state || !files || typeof files !== 'object') return false;
+  const f = files[REVERSE_COMPLETIONS_FILENAME];
+  if (!f) return false;                                   // absent → no-op
+  let content = f.content || '';
+  if (f.truncated && f.raw_url) {                         // large file → fetch raw
+    try { content = await (await fetch(f.raw_url)).text(); }
+    catch (e) { logError(ErrCode.SYNC_PULL, e, 'applyRemoteCompletions: raw fetch'); return false; }
+  }
+  if (!content || !content.trim()) return false;
+  let parsed;
+  try { parsed = JSON.parse(content); }
+  catch (e) { logError(ErrCode.PARSE, e, 'applyRemoteCompletions'); return false; }
+  const list = Array.isArray(parsed) ? parsed
+             : (parsed && Array.isArray(parsed.completions) ? parsed.completions : null);
+  if (!list) return false;
+
+  if (!state.action_done || typeof state.action_done !== 'object' || Array.isArray(state.action_done)) state.action_done = {};
+  // Migrate away the legacy high-water string (pre-fix). It's simply DROPPED — a
+  // single lexicographic clock is exactly the poisoning/backdating vector this
+  // rewrite removes, and it can't be safely re-interpreted as an epoch floor (a
+  // poisoned far-future value clamped to now would dead-channel every past
+  // completion). Dedup is per-event via the ledger + the domain presence checks
+  // below, so dropping it is safe (the feature is unshipped, so no real state
+  // carries it yet anyway). Tolerant: presence is ignored, never trusted.
+  if (typeof state._completionsHwm !== 'undefined') delete state._completionsHwm;
+  let ledger = Array.isArray(state._completionsApplied) ? state._completionsApplied.slice() : [];
+  const ledgerSet = new Set(ledger);
+  const before = ledger.length;
+  const ledgerAdd = (key) => { if (!ledgerSet.has(key)) { ledger.push(key); ledgerSet.add(key); } };
+  // Kind by id from the freshly built items (includes done items, annotated) so
+  // completability can be checked and requirement ids routed to write-through.
+  const kindById = new Map(buildReminderItems(state).map(it => [it.id, it.kind]));
+
+  let applied = 0, skippedBad = 0, skippedNonCompletable = 0;
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue;
+    const id = typeof entry.id === 'string' ? entry.id : '';
+    const at = typeof entry.completedAt === 'string' ? entry.completedAt : '';
+    if (!id || !at) continue;
+    const epoch = Date.parse(at);
+    if (!Number.isFinite(epoch)) { skippedBad++; continue; }   // unparseable → skip + count
+    const key = id + '@' + epoch;
+    if (ledgerSet.has(key)) continue;           // this exact event already applied
+    const doneISO = /^\d{4}-\d{2}-\d{2}/.test(at) ? at.slice(0, 10) : isoDate(new Date(epoch));
+    const kind = kindById.get(id);
+    if (kind === 'requirement-deadline') {
+      const m = /^yv-offer-(.+)-req-(.+)$/.exec(id);
+      const o = m ? (state.offers || []).find(x => x && x.id === m[1]) : null;
+      const row = (o && Array.isArray(o.requirements)) ? o.requirements.find(r => r && r.id === m[2]) : null;
+      if (row) { if (!row.done) { row.done = true; row.done_date = doneISO; applied++; } ledgerAdd(key); }
+      // unknown row → skip (no ledger; may become valid on a later pull)
+    } else if (kind && ACTION_COMPLETABLE_KINDS.has(kind)) {
+      if (!Object.prototype.hasOwnProperty.call(state.action_done, id)) { state.action_done[id] = doneISO; applied++; }
+      ledgerAdd(key);
+    } else {
+      // commitment-end / inflow / outflow, or an id not currently built → the
+      // feed item must NOT be suppressed. Log-skip; do NOT ledger (a not-yet-
+      // built id can legitimately become completable on a later pull).
+      skippedNonCompletable++;
+    }
+  }
+  if (ledger.length > 200) ledger = ledger.slice(ledger.length - 200);   // bound the ledger
+  state._completionsApplied = ledger;
+  // Diagnostic NOTE (not an error): skipped entries are expected (a phone may
+  // tick a non-action reminder, or a timestamp may be malformed) and must not
+  // pollute the app's error diagnostics — console.warn keeps it dev-visible only.
+  if (skippedBad || skippedNonCompletable) {
+    console.warn('[reverse-channel] skipped ' + skippedBad + ' unparseable + ' + skippedNonCompletable + ' non-completable/unknown completedAt entries');
+  }
+  return applied > 0 || ledger.length !== before;
 }
 
 function relativeTimeShort(ts) {
@@ -5439,7 +5527,12 @@ const App = {
       // F5: reusable offer templates (terms only, personal data stripped).
       // Root-level so localStorage + Gist sync carry them; never read by
       // buildReminderItems, so they can't emit feed items.
-      templates: []
+      templates: [],
+      // Per-action completion map: { [feedItemId]: doneDateISO } for action
+      // kinds that have NO domain done-field (everything except
+      // requirement-deadline, which writes through to its requirement row).
+      // Root-level so it round-trips through localStorage + Gist sync.
+      action_done: {}
     };
   },
 
@@ -6700,16 +6793,6 @@ function renderOverview() {
           : `<div class="action-list upcoming-fade" key="${App._upcomingPage}">${upcomingActions.map(renderActionRow).join('')}</div>`}
       </section>
 
-      <aside class="card snapshot-card overview-aside">
-        <div class="snapshot-title">At a glance</div>
-        <div class="snapshot-grid">
-          <div class="snap snap-active"><span class="snap-v">${App.state.offers.filter(o => o.accountStatus !== 'closed' && WORKING_SUB_STATUSES.has(o.subStatus)).length}</span><span class="snap-l">Working toward SUB</span></div>
-          <div class="snap snap-actions"><span class="snap-v">${computeActionsRequired(App.state)}</span><span class="snap-l">Actions required</span></div>
-          <div class="snap snap-confirmed"><span class="snap-v">${App.state.commitments.filter(c => c.status === 'confirmed' && c.includeInProjection).length + App.state.offers.filter(o => CONFIRMED_OFFER_STATUSES.has(o.status)).length}</span><span class="snap-l">Confirmed</span></div>
-          <div class="snap snap-events"><span class="snap-v">${App.state.events.filter(e => e.includeInProjection).length}</span><span class="snap-l">Events</span></div>
-          <div class="snap snap-bonus"><span class="snap-v${(() => { const t = formatCurrency(expectedBonusTotal); return t.length >= 8 ? ' snap-v-sm' : ''; })()}">${formatCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
-        </div>
-      </aside>
       ${renderOverviewChurnSection()}
     </div>
   `;
@@ -6869,22 +6952,27 @@ function statCard(label, value, meta = '', variant = '', action = null) {
    REMINDER / ACTION ITEM MODEL — ONE SHARED BUILDER
    ============================================================
    buildReminderItems(state) is the SINGLE source of every actionable
-   date in the planner. All three surfaces consume its output so they can
+   date in the planner. Both surfaces consume its output so they can
    never diverge again (step-3 P1; step-6 feed-contract v2):
      • computeReminderFeed     — schema-2 machine feed (Gist → iOS Shortcut
                                  / ICS worker); emits ALL future items, no
                                  horizon; adds tombstones + manifestVersion.
+                                 COMPLETED items (see below) are excluded here,
+                                 which tombstones them for the consumer.
      • computeUpcomingActions  — the overview "Upcoming actions" LIST; keeps
-                                 its 90-day horizon filter (by design).
-     • computeActionsRequired  — the at-a-glance headline COUNT; counts WORK
-                                 items only, from today forward (no UPPER
-                                 horizon, but past-due items drop).
-   RECONCILIATION INVARIANT (see computeActionsRequired / computeUpcomingActions):
-   count = the WORK items from this builder (isWork===true) due today or later
-   (no upper horizon); the LIST = every builder item within [today, today+90].
-   Both derive from the same items[] and both drop past-due dates, so the
-   headline count and the visible list agree by construction — a committed
-   offer past its funding date reads count 0 / list 0, never count 1 / list 0.
+                                 its 90-day horizon filter (by design), and
+                                 lingers recently-completed items greyed.
+   (The former third consumer, computeActionsRequired — the At-a-glance headline
+   COUNT — was removed with that panel in R70; nothing else read it.)
+
+   COMPLETION (R70): each item carries `done`/`doneDate`. requirement-deadline
+   reads them from its requirement row (write-through — the same source of truth
+   as the offer-card checklist); every other completable kind reads them from
+   state.action_done[id]. A done item is EXCLUDED from computeReminderFeed's
+   items[] (→ tombstone) and lingered greyed by the LIST for
+   ACTION_DONE_LINGER_DAYS. When nothing is completed, both surfaces are
+   byte-identical to their pre-R70 output (the added fields are never serialized
+   into the feed and the list simply shows no greyed rows).
 
    Each built item carries BOTH the feed fields and the list fields:
      id         — stable across syncs (offer/commitment/event id + kind);
@@ -6912,6 +7000,22 @@ function statCard(label, value, meta = '', variant = '', action = null) {
 // subStatus values for which the account is committed and requirement WORK
 // (deposit / DD initiations / debit purchases) is still outstanding.
 const WORK_ITEM_SUB_STATUSES = new Set(['approved', 'on-track']);
+
+// Per-action completion (Upcoming-actions rows). A completed action lingers in
+// the LIST greyed/struck with its "Done <date>" for this many days, then drops
+// from the list (the FEED already tombstoned it on completion). It never
+// resurrects unless the underlying date/fact changes materially — id stability
+// guarantees that.
+const ACTION_DONE_LINGER_DAYS = 7;
+// The action kinds that carry a completion control. requirement-deadline writes
+// through to its requirement row's done/done_date; the rest live in
+// state.action_done. Pure capital-flow rows (commitment-end / inflow / outflow)
+// are intentionally excluded — they are not "actions the owner performs".
+const ACTION_COMPLETABLE_KINDS = new Set([
+  'requirement-deadline', 'deposit-deadline', 'dd-initiate', 'dd-window-end',
+  'debit-deadline', 'withdrawal', 'churn-eligible', 'expected-bonus-window',
+  'safe-to-close', 'offer-expires'
+]);
 
 // The "all DDs by" window-end date for a DD-family offer, where derivable.
 // Frequency mode ("N DDs, one every <period>") → signup + periods×period.
@@ -7082,7 +7186,11 @@ function buildReminderItems(state) {
     // _feedRemoved tombstone mechanism automatically via computeReminderFeed.
     if (committed && Array.isArray(o.requirements)) {
       for (const r of o.requirements) {
-        if (!r || r.source !== 'user' || !r.id || r.done) continue;
+        if (!r || r.source !== 'user' || !r.id) continue;
+        // DONE rows are NO LONGER skipped — they emit ANNOTATED (done:true) so
+        // the Upcoming-actions list can linger them greyed for a few days. The
+        // machine feed still excludes done items (computeReminderFeed filters
+        // on `done`), so a completed requirement tombstones exactly as before.
         const dlISO = requirementDeadlineISO(o, r);
         if (!dlISO) continue;
         const due = dlISO.slice(0, 10);
@@ -7092,6 +7200,9 @@ function buildReminderItems(state) {
         items.push({
           id: `yv-offer-${o.id}-req-${r.id}`,
           ownerId: o.id, kind: 'requirement-deadline', dueDate: due, isWork: true,
+          // requirement-deadline is the ONE kind whose completion writes through
+          // to a domain field (the row's done/done_date) rather than action_done.
+          reqId: r.id, done: !!r.done, doneDate: r.done ? (r.done_date || null) : null,
           title: `${name} — ${label}`,
           notes: summary ? `${summary}. Complete by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`
                          : `Complete by this date to qualify for the ${formatCompactCurrency(o.signupBonusAmount)} bonus.`,
@@ -7243,6 +7354,21 @@ function buildReminderItems(state) {
     });
   }
 
+  // Annotate action-level completion for every NON-requirement kind from the
+  // state.action_done map (requirement-deadline was already annotated from its
+  // row above). done items are excluded from the machine feed by
+  // computeReminderFeed and lingered greyed by computeUpcomingActions; when the
+  // map is empty this loop sets done:false on everything and the output is
+  // unchanged from before this feature.
+  const actionDone = (state.action_done && typeof state.action_done === 'object' && !Array.isArray(state.action_done))
+    ? state.action_done : {};
+  for (const it of items) {
+    if (it.kind === 'requirement-deadline') continue;
+    const dd = actionDone[it.id];
+    it.done = dd != null;
+    it.doneDate = dd != null ? dd : null;
+  }
+
   items.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return items;
 }
@@ -7276,6 +7402,16 @@ function buildReminderItems(state) {
    the legacy funding/DD/debit fields the deposit-deadline / dd-initiate /
    debit-deadline items already cover, so emitting from them too would
    double-book. Done rows emit nothing (obligation met).
+
+   ACTION COMPLETION (R70, additive — envelope UNCHANGED): a completed action is
+   EXCLUDED from items[] and therefore appears in removed[] (reason 'superseded'),
+   exactly like a deleted/superseded item — so the consumer's EXISTING tombstone
+   loop (Section F) marks the reminder complete. No new field, no envelope change:
+   the Shortcut needs no update to honor completions (it already drains removed[]).
+   Completion source is the requirement row's done flag for requirement-deadline,
+   or state.action_done[id] for every other completable kind. A re-opened action
+   re-enters items[] and its tombstone is dropped (resurrection), same as an
+   un-deleted offer.
 
    (step 4, lifecycle — both informational, isWork:false):
      • `expected-bonus-window` (id `yv-offer-<offerId>-bonuswindow`) — the
@@ -7317,6 +7453,31 @@ const FEED_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // fixed 90-day retentio
 let _manifestHwm = 0;
 function computeReminderFeed(state) {
   const built = buildReminderItems(state);
+  // COMPLETED actions are EXCLUDED from the machine feed. Because they leave the
+  // live-id set below, the existing tombstone diff retires them into removed[],
+  // and the iOS Shortcut marks the matching reminder complete — the same path a
+  // done user-requirement always took. When nothing is completed `emitted` ===
+  // `built`, so items[]/removed[]/the whole envelope are byte-identical to
+  // before this feature (the added per-item `done` field is never serialized).
+  const emitted = built.filter(it => !it.done);
+  // PRUNE state.action_done (P3-1) so it can't grow without bound. Drop a
+  // completion whose item id is NO LONGER produced by the builder (offer/
+  // commitment deleted, or the underlying fact changed so the id is gone) AND
+  // whose done-date is older than the tombstone TTL (90d). The TTL grace stops
+  // flicker-pruning an item that's only momentarily absent; a done item's OWN id
+  // is still in `built` (annotated done:true, before the exclusion above), so an
+  // active/lingering completion is never pruned. An orphaned-offer key therefore
+  // disappears in the first compute where it's both absent AND past the TTL.
+  if (state.action_done && typeof state.action_done === 'object' && !Array.isArray(state.action_done)) {
+    const builtIds = new Set(built.map(it => it.id));
+    const ttlCutoff = Date.now() - FEED_TOMBSTONE_TTL_MS;
+    for (const id in state.action_done) {
+      if (builtIds.has(id)) continue;                              // item still exists → keep
+      const dEpoch = Date.parse(state.action_done[id]);
+      if (Number.isFinite(dEpoch) && dEpoch >= ttlCutoff) continue; // within TTL grace → keep
+      delete state.action_done[id];
+    }
+  }
   const generatedAt = new Date().toISOString();
   const stampTime = (d) => d.slice(0, 10) + 'T09:00:00';
 
@@ -7339,7 +7500,7 @@ function computeReminderFeed(state) {
   // Tombstones. Diff the ids we emit now against the ids we emitted last
   // time (state._feedEmitted). Any id that was live and is now gone gets a
   // tombstone, reason inferred from whether its owning record still exists.
-  const liveIds = new Set(built.map(it => it.id));
+  const liveIds = new Set(emitted.map(it => it.id));
   const offerIds = new Set((state.offers || []).map(o => o.id));
   const cmtIds = new Set((state.commitments || []).map(c => c.id));
   const evtIds = new Set((state.events || []).map(e => e.id));
@@ -7377,7 +7538,7 @@ function computeReminderFeed(state) {
 
   // Record what we emitted this round (id → ownerId) for the next diff.
   const emittedNow = {};
-  for (const it of built) emittedNow[it.id] = it.ownerId || '';
+  for (const it of emitted) emittedNow[it.id] = it.ownerId || '';
   state._feedEmitted = emittedNow;
 
   const lastGoodGeneratedAt = generatedAt; // this compute succeeded
@@ -7387,7 +7548,7 @@ function computeReminderFeed(state) {
     manifestVersion,
     feedStatus: 'ok',
     lastGoodGeneratedAt,
-    items: built.map(it => ({
+    items: emitted.map(it => ({
       id: it.id,
       kind: it.kind,
       title: it.title,
@@ -7425,41 +7586,30 @@ function computeFeedSafely(state) {
   }
 }
 
-// "Actions required": the headline count of discrete to-dos still owed on
-// committed offers. Counts the WORK items from the shared builder (deposit,
-// each future DD initiation, debit purchases) that are still ACTIONABLE
-// (due today or later). No UPPER horizon — a work item past the list's 90-day
-// window still counts — but a work item whose deadline has already PASSED is
-// dropped, exactly as the list drops d < TODAY, so the headline count and the
-// visible list can never disagree (a committed offer past its funding date
-// must read count 0 / list 0, not count 1 / list 0). Prospects/applied
-// contribute ZERO (owner decision, step-6 [4]); met-waiting/earned/closed
-// offers have no outstanding work (excluded by the builder's committed gate).
-function computeActionsRequired(state) {
-  const todayISO = isoDate(TODAY);
-  let n = 0;
-  for (const it of buildReminderItems(state)) {
-    if (!it.isWork) continue;
-    // Past-due work items drop from the count just as they drop from the list
-    // (string compare is safe on canonical YYYY-MM-DD).
-    if (it.dueDate < todayISO) continue;
-    // debit-deadline is one dated item standing in for N purchases.
-    n += Number(it.workCount) || 1;
-  }
-  return n;
-}
-
-// The overview "Upcoming actions" LIST: every builder item within the
-// 90-day horizon (the horizon filter is by design — the FEED keeps the full
-// future). Reconciles with computeActionsRequired by construction: same
-// items[], count = the isWork subset regardless of horizon, list = all
-// within horizon.
+// The overview "Upcoming actions" LIST: every builder item within the 90-day
+// horizon (the horizon filter is by design — the FEED keeps the full future),
+// PLUS any recently-completed action still inside its ACTION_DONE_LINGER_DAYS
+// window (rendered greyed). (The former companion `computeActionsRequired`
+// headline count was removed with the At-a-glance panel — R70; it had no other
+// consumer, so its known past-due miscount is fully mooted.)
 function computeUpcomingActions(state, limit = 12) {
   const horizonEnd = addDays(TODAY, 90);
   const items = [];
   for (const it of buildReminderItems(state)) {
     const d = parseDate(it.dueDate);
-    if (!d || d < TODAY || d > horizonEnd) continue;
+    if (!d) continue;
+    if (it.done) {
+      // Completed actions linger in the list greyed for ACTION_DONE_LINGER_DAYS
+      // after their done date, then drop (the feed already tombstoned them).
+      // Gated on the DONE date, not the due date, so a completed-but-past-due
+      // item still shows briefly (it would fail the d < TODAY horizon below).
+      const dd = it.doneDate ? parseDate(it.doneDate) : null;
+      if (!dd) continue;
+      const age = daysBetween(dd, TODAY);
+      if (age < 0 || age > ACTION_DONE_LINGER_DAYS) continue;
+    } else {
+      if (d < TODAY || d > horizonEnd) continue;   // existing 90-day horizon
+    }
     items.push({
       date: d,
       kind: it.listLabel,
@@ -7468,12 +7618,19 @@ function computeUpcomingActions(state, limit = 12) {
       tag: it.tag,
       color: it.color,
       targetKind: it.targetKind,
-      targetId: it.targetId
+      targetId: it.targetId,
+      // Completion plumbing threaded through to renderActionRow:
+      feedId: it.id,             // stable id → completion control + action_done key
+      feedKind: it.kind,         // semantic kind → routes the toggle (req vs map)
+      ownerId: it.ownerId,       // offer id, for requirement write-through
+      reqId: it.reqId || '',     // requirement row id (requirement-deadline only)
+      done: !!it.done,
+      doneDate: it.doneDate || null
     });
   }
-  // Builder already sorts by dueDate; keep a stable date sort for the Date
-  // objects (identical ordering) and page.
-  items.sort((a, b) => a.date - b.date);
+  // Not-done first (by date), then the lingering-done rows collected at the
+  // bottom (also by date) so completed items never push pending work down.
+  items.sort((a, b) => (a.done - b.done) || (a.date - b.date));
   return items.slice(0, limit);
 }
 
@@ -7515,17 +7672,34 @@ function updateUpcomingPage(nextPage) {
 function renderActionRow(item) {
   const month = item.date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
   const day = item.date.getDate();
+  const done = !!item.done;
+  // Display-side name strip (R70): the feed title carries the raw offer name,
+  // which may end in a "$amount". Strip it for the LIST only (feed payload is
+  // untouched) via the same helper the rest of the UI uses.
+  const displayName = displayOfferName(item.name);
+  // A quiet completion control on completable kinds (checklist idiom). Its own
+  // data-action wins over the row's open-action-target because onClick uses the
+  // INNERMOST [data-action] ancestor, so tapping it toggles completion without
+  // opening the offer.
+  const canComplete = item.feedId && ACTION_COMPLETABLE_KINDS.has(item.feedKind);
+  const check = canComplete
+    ? `<button type="button" class="action-check${done ? ' checked' : ''}" data-action="toggle-action-done" data-feed-id="${escapeAttr(item.feedId)}" data-feed-kind="${escapeAttr(item.feedKind || '')}" data-owner-id="${escapeAttr(item.ownerId || '')}" data-req-id="${escapeAttr(item.reqId || '')}" aria-pressed="${done ? 'true' : 'false'}" aria-label="${done ? 'Mark not done' : 'Mark done'}" title="${done ? 'Mark not done' : 'Mark done'}">${done ? '✓' : ''}</button>`
+    : '';
+  const sub = done
+    ? `Done ${escapeHtml(formatDateDisplay(item.doneDate))}`
+    : `${escapeHtml(item.sub)} · ${escapeHtml(relativeDays(item.date))}`;
   return `
-    <div class="action-row${item.color ? ' has-color' : ''}${item.targetKind ? ' clickable' : ''}"${item.color ? ` style="--offer-color:${item.color};"` : ''}${item.targetKind ? ` data-action="open-action-target" data-target-kind="${item.targetKind}" data-target-id="${escapeAttr(item.targetId)}" role="button" tabindex="0"` : ''}>
+    <div class="action-row${item.color ? ' has-color' : ''}${item.targetKind ? ' clickable' : ''}${done ? ' done' : ''}"${item.color ? ` style="--offer-color:${item.color};"` : ''}${item.targetKind ? ` data-action="open-action-target" data-target-kind="${item.targetKind}" data-target-id="${escapeAttr(item.targetId)}" role="button" tabindex="0"` : ''}>
       <div class="action-day">
         <span class="month">${month}</span>
         <span class="day">${day}</span>
       </div>
       <div class="action-body">
-        <div class="action-title">${escapeHtml(item.name)}</div>
-        <div class="action-sub">${escapeHtml(item.sub)} · ${relativeDays(item.date)}</div>
+        <div class="action-title">${escapeHtml(displayName)}</div>
+        <div class="action-sub">${sub}</div>
       </div>
       <span class="action-tag ${item.tag || ''}">${escapeHtml(item.kind)}</span>
+      ${check}
     </div>
   `;
 }
@@ -8044,11 +8218,12 @@ function renderOfferCard(o) {
         ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
       ${(() => {
-        // Item 2: DoC source link + Updated stamp share one right-aligned footer.
+        // R70 [6]: the DoC source link now STACKS BELOW the Updated stamp
+        // (stamp on top, link beneath) — both right-aligned in a column footer.
         // Skip the wrapper entirely when neither is present (no empty gap).
         const doc = offerDocLink(o);
         const stamp = offerUpdatedStamp(o);
-        return (doc || stamp) ? `<div class="offer-card-foot">${doc}${stamp}</div>` : '';
+        return (doc || stamp) ? `<div class="offer-card-foot">${stamp}${doc}</div>` : '';
       })()}
     </div>
   `;
@@ -9573,6 +9748,40 @@ function docSnippet(s) {
   return t.length > 120 ? t.slice(0, 117) + '…' : t;
 }
 
+// Cap a string at n chars with an ellipsis (word-boundary-agnostic; used for
+// condition values that must not run unbounded into the form).
+function docCapText(s, n) {
+  const t = String(s == null ? '' : s).trim();
+  return t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '').trim() + '…' : t;
+}
+
+// A condition clause captured from the body can END AT A COLON when the actual
+// terms live in a following bullet list ("… otherwise you must:" + <ul>). The
+// list, flattened by the HTML→text step, becomes consecutive lines right after
+// the clause. Collect those bullet lines (≥2, so a single trailing sentence
+// isn't mistaken for a list), strip bullet markers + trailing ", or"/" and"
+// connectors, lowercase each item's first letter (they continue the sentence
+// after the colon), and join with "; or ". Returns '' when no real list follows.
+// `fromIdx` is the index in `text` immediately after the clause match.
+function docBulletsAfterClause(text, fromIdx) {
+  const lines = String(text).slice(fromIdx).split(/\r?\n/).map(l => l.trim());
+  const bullets = [];
+  for (let i = 0; i < lines.length && bullets.length < 6; i++) {
+    const l = lines[i];
+    if (l === '') { if (bullets.length) break; else continue; }
+    // Stop once a list has started and we hit a new glance-style label
+    // ("Label: value") or an over-long paragraph (not a list item).
+    if (bullets.length && (/^[A-Za-z][A-Za-z /&-]{0,28}:\s/.test(l) || l.length > 180)) break;
+    let b = l.replace(/^[\s•·\-\*•●▪‣]+/, '')      // leading bullet glyphs
+             .replace(/[,;]?\s*(?:or|and)\s*$/i, '')                  // trailing ", or" / " and"
+             .trim();
+    if (!b) continue;
+    b = b.charAt(0).toLowerCase() + b.slice(1);
+    bullets.push(b);
+  }
+  return bullets.length >= 2 ? bullets.join('; or ') : '';
+}
+
 // Fuzzy label match (quirk 6): lowercase, strip non-alphanumerics, test that all
 // of the target's significant tokens appear in the candidate label. Tolerates
 // "Direct Deposit Required" vs "Direct deposit needed" etc.
@@ -10457,16 +10666,55 @@ function parseDocPost(raw) {
       }
     }
   }
-  // Hold period. Prefer an explicit "days N-M" / "days N through M" Maintenance-
-  // Period span (duration = M − N + 1, e.g. «days 31-90» → 60 — [04][18]), then
-  // a "maintain … for Z days/weeks" phrase. A "by day N" DEPOSIT deadline is NOT
-  // a hold and is excluded from this scan.
-  const spanM = text.match(/days?\s+(\d{1,3})\s*(?:-|–|—|through|to|thru)\s*(\d{1,3})\b/i);
+  // Hold period + ANCHOR. This is clawback-territory (R70): the hold is the day
+  // the bank counts to, and the ANCHOR (account opening vs funded date) decides
+  // when the clock starts. Getting the anchor wrong UNDER-holds and can forfeit
+  // the bonus, so both are extracted together.
+  //
+  // (a) A "day-number span" — «days 31 through day 90», «from day 31 to 90»,
+  //     «between day 31 and 90». The "day N" numbering is counted from ACCOUNT
+  //     OPENING (the enrollment clock), so the funds must remain through day Y
+  //     (the END of the span) measured from opening: daysFundsMustRemain = Y and
+  //     lockStartsFrom = 'open date'. (The OLD code wrote M−N+1 = 60 with the
+  //     default FUNDED anchor — a 30-day under-hold if you fund early; corpus
+  //     gold labels this hold as 90/opening, so this also fixes [01][04][18].)
+  //     The interposed "day" before Y was the exact miss on the owner's BofA
+  //     import — `(?:day\s+)?` now tolerates it. The START day X is NOT wired to
+  //     the deposit window here: the explicit "within N days" clause (parsed just
+  //     below) stays authoritative and X can conflict with it.
+  const spanM = text.match(/\bdays?\s+(\d{1,3})\s*(?:-|–|—|to|through|thru)\s*(?:day\s+)?(\d{1,3})\b/i)
+    || text.match(/\bfrom\s+day\s+(\d{1,3})\s+(?:to|through|thru)\s+(?:day\s+)?(\d{1,3})\b/i)
+    || text.match(/\bbetween\s+days?\s+(\d{1,3})\s+and\s+(?:day\s+)?(\d{1,3})\b/i);
   if (spanM) {
     const a = Number(spanM[1]), b = Number(spanM[2]);
-    if (Number.isFinite(a) && Number.isFinite(b) && b > a) put('daysFundsMustRemain', b - a + 1, 'medium', spanM[0]);
+    // b>a (a real forward span) and a plausible through-day (≥20, ≤366) so a
+    // stray "day 1 and day 2"-style phrase can't masquerade as a hold.
+    if (Number.isFinite(a) && Number.isFinite(b) && b > a && b >= 20 && b <= 366) {
+      put('daysFundsMustRemain', b, 'high', spanM[0]);          // THROUGH day Y
+      // ANCHOR confidence (P3-3). A bare "days 31 through day 90" doesn't STATE
+      // its anchor — the day-number convention implies opening, but asserting
+      // open-date at HIGH on a bare span is clawback-adjacent if wrong. Only an
+      // explicit opening cue in the SAME sentence earns the HIGH open-date
+      // anchor; a bare span emits it LOW (default-UNCHECKED in the preview) so
+      // the user decides. (A bare span left at the form's FUNDED default is SAFE:
+      // funded+Y ≥ opening+Y, i.e. it over-holds, never under-holds — the
+      // dangerous direction is the OLD 60/funded under-hold, already fixed by
+      // count=Y above.)
+      const si = spanM.index || 0;
+      const sentStart = Math.max(text.lastIndexOf('.', si), text.lastIndexOf('\n', si)) + 1;
+      let sentEnd = si + spanM[0].length;
+      const pe = text.indexOf('.', sentEnd), ne = text.indexOf('\n', sentEnd);
+      sentEnd = Math.min(pe < 0 ? text.length : pe, ne < 0 ? text.length : ne);
+      const sentence = text.slice(sentStart, sentEnd);
+      const openingCtx = /account opening|\bof opening\b|\bafter opening\b|\bfrom opening\b|opening date|from account open/i.test(sentence);
+      put('lockStartsFrom', 'open date', openingCtx ? 'high' : 'low', spanM[0]);
+    }
   }
   if (!fields.daysFundsMustRemain) {
+    // (b) A DURATION phrase — «maintain the balance for 60 days», «keep funds for
+    //     90 days» — is measured from FUNDING (the money movement), so
+    //     daysFundsMustRemain = N and the anchor stays the default 'funded date'
+    //     (no lockStartsFrom emitted → the form's default funded radio holds).
     const holdM = text.match(/([^.\n]{0,160}\b(?:keep|maintain|hold|remain|leave)\b[^.\n]{0,120}?(?:for\s+)(?:at least\s+)?(\d+)\s+(days?|weeks?)[^.\n]{0,120})/i);
     if (holdM) { const d = docDaysFrom(holdM[2], holdM[3]); if (d != null) put('daysFundsMustRemain', d, 'medium', holdM[1]); }
   }
@@ -10577,7 +10825,20 @@ function parseDocPost(raw) {
     const wvb = text.match(/([^.\n]{0,160}\bfee\b[^.\n]{0,160}\bwaiv\w*[^.\n]{0,160})/i);
     if (wvb) {
       const cond = wvb[1].match(/waiv\w*\s+(?:with|if|by|for|when)\s+([^.;\n]+)/i);
-      if (cond) put('fee_waiver_condition', cond[1].trim(), 'medium', wvb[1]);
+      if (cond) {
+        let value = cond[1].trim();
+        // COLON + BULLETS (R70): the clause ends at a colon and the real terms
+        // live in a following bullet list ("… otherwise you must:" + <ul>). Use
+        // the fuller lead-in (wvb[1], which reads "Fee is waived for … you must:")
+        // and append the dropped bullets so the condition isn't silently halved.
+        if (/:\s*$/.test(value)) {
+          const bullets = docBulletsAfterClause(text, wvb.index + wvb[1].length);
+          if (bullets) value = wvb[1].replace(/\s*:\s*$/, ': ').trim() + ' ' + bullets;
+        }
+        // Cap the appended clause (~240; 260 chosen so a typical 3-condition
+        // "you must: X; or Y; or Z" list isn't truncated mid-item).
+        put('fee_waiver_condition', docCapText(value, 260), 'medium', wvb[1]);
+      }
     }
   }
 
@@ -10713,12 +10974,35 @@ function parseDocPost(raw) {
 function _docForm() { return document.getElementById('offer-form'); }
 function _docEl(sel) { const f = _docForm(); return f ? f.querySelector(sel) : null; }
 // Set a scalar input's value and fire input+change so dependent logic runs.
+// Capitalize the FIRST letter of an applied free-text value ("smaller companies…"
+// → "Smaller companies…"). Leaves the rest untouched (not title-case). Returns
+// the input unchanged when it has no letter to capitalize.
+function _docCapFirst(s) {
+  const str = String(s);
+  const m = str.match(/[A-Za-z]/);
+  if (!m) return str;
+  return str.slice(0, m.index) + str[m.index].toUpperCase() + str.slice(m.index + 1);
+}
 function _docSetInput(sel, value, kind) {
   const el = _docEl(sel);
   if (!el) return;
   if (kind === 'money') el.value = (value == null || value === '') ? '' : formatMoneyInput(value);
   else if (kind === 'date') el.value = value ? formatDateDisplay(value) : '';
-  else el.value = (value == null) ? '' : String(value);
+  else {
+    let out = (value == null) ? '' : String(value);
+    // R70: capitalize the first letter of applied prose so imported text reads
+    // naturally. EXCLUSIONS that must pass through byte-for-byte: promo codes and
+    // URL/doc fields (case-sensitive at the bank — mangling flips a valid code),
+    // <select> enums (churnable / churn-anchor — a capital breaks option matching),
+    // and machine tokens (true|false, snake_case). A value with no leading letter
+    // is untouched by _docCapFirst anyway.
+    const skip = /promo|url|link|\bdoc\b|f-doc/i.test(sel)
+      || (el.tagName === 'SELECT')
+      || /^(?:true|false)$/i.test(out)
+      || /^[a-z]+(?:_[a-z]+)+$/.test(out);
+    if (out && !skip) out = _docCapFirst(out);
+    el.value = out;
+  }
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
@@ -10791,6 +11075,12 @@ const DOC_FIELD_MAP = [
   { key: 'requiredFundingAmount', label: 'Funding amount', format: v => '$' + formatMoneyInput(v), current: () => _docCurrentInput('#f-funding', 'money'), apply: v => _docSetInput('#f-funding', v, 'money') },
   { key: 'daysAfterSignupAllowedBeforeDeposit', label: 'Deposit/DD window (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-deposit'), apply: v => _docSetInput('#f-days-deposit', v) },
   { key: 'daysFundsMustRemain', label: 'Hold period (days)', format: v => v + ' days', current: () => _docCurrentInput('#f-days-remain'), apply: v => _docSetInput('#f-days-remain', v) },
+  // Hold ANCHOR (R70). Only emitted by the parser for an opening-anchored day-span
+  // ("days 31 through day 90"), where getting it wrong under-holds; a funded hold
+  // leaves the form's default 'funded date' radio and this row is simply absent.
+  { key: 'lockStartsFrom', label: 'Hold counted from', format: v => (v === 'open date' ? 'Account opening' : 'Funded date'),
+    current: () => { const r = _docEl('[name="lockStartsFrom"]:checked'); return r ? (r.value === 'open date' ? 'Account opening' : 'Funded date') : ''; },
+    apply: v => { const r = _docEl(v === 'open date' ? '#lsf-open' : '#lsf-fund'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } } },
   { key: 'debitCount', label: 'Debit transactions', format: v => v + '×',
     current: () => { const y = _docEl('#debit-yes'); return (y && y.checked) ? _docCurrentInput('#f-debit-count') : ''; },
     apply: v => { const y = _docEl('#debit-yes'); if (y) { y.checked = true; y.dispatchEvent(new Event('change', { bubbles: true })); } _docSetInput('#f-debit-count', v); } },
@@ -10985,9 +11275,33 @@ function _docEffectiveFields(result, tierSel) {
 // escaped) and a tiny "→ funding amount / maintain-balance requirement" target
 // hint. A trailing "No tier" radio keeps the manual/headline values. `sel` is
 // _docTierSel (null / -1 / index).
+// Compact percent for the tier ROI chip: whole number at ≥10, one decimal below
+// (keeps "≈30%/yr" tight while "≈6.2%/yr" stays informative). Numeric-only.
+function _docFmtPct(v) {
+  if (!Number.isFinite(v)) return '0';
+  return v >= 10 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
+}
+
 function _docRenderTierGroup(result, sel) {
   const tiers = (result && result.tiers) || [];
   if (tiers.length < 2) return '';
+  // Offer-level hold (daysFundsMustRemain) from the parsed fields, used as the
+  // lock-days fallback when a tier carries no per-tier hold (the 4a scanner emits
+  // per-tier holds as null — the hold is stated once for the whole offer).
+  const _f = (result && result.fields) || {};
+  const offerHoldRaw = _f.daysFundsMustRemain ? Number(_f.daysFundsMustRemain.value) : NaN;
+  let offerHoldDays = (Number.isFinite(offerHoldRaw) && offerHoldRaw > 0) ? offerHoldRaw : 0;
+  // The chip annualizes over the ACTUAL capital lock (funded → withdrawal). When
+  // the hold is anchored to ACCOUNT OPENING, daysFundsMustRemain is a through-day
+  // measured from opening, but the money isn't tied up until it's DEPOSITED — so
+  // subtract the deposit window to get the real lock (BofA: through-day 90 from
+  // opening − 30-day deposit window = 60 days actually locked → ≈30%/yr, not the
+  // ≈20%/yr a naive 90-day basis would show). A funded-date hold is already the
+  // real lock and is used as-is.
+  const anchor = (_f.lockStartsFrom && _f.lockStartsFrom.value) || 'funded date';
+  const depWinRaw = _f.daysAfterSignupAllowedBeforeDeposit ? Number(_f.daysAfterSignupAllowedBeforeDeposit.value) : NaN;
+  const depWin = (Number.isFinite(depWinRaw) && depWinRaw > 0) ? depWinRaw : 0;
+  if (anchor === 'open date' && depWin > 0 && offerHoldDays > depWin) offerHoldDays = offerHoldDays - depWin;
   const rows = tiers.map((t, i) => {
     const checked = (sel === i) ? 'checked' : '';
     const threshold = escapeHtml(_docTierThresholdLabel(t));
@@ -10995,6 +11309,19 @@ function _docRenderTierGroup(result, sel) {
     const target = escapeHtml(_docTierThresholdTargetDesc(t));
     const snip = String(t.snippet || '').slice(0, 120);
     const snipLine = snip ? `<span class="doc-tier-snippet">"${escapeHtml(snip)}"</span>` : '';
+    // Annualized-return chip. rate = bonus / threshold_min; annualize by
+    // 365/lockDays, lockDays = per-tier hold ?? offer-level hold. With NO hold
+    // data anywhere, fall back to plain ROI. Division guarded on both operands;
+    // all numeric so nothing new to escape.
+    const tmin = Number(t.threshold_min);
+    const lockDays = (t.hold_days != null && Number(t.hold_days) > 0) ? Number(t.hold_days) : offerHoldDays;
+    let roiChip = '';
+    if (Number.isFinite(tmin) && tmin > 0 && Number.isFinite(Number(t.bonus))) {
+      const roiPct = (Number(t.bonus) / tmin) * 100;
+      roiChip = (lockDays > 0)
+        ? `<span class="doc-tier-roi" title="Annualized: ${_docFmtPct(roiPct)}% return over a ${lockDays}-day hold, ×365/${lockDays}">≈${_docFmtPct(roiPct * (365 / lockDays))}%/yr</span>`
+        : `<span class="doc-tier-roi" title="No hold period parsed — showing simple return, not annualized">${_docFmtPct(roiPct)}% ROI (no hold data)</span>`;
+    }
     return `
       <label class="doc-tier-opt">
         <input type="radio" name="doc-tier-pick" class="doc-tier-radio" value="${i}" ${checked} />
@@ -11003,6 +11330,7 @@ function _docRenderTierGroup(result, sel) {
             <span class="doc-tier-thresh">${threshold}</span>
             <svg class="doc-tier-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             <span class="doc-tier-bonus">${bonus}</span>
+            ${roiChip}
             <span class="doc-tier-target">→ ${target}</span>
           </span>
           ${snipLine}
@@ -11273,6 +11601,22 @@ function _docMergeLlmFields(result, llm, articleText) {
   return result;
 }
 
+// Derive a pseudo-title from a DoC URL slug when the Worker returned no `title`
+// (old deployment). "…/bank-of-america-business-500-3000-bonus/" → "Bank Of
+// America Business 500 3000 Bonus". Hyphens → spaces, alpha words title-cased,
+// numeric tokens (amounts) left as-is. Best-effort → '' on any parse failure.
+function _docSlugTitle(url) {
+  try {
+    const u = new URL(url);
+    let slug = (u.pathname.replace(/\/+$/, '').split('/').pop() || '').replace(/\.(html?|php|aspx?)$/i, '');
+    if (!slug) return '';
+    return slug.split('-').filter(Boolean)
+      .map(w => /^[0-9]/.test(w) ? w : (w.charAt(0).toUpperCase() + w.slice(1)))
+      .join(' ')
+      .trim();
+  } catch { return ''; }
+}
+
 async function docImportFetch() {
   const urlInput = document.getElementById('doc-fetch-url');
   const btn = document.getElementById('doc-fetch-btn');
@@ -11322,6 +11666,29 @@ async function docImportFetch() {
     catch (e) {
       if (typeof logError === 'function') logError(ErrCode.PARSE, e, 'docImportFetch: parse');
       throw new Error('could not parse the fetched post');
+    }
+    // BANK / OFFER NAME (R70): the post TITLE lives OUTSIDE entry-content, so the
+    // article body the Worker returns has no headline for the name heuristic to
+    // read. If the body alone produced neither a bank nor an offer name, prepend
+    // the Worker's returned `title` (or, for an OLD worker that predates the field,
+    // a pseudo-title derived from the URL slug at LOW confidence) as a synthetic
+    // first line and re-parse — then adopt ONLY the name fields it recovers.
+    const _gotName = (f) => f && f.value != null && String(f.value).trim() !== '';
+    if (!_gotName(result.fields.bankName) || !_gotName(result.fields.offerName)) {
+      let titleLine = (typeof data.title === 'string' && data.title.trim()) ? data.title.trim() : '';
+      let lowConf = false;
+      if (!titleLine) { titleLine = _docSlugTitle(url); lowConf = true; }   // old worker fallback
+      if (titleLine) {
+        let reparsed = null;
+        try { reparsed = parseDocPost(titleLine + '\n\n' + data.html); } catch (e) { reparsed = null; }
+        if (reparsed) {
+          for (const k of ['bankName', 'offerName']) {
+            if (!_gotName(result.fields[k]) && _gotName(reparsed.fields[k])) {
+              result.fields[k] = lowConf ? Object.assign({}, reparsed.fields[k], { confidence: 'low' }) : reparsed.fields[k];
+            }
+          }
+        }
+      }
     }
     _docMergeLlmFields(result, data.llm, data.html);
     _docLastParse = result;
@@ -11439,7 +11806,7 @@ const DOC_TEST_EXPECT = {
   // LOW-confidence (default-unchecked) + a top-level tiers[] (checked via _tiers).
   // The "Credit card funding: … up to $500" row is a cc_funding_note, NOT the
   // funding requirement (P0); requiredFundingAmount = the lowest deposit tier.
-  '06': { signupBonusAmount: 3000, ddRequired: false, requiredFundingAmount: 10000, offerExpirationDate: '2026-12-31', early_termination_fee: 0, cc_funding_note: '@present', _tiers: 4, _signupBonusConfidence: 'low' },
+  '06': { signupBonusAmount: 3000, ddRequired: false, requiredFundingAmount: 10000, offerExpirationDate: '2026-12-31', early_termination_fee: 0, cc_funding_note: '@present', _tiers: 4, _signupBonusConfidence: 'low', daysFundsMustRemain: 90, lockStartsFrom: 'open date', daysAfterSignupAllowedBeforeDeposit: 30, fee_waiver_condition: '@present' },
   // 07 — DELTA updates (step-4a P2). The newest "Update 5/20/2026" LOWERS the
   // bonus to $250, EXTENDS expiration to 9/30/2026, and changes the promo code to
   // SUMMER250 — each supersedes the stale glance box + the older 2/2/2026 update.
@@ -11548,14 +11915,48 @@ function testDocParserRegressions() {
     { name: 'Item5b trailing $600 stripped from offerName',
       html: '<article><p>Ridgeline $500 Premier Checking $600</p><p>Open a Ridgeline account to earn your bonus.</p></article>',
       key: 'offerName', want: 'Premier Checking' },
+    // R70 [5] + addendum — HOLD ANCHOR. "days 31 through day 90" is counted from
+    // ACCOUNT OPENING, so the funds must remain THROUGH day 90 (not 60 = the
+    // window duration) and the anchor is 'open date' (getting this wrong
+    // under-holds → clawback). Both directions pinned.
+    { name: 'R70 hold: "days 31 through day 90 of opening" → daysFundsMustRemain 90',
+      html: '<article><p>You must deposit funds within 30 days of account opening and maintain the balance from days 31 through day 90.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'daysFundsMustRemain', want: 90 },
+    { name: 'R70 hold: opening-context span → lockStartsFrom "open date" HIGH',
+      html: '<article><p>You must deposit funds within 30 days of account opening and maintain the balance from days 31 through day 90.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'lockStartsFrom', want: 'open date', wantConf: 'high' },
+    // P3-3 — a BARE span (no opening-context language) still counts the through-day
+    // (high) but the ANCHOR is only a LOW-confidence suggestion (default-unchecked),
+    // so the parser never asserts open-date at high confidence off a bare span.
+    { name: 'R70 P3-3 bare span (no opening ctx) → daysFundsMustRemain 90',
+      html: '<article><p>Maintain the balance from days 31 through day 90 to keep the bonus.</p><p>Open a Foo account.</p></article>',
+      key: 'daysFundsMustRemain', want: 90 },
+    { name: 'R70 P3-3 bare span → lockStartsFrom "open date" but LOW confidence',
+      html: '<article><p>Maintain the balance from days 31 through day 90 to keep the bonus.</p><p>Open a Foo account.</p></article>',
+      key: 'lockStartsFrom', want: 'open date', wantConf: 'low' },
+    { name: 'R70 hold CONTROL: "maintain the balance for 60 days" → 60, funded',
+      html: '<article><p>Keep the funds on deposit and maintain the balance for 60 days after funding to keep the bonus.</p><p>Open a Foo account to earn your bonus.</p></article>',
+      key: 'daysFundsMustRemain', want: 60 },
+    { name: 'R70 hold CONTROL: funded duration emits NO lockStartsFrom (form default)',
+      html: '<article><p>Keep the funds on deposit and maintain the balance for 60 days after funding to keep the bonus.</p><p>Open a Foo account to earn your bonus.</p></article>',
+      key: 'lockStartsFrom', want: undefined },
+    // R70 [2] — WAIVER COLON + BULLETS. A condition clause ending at a colon whose
+    // terms live in a following bullet list must APPEND those bullets (joined
+    // "; or "), not drop them. Owner's exact BofA-import text.
+    { name: 'R70 waiver: colon + bullet list appended',
+      html: '<article><p>Fee is waived for smaller companies for the first 12 months, otherwise you must:</p><ul><li>Maintain a $5,000 combined average balance, or</li><li>Spend at least $500 in new net purchases on your business debit card, or</li><li>Become a member of Preferred Rewards for Business</li></ul></article>',
+      key: 'fee_waiver_condition', want: 'Fee is waived for smaller companies for the first 12 months, otherwise you must: maintain a $5,000 combined average balance; or spend at least $500 in new net purchases on your business debit card; or become a member of Preferred Rewards for Business' },
   ];
   let pass = 0, fail = 0; const failures = [];
   for (const c of cases) {
     let res; try { res = parseDocPost(c.html); } catch (e) { fail++; failures.push(c.name + ' THREW ' + e.message); continue; }
     const got = res.fields[c.key];
     const val = got ? got.value : undefined;
-    if (val === c.want) pass++;
-    else { fail++; failures.push(`${c.name}: got ${JSON.stringify(val)} want ${JSON.stringify(c.want)}`); }
+    // Optional confidence assertion (c.wantConf) — used to pin the P3-3 anchor
+    // distinction (opening-context span = high, bare span = low).
+    const confOk = (c.wantConf === undefined) || (got && got.confidence === c.wantConf);
+    if (val === c.want && confOk) pass++;
+    else { fail++; failures.push(`${c.name}: got ${JSON.stringify(val)}${got ? '/' + got.confidence : ''} want ${JSON.stringify(c.want)}${c.wantConf ? '/' + c.wantConf : ''}`); }
   }
   const line = `testDocParserRegressions: PASS ${pass}  FAIL ${fail}`;
   if (fail) { console.warn(line); failures.forEach(f => console.warn('  ✗ ' + f)); }
@@ -13517,7 +13918,9 @@ function bindGlobalEvents() {
     // Activate keyboard-focused upcoming-action rows with Enter or Space
     if (e.key === 'Enter' || e.key === ' ') {
       const row = e.target && e.target.closest && e.target.closest('.action-row.clickable');
-      if (row) {
+      // Don't open the offer when the focus is on the row's completion control —
+      // the <button> fires its own click (→ toggle-action-done) on Enter/Space.
+      if (row && !(e.target.closest && e.target.closest('[data-action="toggle-action-done"]'))) {
         e.preventDefault();
         openActionTarget(row.dataset.targetKind, row.dataset.targetId);
       }
@@ -13603,6 +14006,7 @@ function onClick(e) {
     case 'add-req-row': addRequirementRow(); break;
     case 'remove-req-row': removeRequirementRow(target.dataset.reqIndex); break;
     case 'toggle-req-done': toggleRequirementDone(id, target.dataset.reqId); break;
+    case 'toggle-action-done': toggleActionDone(target.dataset.feedId, target.dataset.feedKind, target.dataset.ownerId, target.dataset.reqId); break;
     case 'lifecycle-mark-waiting': lifecycleMarkWaiting(id); break;
     case 'lifecycle-dismiss-suggest': lifecycleDismissSuggest(id); break;
     case 'churn-run-again': churnRunAgain(id); break;
@@ -13951,6 +14355,29 @@ function toggleRequirementDone(offerId, rowId) {
     if (!row) return;
     row.done = !row.done;
     row.done_date = row.done ? isoDate(TODAY) : null;
+  });
+}
+
+// Toggle completion of an Upcoming-actions row. requirement-deadline WRITES
+// THROUGH to the requirement row's done/done_date (two-way: the offer-card
+// checklist and this control are the same source of truth). Every other
+// completable kind toggles an entry in state.action_done (feedId → doneDateISO).
+// Rides App.update, so it persists, re-renders, AND schedules a push — the push
+// recomputes the feed, which excludes the now-done item and tombstones it, so
+// the iOS Shortcut marks the reminder complete (identical to requirement-done).
+function toggleActionDone(feedId, feedKind, ownerId, reqId) {
+  if (!feedId) return;
+  if (feedKind === 'requirement-deadline') {
+    toggleRequirementDone(ownerId, reqId);
+    return;
+  }
+  App.update(s => {
+    if (!s.action_done || typeof s.action_done !== 'object' || Array.isArray(s.action_done)) s.action_done = {};
+    if (Object.prototype.hasOwnProperty.call(s.action_done, feedId)) {
+      delete s.action_done[feedId];            // un-complete → resurrects in feed
+    } else {
+      s.action_done[feedId] = isoDate(TODAY);  // complete
+    }
   });
 }
 

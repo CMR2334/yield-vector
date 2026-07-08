@@ -158,6 +158,37 @@ export function extractArticle(html) {
   return htmlToText(chosen);
 }
 
+/**
+ * Pull the post TITLE — the bank + offer name — which on DoC lives OUTSIDE
+ * entry-content (page <title> / og:title / <h1>), so the article-body text the
+ * client parser sees never contains it. Preference: og:title (usually the clean
+ * headline) → <title> → first <h1>. The site-name suffix (" - Doctor of Credit",
+ * " | Doctor of Credit", "– Doctor Of Credit") is stripped. Returns '' when none
+ * is found. Backward-compatible addition — the field is optional in the response.
+ * Pure → unit-testable.
+ */
+export function extractTitle(html) {
+  if (typeof html !== 'string' || !html) return '';
+  const clean = (raw) => {
+    if (!raw) return '';
+    let t = decodeEntities(String(raw)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Drop a trailing " - Doctor of Credit" / " | Doctor Of Credit" site suffix
+    // (any dash: -, –, —, or a pipe), case-insensitive.
+    t = t.replace(/\s*[-–—|]\s*Doctor\s+of\s+Credit\s*$/i, '').trim();
+    return t;
+  };
+  // og:title (content attr, either attribute order).
+  let m = html.match(/<meta[^>]+property=["']og:title["'][^>]*\bcontent=["']([^"']*)["']/i)
+       || html.match(/<meta[^>]+\bcontent=["']([^"']*)["'][^>]*property=["']og:title["']/i);
+  let title = clean(m && m[1]);
+  if (title) return title;
+  m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  title = clean(m && m[1]);
+  if (title) return title;
+  m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  return clean(m && m[1]);
+}
+
 // Find the opening <div ...class="…target…"> and return a best-effort slice of
 // that div by walking nested <div> depth. Returns null if no match.
 function sliceFirstContainer(html, classPatterns) {
@@ -602,11 +633,14 @@ export default {
       return json({ ok: false, error: page.error }, 502, env, origin);
     }
 
-    // Extract the article body → readable text.
+    // Extract the article body → readable text, plus the post TITLE (bank/offer
+    // name, which lives outside entry-content). `title` is an additive field;
+    // older clients ignore it, newer ones use it to fill bank/offer name.
     const articleText = extractArticle(page.html);
+    const title = extractTitle(page.html);
     if (!articleText || articleText.trim().length < 40) {
       // Nothing usable — still 200 so the client can tell the user to paste.
-      return json({ ok: true, html: articleText || '', llm: null }, 200, env, origin);
+      return json({ ok: true, html: articleText || '', title, llm: null }, 200, env, origin);
     }
 
     // LLM prose tier (best-effort). Failure → llm:null, deterministic proceeds.
@@ -618,6 +652,6 @@ export default {
       llm = null;
     }
 
-    return json({ ok: true, html: articleText, llm }, 200, env, origin);
+    return json({ ok: true, html: articleText, title, llm }, 200, env, origin);
   }
 };

@@ -126,3 +126,14 @@ fetch UI renders at all).
 The paste-only importer never depends on this Worker: any Worker failure surfaces
 as a muted inline message ("Fetch failed — paste the post text instead") and the
 manual paste path is always available.
+
+## Changelog
+
+- **2026.07.08e** — Response now includes a **`title`** field (from `<title>` /
+  `og:title` / `<h1>`, stripped of the " - Doctor of Credit" site suffix). The
+  post title carries the bank + offer name, which lives OUTSIDE `entry-content`,
+  so the article body alone never yielded them. The app uses `title` to fill the
+  bank/offer name; **an old deployment (no `title`) still works** — the app falls
+  back to a URL-slug pseudo-title at low confidence. **Redeploy this Worker** to
+  get the higher-quality title fill (Deploy steps above; the field is additive
+  and backward-compatible, so nothing breaks if you don't).

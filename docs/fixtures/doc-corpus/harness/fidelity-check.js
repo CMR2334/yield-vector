@@ -22,7 +22,7 @@ const DOC_TEST_EXPECT = {
   // step-4a fixtures. `_tiers` / `_signupBonusConfidence` are META-assertions on
   // the RESULT SHAPE (res.tiers.length, forced-low headline confidence) — mirror
   // testDocParser's underscore-key handling below.
-  '06': { signupBonusAmount: 3000, ddRequired: false, requiredFundingAmount: 10000, offerExpirationDate: '2026-12-31', early_termination_fee: 0, cc_funding_note: '@present', _tiers: 4, _signupBonusConfidence: 'low' },
+  '06': { signupBonusAmount: 3000, ddRequired: false, requiredFundingAmount: 10000, offerExpirationDate: '2026-12-31', early_termination_fee: 0, cc_funding_note: '@present', _tiers: 4, _signupBonusConfidence: 'low', daysFundsMustRemain: 90, lockStartsFrom: 'open date', daysAfterSignupAllowedBeforeDeposit: 30, fee_waiver_condition: '@present' },
   '07': { signupBonusAmount: 250, offerExpirationDate: '2026-09-30', promo_code: 'SUMMER250', ddRequired: true, monthly_fee: 12, early_termination_fee: 30, etf_window_days: 180, daysAfterSignupAllowedBeforeDeposit: 90, cc_funding_note: '@present', churnable: true, churn_wait_months: 12 },
 };
 const FILES = {
