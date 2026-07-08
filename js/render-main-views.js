@@ -5,7 +5,7 @@ import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
+import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
@@ -145,7 +145,7 @@ function renderComboCard(r, rank, candidates, currentMask) {
       <div class="combo-offers">
         ${offers.map(o => `
           <div class="combo-offer">
-            <span class="name">${escapeHtml(o.bankName)}${(() => { const dn = displayOfferName(o.offerName); return dn ? ' · ' + escapeHtml(dn) : ''; })()}</span>
+            <span class="name">${escapeHtml(offerDisplayLabel(o, { separator: ' · ' }))}</span>
             <span class="amount">${formatCompactCurrency(o.signupBonusAmount)} / ${formatCompactCurrency(o.requiredFundingAmount)}</span>
           </div>
         `).join('')}
@@ -1483,8 +1483,7 @@ function renderHeroChart(svg) {
   }
   const displayName = (o) => {
     const ambiguous = (bankActiveCount.get(o.bankName) || 0) > 1;
-    const dn = displayOfferName(o.offerName);
-    return ambiguous && dn ? `${o.bankName} — ${dn}` : o.bankName;
+    return ambiguous ? offerDisplayLabel(o) : o.bankName;
   };
   const markers = [];
   for (const o of App.state.offers) {

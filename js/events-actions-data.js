@@ -9,7 +9,7 @@ import { convertOfferToCommitment, generateProjection, runOptimizer, summarizePr
 import { updateUpcomingPage } from './reminders.js';
 import { diagReportText } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
-import { displayOfferName, offerToTemplate, templateToOffer } from './requirements-templates.js';
+import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 import { ErrCode, STORAGE_KEY, clearDiagLog, copyText, defaultAccountForSub, logError, normalizeOfferStatus } from './runtime-status.js';
 import { SYNC_FILENAME, Sync, ghGet, revisionOf, updateSyncIndicator } from './sync-pwa.js';
 import { toast } from './ui-utils.js';
@@ -447,8 +447,7 @@ function addOrReplaceTemplate(tpl, { silent = false } = {}) {
   const identity = templateIdentity(tpl);
   const existingIdx = (App.state.templates || []).findIndex(t => templateIdentity(t) === identity);
   if (existingIdx >= 0 && !silent) {
-    const dn = displayOfferName(tpl.offerName);
-    const label = dn ? `${tpl.bankName} — ${dn}` : tpl.bankName;
+    const label = offerDisplayLabel(tpl);
     if (!confirm(`A template for "${label}" already exists. Replace it with the current terms?`)) return false;
   }
   App.update(s => {
@@ -619,8 +618,7 @@ function churnRunAgain(offerId) {
   const o = (App.state.offers || []).find(x => x && x.id === offerId);
   if (!o) return;
   const seed = templateToOffer(offerToTemplate(o));
-  const dn = displayOfferName(o.offerName);
-  const reRun = `Re-run of ${o.bankName}${dn ? ' — ' + dn : ''}`;
+  const reRun = `Re-run of ${offerDisplayLabel(o)}`;
   seed.notes = seed.notes ? `${seed.notes}\n${reRun}` : reRun;
   showOfferModal(null, seed);
 }

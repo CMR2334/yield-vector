@@ -2,7 +2,7 @@ import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, 
 import { ddRoundTrip, directDepositEffectiveDate } from './dd-widgets.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './migrations-catalogs.js';
 import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate } from './offer-model.js';
-import { displayOfferName } from './requirements-templates.js';
+import { offerDisplayLabel } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
    ============================================================
@@ -257,7 +257,7 @@ function convertOfferToCommitment(offer) {
   if (!start || !end) return null;
   return {
     id: uid('cmt'),
-    commitmentName: (() => { const dn = displayOfferName(offer.offerName); return dn ? `${offer.bankName} — ${dn}` : offer.bankName; })(),
+    commitmentName: offerDisplayLabel(offer),
     sourceBonusOfferId: offer.id,
     amount: Number(offer.requiredFundingAmount),
     startDate: start,

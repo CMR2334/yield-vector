@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { formatCompactCurrency, formatDateDisplay, formatDateMedium, formatMoneyInput, formatDollarInput, parseMoneyInput, uid } from './date-format-core.js';
 import { parseDocPost } from './doc-parser.js';
 import { generateDdDatesFromRequirement, readUserReqsFromForm, refreshLifecycleStrip, refreshRequirementsSection, showOfferModal, writeUserReqsToForm } from './modals-forms.js';
-import { displayOfferName, makeRequirementRow, requirementSummary, templateToOffer } from './requirements-templates.js';
+import { offerDisplayLabel, makeRequirementRow, requirementSummary, templateToOffer } from './requirements-templates.js';
 import { ErrCode, logError } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
 import { escapeAttr, escapeHtml, toast } from './ui-utils.js';
@@ -1063,8 +1063,7 @@ function templateRowChips(tpl) {
 
 // One template row: title (bank — offer), chips, savedAt muted, Use + delete.
 function renderTemplateRow(tpl) {
-  const dn = displayOfferName(tpl.offerName);
-  const name = dn ? `${tpl.bankName} — ${dn}` : (tpl.bankName || 'Untitled offer');
+  const name = offerDisplayLabel(tpl) || 'Untitled offer';
   const saved = tpl.savedAt ? `Saved ${escapeHtml(formatDateMedium(tpl.savedAt))}` : '';
   return `
     <div class="tpl-row" data-tpl-row="${escapeAttr(tpl.tplId)}">
@@ -1155,7 +1154,7 @@ function useTemplate(tplId) {
 function deleteTemplate(tplId) {
   if (!tplId) return;
   const tpl = (App.state.templates || []).find(t => t && t.tplId === tplId);
-  const label = tpl ? (() => { const dn = displayOfferName(tpl.offerName); return dn ? `${tpl.bankName} — ${dn}` : tpl.bankName; })() : 'this template';
+  const label = tpl ? offerDisplayLabel(tpl) : 'this template';
   if (!confirm(`Delete the template "${label}"?`)) return;
   App.update(s => {
     s.templates = (s.templates || []).filter(t => t && t.tplId !== tplId);

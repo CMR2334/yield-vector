@@ -66,6 +66,20 @@ function displayOfferName(name) {
   return String(name == null ? '' : name).replace(/\s*[-–—]?\s*\$[\d,]+(?:\.\d+)?$/, '').trim();
 }
 
+// Compose an offer/template's DISPLAY label: bank name, plus the display offer
+// name (trailing "$N" stripped by displayOfferName) joined by `separator` when
+// present, else the bank name alone. `separator` defaults to an em dash; the
+// planner combo card passes ' · '. PURE and format-only — callers wrap it for
+// their own needs: escaped (escapeHtml(offerDisplayLabel(o,{separator:' · '}))),
+// prefixed (`Re-run of ${offerDisplayLabel(o)}`), or with an empty-name fallback
+// (offerDisplayLabel(tpl) || 'Untitled offer'). The chart marker shows bank-only
+// unless the bank is ambiguous (ambiguous ? offerDisplayLabel(o) : o.bankName).
+// The reminder FEED deliberately uses raw names and does NOT route through here.
+function offerDisplayLabel(o, { separator = ' — ' } = {}) {
+  const dn = displayOfferName(o.offerName);
+  return dn ? o.bankName + separator + dn : o.bankName;
+}
+
 // The absolute calendar deadline for a requirement row, as an ISO string, or
 // '' when it can't be computed. Anchored on the SAME sign-up date the existing
 // deposit/debit deadline math uses (offer.plannedSignupDate): deadline_days is
@@ -473,4 +487,4 @@ function templateToOffer(tpl) {
 // (only if that key is absent) for the Settings restore path; a quota failure
 // is logged and must NOT block the app. Does NOT save()/schedulePush — leaves
 // persistence to the next genuine user save (like the other init migrations).
-export { REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, requirementDisplayLabel, displayOfferName, requirementDeadlineISO, requirementSummary, makeRequirementRow, deriveRequirementsFromLegacy, syncRequirementsWithLegacy, schemaV2Defaults, offerToTemplate, templateToOffer };
+export { REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, requirementDisplayLabel, displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementSummary, makeRequirementRow, deriveRequirementsFromLegacy, syncRequirementsWithLegacy, schemaV2Defaults, offerToTemplate, templateToOffer };

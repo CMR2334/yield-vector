@@ -6,7 +6,7 @@ import { CHURN_HORIZON_DAYS, churnEligibleDate, churnSnoozeActive, offerIsActive
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { computeUpcomingActions, renderActionRow } from './reminders.js';
 import { renderChartsAfterMount, renderOffers, renderPlanner, renderSettings, renderTimeline } from './render-main-views.js';
-import { displayOfferName } from './requirements-templates.js';
+import { offerDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, ErrCode, logError, normalizeOfferStatus } from './runtime-status.js';
 import { renderSyncIndicator } from './sync-pwa.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
@@ -333,7 +333,7 @@ function renderOverviewChurnSection() {
   upcoming.sort((a, b) => a.d - b.d);
   snoozed.sort((a, b) => (a.o.bankName || '').localeCompare(b.o.bankName || ''));
 
-  const offerName = (o) => { const dn = displayOfferName(o.offerName); return `${o.bankName}${dn ? ' — ' + dn : ''}`; };
+  const offerName = (o) => offerDisplayLabel(o);
 
   // A visible (non-snoozed) row: navigation main area + a subtle snooze menu.
   // The clickable nav div and the snooze controls are SIBLINGS inside a wrap so
