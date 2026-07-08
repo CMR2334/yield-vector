@@ -798,6 +798,16 @@ function requirementFieldEditable(row, field) {
 // One requirement row in the modal editor. `i` indexes user rows within the
 // hidden JSON payload (derived rows pass i = -1). Renders type, optional custom
 // label, amount and/or count (only the inputs the type uses), deadline_days,
+// Requirement row's date line: "Due <date>" when a deadline resolves, else a
+// "No date" hint naming the missing input (a deadline vs a sign-up date).
+// Shared by the initial row render + the two live date-refresh paths.
+function requirementDateLineHtml(offer, row) {
+  const dlISO = requirementDeadlineISO(offer, row);
+  return dlISO
+    ? `Due <strong>${formatDateMedium(dlISO)}</strong>`
+    : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`;
+}
+
 // frequency, a live computed date, and (user rows only) a remove button.
 function renderRequirementRow(row, offer, i) {
   const meta = REQUIREMENT_TYPE_META[row.type] || REQUIREMENT_TYPE_META.custom;
@@ -809,7 +819,6 @@ function renderRequirementRow(row, offer, i) {
   // their type meta.
   const showMoney = isDerived ? (row.amount != null || meta.money) : meta.money;
   const showCount = isDerived ? (row.count != null || meta.count) : meta.count;
-  const dlISO = requirementDeadlineISO(offer, row);
   const typeCell = isDerived
     ? `<span class="req-type-label">${escapeHtml(meta.label)}<span class="req-auto-tag" title="Mirrors a field above — edit here or there.">auto</span></span>`
     : `<select class="select req-input" ${dataAttrs} data-req-field="type" aria-label="Requirement type">
@@ -858,7 +867,7 @@ function renderRequirementRow(row, offer, i) {
         ${freqCell ? `<div class="req-cell req-cell-freq">${freqCell}</div>` : ''}
         <div class="req-cell req-cell-remove">${removeCell}</div>
       </div>
-      <div class="req-row-date" data-req-date-for="${idAttr}">${dlISO ? `Due <strong>${formatDateMedium(dlISO)}</strong>` : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`}</div>
+      <div class="req-row-date" data-req-date-for="${idAttr}">${requirementDateLineHtml(offer, row)}</div>
     </div>`;
 }
 
@@ -1020,10 +1029,7 @@ function refreshRequirementDates() {
     const id = node.getAttribute('data-req-date-for');
     const row = byId.get(id);
     if (!row) return;
-    const dlISO = requirementDeadlineISO(offer, row);
-    node.innerHTML = dlISO
-      ? `Due <strong>${formatDateMedium(dlISO)}</strong>`
-      : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`;
+    node.innerHTML = requirementDateLineHtml(offer, row);
   });
 }
 
@@ -1085,10 +1091,7 @@ function handleRequirementInput(el) {
     const row = (offer.requirements || []).find(r => r.id === id) ||
       (source === 'user' ? (offer.requirements || []).filter(r => r.source === 'user')[Number(el.dataset.reqIndex)] : null);
     if (row) {
-      const dlISO = requirementDeadlineISO(offer, row);
-      dateNode.innerHTML = dlISO
-        ? `Due <strong>${formatDateMedium(dlISO)}</strong>`
-        : `<span class="req-nodate">No date${row.deadline_days == null ? ' — set a deadline' : ' — set a sign-up date'}</span>`;
+      dateNode.innerHTML = requirementDateLineHtml(offer, row);
     }
   }
 }
