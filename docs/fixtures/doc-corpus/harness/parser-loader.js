@@ -10,9 +10,10 @@
 // unchanged by running the app's own 7 DOC_TEST_EXPECT fixtures through it.
 //
 // We DO NOT execute the whole app script (it references window/document/App and
-// would throw). We slice out only the pure parser functions by brace-matching,
-// then eval them in a vm context whose only globals are DOMParser (jsdom) +
-// console.
+// would throw). Since the P1 module split, the parser lives in its own ES
+// modules (js/doc-parser.js + js/date-format-core.js); we read those module
+// files, strip their import/export lines, and eval the remaining declarations in
+// a vm context whose only globals are DOMParser (jsdom) + console.
 //
 // PATHS (repo-relative): this file lives at
 //   <repo>/docs/fixtures/doc-corpus/harness/parser-loader.js
@@ -35,9 +36,10 @@ if (!fs.existsSync(INDEX)) {
 }
 
 // The functions parseDocPost depends on (transitive closure of pure helpers).
-// NOTE: new helpers added to the parser must be listed here or the brace-matched
-// extraction won't include them. Optional names are filtered at build time so
-// this list stays forward-compatible with the pre-calibration baseline parser.
+// INFORMATIONAL SINCE THE P1 SPLIT: buildParser now evals the whole js/doc-parser
+// + js/date-format-core module bodies, so new parser helpers are picked up
+// automatically and need NOT be added here. Kept (and exported) as a documented
+// inventory of the parser's helper surface.
 const NEEDED = [
   '_isoFromYMD', 'docNormalizeInput', 'docSnippet', 'docLabelMatches',
   'docExtractGlanceRows', 'docGlance', 'docLatestDate', 'docLatestUpdateBlock',
@@ -50,26 +52,24 @@ const NEEDED = [
   'docCapText', 'docBulletsAfterClause'
 ];
 
-function extractFn(name, body, optional) {
-  const re = new RegExp('function ' + name + '\\s*\\(');
-  const start = body.search(re);
-  if (start === -1) { if (optional) return ''; throw new Error('fn not found in index.html: ' + name); }
-  let i = body.indexOf('{', start), depth = 0;
-  for (; i < body.length; i++) {
-    if (body[i] === '{') depth++;
-    else if (body[i] === '}') { depth--; if (depth === 0) { i++; break; } }
-  }
-  return body.slice(start, i);
+// Strip the ESM import/export statements a module carries so its remaining
+// function/const declarations can be evaluated as one plain script in a vm
+// sandbox (exactly the closure the parser had when it was inline).
+function stripModuleSource(src) {
+  return src
+    .replace(/^import \{[^}]*\} from '[^']+';[ \t]*\n/gm, '')
+    .replace(/^export \{[^}]*\};[ \t]*\n?/gm, '');
 }
 
 function buildParser() {
-  const html = fs.readFileSync(INDEX, 'utf8');
-  // Largest <script> block is the app body. The app tag is now
-  // <script type="module"> and an APP_VERSION import map adds a second, tiny
-  // <script type="importmap">; [^>]* matches either and the length-reduce keeps
-  // the app body.
-  const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
-    .map(x => x[1]).reduce((a, b) => a.length > b.length ? a : b, '');
+  // P1 (module split) moved the parser into js/doc-parser.js, which imports
+  // _isoFromYMD from js/date-format-core.js. We read BOTH module files and eval
+  // their bodies together in one sandbox — the parser is sourced from the real
+  // module files (no more brace-matching index.html, no NEEDED[] upkeep) and is
+  // wired exactly as the browser wires it. date-format-core first so its
+  // _isoFromYMD + date/format helpers are in scope for the parser.
+  const dfc = stripModuleSource(fs.readFileSync(path.join(REPO, 'js', 'date-format-core.js'), 'utf8'));
+  const dp = stripModuleSource(fs.readFileSync(path.join(REPO, 'js', 'doc-parser.js'), 'utf8'));
 
   // A throwaway jsdom document gives us a real, spec-compliant DOMParser.
   const win = new JSDOM('<!doctype html><body></body>').window;
@@ -78,13 +78,12 @@ function buildParser() {
   sandbox.global = sandbox;
   vm.createContext(sandbox);
 
-  // The calibration helpers are optional so this loader also runs against a
-  // pre-change baseline parser (for before/after diffs) without throwing.
-  const OPTIONAL = new Set(['docIsCardFundingLabel', 'docDateSegments', 'docReconcileScalar', 'docScanTiers', 'docChurnAnchor']);
-  let src = '';
-  for (const n of NEEDED) src += extractFn(n, script, OPTIONAL.has(n)) + '\n';
-  src += '\nglobal.__api = { parseDocPost, docNormalizeInput, docExtractGlanceRows, ' +
-         'docParseBonusValue, docFirstDollar, docDollarToNumber, docDaysFrom, docLatestDate };\n';
+  // Same public surface the brace-match loader returned, plus docDateSegments
+  // (the p2b segmentation pin sources it here instead of re-extracting).
+  const src = dfc + '\n' + dp + '\n' +
+    'global.__api = { parseDocPost, docNormalizeInput, docExtractGlanceRows, ' +
+    'docParseBonusValue, docFirstDollar, docDollarToNumber, docDaysFrom, docLatestDate, ' +
+    'docDateSegments };\n';
   vm.runInContext(src, sandbox);
   return sandbox.__api;
 }

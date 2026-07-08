@@ -3,17 +3,12 @@
 // segmentation fix (glance headings resume the undated base). Asserts on (a) a
 // synthetic updates-at-top post (always runs) and (b) the real BofA id-01 post
 // when a re-hydrated corpus is available (copyright: posts are not committed).
-const fs=require('fs'),path=require('path'),vm=require('vm');
-const {JSDOM}=require('jsdom');
-const {REPO,extractEntryContentHTML,postsDir}=require('./parser-loader');
-const html=fs.readFileSync(path.join(REPO,'index.html'),'utf8');
-const script=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(x=>x[1]).reduce((a,b)=>a.length>b.length?a:b,'');
-function extractFn(name){const re=new RegExp('function '+name+'\\s*\\(');const s=script.search(re);if(s===-1)throw new Error(name);let i=script.indexOf('{',s),d=0;for(;i<script.length;i++){if(script[i]==='{')d++;else if(script[i]==='}'){d--;if(d===0){i++;break;}}}return script.slice(s,i);}
-const win=new JSDOM('<!doctype html><body></body>').window;
-const sandbox={DOMParser:win.DOMParser,console};sandbox.global=sandbox;vm.createContext(sandbox);
-let src='';for(const n of ['_isoFromYMD','docNormalizeInput','docLatestDate','docDateSegments'])src+=extractFn(n)+'\n';
-src+='global.__x={docNormalizeInput,docDateSegments};';vm.runInContext(src,sandbox);
-const {docNormalizeInput,docDateSegments}=sandbox.__x;
+const fs=require('fs'),path=require('path');
+const {buildParser,extractEntryContentHTML,postsDir}=require('./parser-loader');
+// Since the P1 module split, docNormalizeInput + docDateSegments are sourced from
+// the parser module via buildParser (was: brace-matched out of index.html).
+const api=buildParser();
+const docNormalizeInput=api.docNormalizeInput, docDateSegments=api.docDateSegments;
 const glanceRe=/offer at a glance|maximum bonus amount/i;
 let fail=0;
 function assertGlanceInBase(label, text){
