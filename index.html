@@ -421,7 +421,6 @@ a { color: inherit; text-decoration: none; }
 .btn-outline-danger:hover { background: var(--danger-soft); }
 
 .btn-sm { padding: 6px 12px; font-size: 13px; }
-.btn-lg { padding: 12px 22px; font-size: 15px; }
 
 .btn-icon {
   width: 36px; height: 36px;
@@ -445,15 +444,6 @@ a { color: inherit; text-decoration: none; }
 }
 
 .card-soft { background: var(--card-soft); border: 1px solid var(--border-soft); box-shadow: none; }
-
-.card-title {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--text-tertiary);
-  margin-bottom: var(--space-4);
-}
 
 .card-header {
   display: flex;
@@ -708,11 +698,6 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   gap: var(--space-4);
 }
-
-.grid-cols-1 { grid-template-columns: 1fr; }
-.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .stat-card {
   background: var(--card);
@@ -1241,7 +1226,6 @@ a { color: inherit; text-decoration: none; }
 .ddm-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .ddm-left  { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
-.ddm-src   { font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; font-size: 10px; }
 .ddm-list  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
 .ddm-pill  { display: inline-flex; align-items: center; font-size: 11px; padding: 2px 4px 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
 .ddm-method { overflow: hidden; text-overflow: ellipsis; }
@@ -2160,7 +2144,6 @@ a { color: inherit; text-decoration: none; }
   #capital-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
-.field-error { font-size: 12px; color: var(--danger); margin-top: 2px; }
 
 .input, .select, .textarea {
   width: 100%;
@@ -2597,8 +2580,6 @@ table.data-table {
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.danger { background: var(--danger); }
 
-.divider { height: 1px; background: var(--border-soft); margin: var(--space-5) 0; }
-
 .banner {
   display: flex;
   gap: var(--space-3);
@@ -2663,11 +2644,6 @@ table.data-table {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width: 880px) {
-  .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 @media (max-width: 720px) {
   .primary-nav, .header-actions { display: none; }
   .app-header { padding: 0 var(--space-4); }
@@ -2683,8 +2659,6 @@ table.data-table {
   .hero-amount { font-size: 36px; }
   .hero-label { font-size: 13px; letter-spacing: 0.02em; } /* R62: match tightened desktop value */
   .overview-grid .card-header h2 { font-size: 13px; } /* R69 Item E: keep the unified headers matched to .hero-label at mobile */
-  .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
-  .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
   .stat-value { font-size: 22px; }
   /* Mobile portrait timeline: narrower sticky label column; single
@@ -2724,7 +2698,6 @@ table.data-table {
 }
 
 @media (max-width: 480px) {
-  .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .hero-amount { font-size: 34px; }
   /* Modal action rows carry up to four buttons (Delete · Save as template ·
      Cancel · Save). At <=480px the modal is full-width and that row no longer
@@ -2842,11 +2815,6 @@ table.data-table {
   .planner-grid, .combo-grid { display: flex; flex-direction: column; gap: var(--space-4); }
 }
 
-/* Visually hidden but accessible */
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
-}
 </style>
 </head>
 <body>
