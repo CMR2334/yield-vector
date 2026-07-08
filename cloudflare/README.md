@@ -59,6 +59,16 @@ config lives, but keeping the Worker a single portable file is simpler for a
 personal deploy). If you prefer one, add it locally — do **not** put the API key
 in it; the key must be a secret, never a plaintext var or a repo file.
 
+> **Deploy-drift gotcha (hit live 2026-07-08):** when a local `wrangler.jsonc`/
+> `wrangler.toml` exists, `npx wrangler deploy` treats it as the source of truth
+> and **overwrites the Worker's remote config — dashboard-set *variables* are
+> dropped** unless mirrored in the local file's `"vars"` block (secrets are NOT
+> affected; only vars). Because `ALLOWED_ORIGIN` fails closed, a deploy that
+> drops it silently breaks every URL import with 403s. The gitignored
+> `wrangler.jsonc` on the deploy machine therefore pins
+> `"vars": { "ALLOWED_ORIGIN": "https://cmr2334.github.io" }` — keep it that
+> way, and mirror any future dashboard-set var into it before deploying.
+
 ## Configuration
 
 | Name | Kind | Required | Value |
