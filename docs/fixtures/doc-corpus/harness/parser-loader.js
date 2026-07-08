@@ -64,8 +64,11 @@ function extractFn(name, body, optional) {
 
 function buildParser() {
   const html = fs.readFileSync(INDEX, 'utf8');
-  // Largest <script> block is the app. (grep confirmed exactly one <script>.)
-  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+  // Largest <script> block is the app body. The app tag is now
+  // <script type="module"> and an APP_VERSION import map adds a second, tiny
+  // <script type="importmap">; [^>]* matches either and the length-reduce keeps
+  // the app body.
+  const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
     .map(x => x[1]).reduce((a, b) => a.length > b.length ? a : b, '');
 
   // A throwaway jsdom document gives us a real, spec-compliant DOMParser.

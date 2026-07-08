@@ -15,6 +15,37 @@
 <link rel="apple-touch-icon" id="apple-icon" href="">
 <link rel="icon" id="favicon" href="">
 <link rel="manifest" id="manifest" href="">
+<!-- APP_VERSION-keyed import map (design §1): versions every ./js/ module URL as
+     ./js/<name>.js?v=<APP_VERSION> so one release busts the whole module set
+     atomically (the zero-build cache-busting mechanism). INERT until modules are
+     extracted (P1+): with no ES `import` statements yet, no key resolves and
+     nothing is fetched. The ?v= values track APP_VERSION and are regenerated per
+     release — they MUST be updated whenever APP_VERSION is bumped (step 5).
+     Relative ./js/ specifiers only — this is a GitHub project page; absolute
+     /js/ would resolve to the domain root and 404 (design §5). -->
+<script type="importmap">
+{
+  "imports": {
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.08e",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.08e",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.08e",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.08e",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.08e",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.08e",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.08e",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.08e",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.08e",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.08e",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.08e",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.08e",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.08e",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.08e",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.08e",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.08e",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.08e"
+  }
+}
+</script>
 <style>
 /* ============================================================
    DESIGN TOKENS
@@ -2823,7 +2854,7 @@ table.data-table {
   <!-- Populated by JS -->
 </div>
 
-<script>
+<script type="module">
 'use strict';
 
 /* ============================================================
@@ -14977,6 +15008,20 @@ function seedSampleData(state) {
 
   return state;
 }
+
+/* ============================================================
+   BOOTSTRAP EXPOSURE — console + verification harness only
+   Converting the classic <script> to <script type="module"> moved the
+   top-level const/function declarations out of global scope. Re-attach the
+   names the DevTools console and the corpus/regression harness reference.
+   NOT used for event dispatch (dispatch is delegation-based — design §5).
+   ============================================================ */
+window.App = App;
+window.Sync = Sync;
+window.YieldVector = { App, Sync, parseDocPost, testDocParser, testDocParserRegressions, render };
+// Documented bare-console workflow (comments :11825/:11890, doc-samples/README.md:176): keep these callable un-namespaced from DevTools.
+window.testDocParser = testDocParser;
+window.testDocParserRegressions = testDocParserRegressions;
 
 /* ============================================================
    INIT
