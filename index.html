@@ -1442,6 +1442,40 @@ a { color: inherit; text-decoration: none; }
 .doc-tpl-save { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .doc-tpl-save input { flex: 0 0 auto; }
 
+/* Tier picker (step 4b): a "Select your tier" radio group ABOVE the field rows
+   when a >=2 bonus ladder was parsed. A left accent border sets it apart from
+   the ordinary .doc-field rows without leaving the .doc-* idiom. */
+.doc-tier-group {
+  margin-bottom: 14px; padding: 10px 12px;
+  border: 1px solid var(--accent-mid); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md); background: var(--accent-soft);
+}
+.doc-tier-head {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--accent-strong);
+}
+.doc-tier-sub { font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin: 4px 0 10px; }
+.doc-tier-opts { display: flex; flex-direction: column; gap: 6px; }
+.doc-tier-opt {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.doc-tier-opt:hover { border-color: var(--accent-mid); }
+.doc-tier-radio { flex: 0 0 auto; margin-top: 2px; width: 15px; height: 15px; accent-color: var(--accent); }
+.doc-tier-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.doc-tier-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+.doc-tier-thresh { font-size: 13px; font-weight: 600; color: var(--text-strong); word-break: break-word; }
+.doc-tier-arrow { flex: 0 0 auto; color: var(--text-tertiary); }
+.doc-tier-bonus { font-size: 14px; font-weight: 700; color: var(--accent); }
+.doc-tier-target {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+}
+.doc-tier-snippet { font-size: 11px; color: var(--text-tertiary); font-style: italic; line-height: 1.4; word-break: break-word; }
+.doc-tier-none .doc-tier-thresh { font-weight: 500; color: var(--text-secondary); }
+
 /* Template picker (F5): "Start from a template" affordance at the top of the
    NEW-offer modal. Mirrors the .doc-import card idiom (bordered soft card,
    uppercase toggle) so the two in-modal affordances read as a family. */
@@ -10599,6 +10633,26 @@ function _docAppendNote(line) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+// Wire the legacy DIRECT-DEPOSIT model for a dd_total tier (step 4b / P2a). The
+// projection + completeness read directDeposits[] (dated rows with amounts), not
+// the requirement spec, so a user-req row alone is invisible. This: (1) flips the
+// offer type to 'direct-deposit' (the DD radio) if not already a DD variant —
+// which reveals the DD section and, via syncDdSectionUI, auto-generates rows when
+// empty; (2) explicitly (re)generates dated DD rows from the requirement controls
+// + the just-applied #f-funding (= the DD total, divided across the deposits).
+// After this the offer is NOT a draft and its DD amounts project as capital. All
+// targets are the existing modal inputs/functions — no new persistence path.
+function _docWireDdModel() {
+  const cur = (_docEl('[name="offerType"]:checked') || {}).value;
+  if (cur !== 'direct-deposit' && cur !== 'held-and-dd') {
+    const r = _docEl('#ot-dd');
+    if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
+  }
+  // Regenerate rows unconditionally so the amounts reflect the tier's funding
+  // even if syncDdSectionUI already seeded rows from a prior (stale) funding.
+  if (typeof generateDdDatesFromRequirement === 'function') generateDdDatesFromRequirement();
+}
+
 const DOC_FIELD_MAP = [
   { key: 'bankName', label: 'Bank name', format: v => v, current: () => _docCurrentInput('#f-bank'), apply: v => _docSetInput('#f-bank', v) },
   { key: 'offerName', label: 'Offer name', format: v => v, current: () => _docCurrentInput('#f-offer'), apply: v => _docSetInput('#f-offer', v) },
@@ -10665,6 +10719,191 @@ function _docConfDot(conf) {
   return `<span class="doc-conf doc-conf-${c}" title="${c} confidence"></span>`;
 }
 
+/* ---- Tier picker (step 4b) -------------------------------------------------
+   A parse result may carry a top-level `tiers` array (>=2 rows) from the 4a
+   scanner. When it does, the preview shows a "Select your tier" group ABOVE the
+   ordinary field rows: a radio per tier + a "No tier" radio. Nothing is
+   auto-selected (the owner's motivating case is a LOWER tier than the headline,
+   so we never guess). Choosing a tier feeds tier.bonus / threshold into the
+   field rows (or a maintain_balance / spend / DD user-req on Apply), all through
+   the SAME apply paths as any other row. Selection state lives in _docTierSel. */
+
+// True when this result should render the tier picker: a real >=2 ladder.
+function _docHasTiers(result) {
+  return !!(result && Array.isArray(result.tiers) && result.tiers.length >= 2);
+}
+
+// The human label for a tier's threshold, e.g. "Deposit $15,000+" or a range
+// "Balance $5,000–$9,999". Kind drives the noun; min/max drive the figure. Money
+// is formatted via formatMoneyInput (comma groups, no cents unless present).
+function _docTierKindNoun(kind) {
+  return kind === 'balance' ? 'Balance'
+    : kind === 'dd_total' ? 'Direct deposit'
+    : kind === 'spend' ? 'Spend'
+    : 'Deposit';
+}
+function _docTierThresholdLabel(t) {
+  if (!t) return '';
+  const noun = _docTierKindNoun(t.threshold_kind);
+  const lo = '$' + formatMoneyInput(t.threshold_min);
+  if (t.threshold_max != null && Number.isFinite(t.threshold_max)) {
+    return `${noun} ${lo}–$${formatMoneyInput(t.threshold_max)}`;
+  }
+  return `${noun} ${lo}+`;
+}
+
+// A compact one-line description of what a tier maps a threshold INTO, used both
+// in the picker row and in the provenance note. Deposit → funding amount; the
+// row-only kinds name the requirement they create.
+function _docTierThresholdTargetDesc(t) {
+  if (!t) return '';
+  switch (t.threshold_kind) {
+    case 'balance':  return 'Funding + maintain-balance';
+    case 'dd_total': return 'Direct-deposit total';
+    case 'spend':    return 'Spend requirement';
+    default:         return 'Funding amount';
+  }
+}
+
+// Describe the user-requirement row a tier threshold should ALSO create on Apply
+// to carry the requirement SEMANTICS (its type + deadline/hold), on top of the
+// legacy field wiring in _docEffectiveFields. deposit/spend/dd_total live purely
+// in the legacy model (funding field / DD rows) so they return null here; only
+// 'balance' adds a row (maintain_balance carries the "keep $X on deposit"
+// meaning the funding lump can't express). deadline_days / hold_days come from
+// the OFFER-LEVEL parsed fields when present (the 4a scanner emits per-tier holds
+// as null — stated once for the whole offer). Returns { type, over } or null.
+function _docTierReqDescriptor(result, t) {
+  if (!t || t.threshold_kind !== 'balance') return null;
+  const fields = (result && result.fields) || {};
+  const numField = (k) => {
+    const f = fields[k];
+    if (!f || f.value == null || f.value === '') return null;
+    const n = Number(f.value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const deadline = numField('daysAfterSignupAllowedBeforeDeposit');
+  const hold = numField('daysFundsMustRemain');
+  const over = { amount: t.threshold_min, label: 'Maintain balance' };
+  if (deadline != null) over.deadline_days = deadline;
+  if (hold != null) over.hold_days = hold;
+  return { type: 'maintain_balance', over };
+}
+
+// Compute the EFFECTIVE fields map to render/apply given the current tier
+// selection. Pure: returns a shallow clone of result.fields with tier overrides
+// layered on, plus Sets of field keys the selection force-CHECKS or force-
+// UNCHECKS, plus a ddWire flag (dd_total needs the legacy DD model wired at
+// Apply). Nothing is mutated on the cached parse result.
+//   • no selection (null) or "No tier" (-1): parser's original fields, nothing
+//     forced (headline bonus stays low/unchecked).
+//   • a tier index: signupBonusAmount := tier.bonus HIGH + force-checked. Then
+//     per threshold_kind, funding-row disposition (the capital model keys off
+//     #f-funding for cash-flow/ROI/withdrawal + requires requiredFundingAmount>0
+//     for completeness):
+//       deposit → funding := threshold_min, force-checked (existing behavior).
+//       balance → funding := threshold_min, force-checked (capital IS locked at
+//                 that balance); a maintain_balance user row is ALSO added at
+//                 Apply for the requirement semantics.
+//       dd_total→ funding := threshold_min, force-checked (the DD TOTAL; the DD
+//                 rows divide it into per-DD amounts that project as capital) and
+//                 ddWire=true so Apply flips offerType→direct-deposit + generates
+//                 dated DD rows. Completeness needs requiredFundingAmount>0, so
+//                 the funding row can't be dropped here.
+//       spend  → the parser's funding row is a misread lowest rung for a spend
+//                ladder, so FORCE-UNCHECK it (user may re-check); a spend user
+//                row carries the real obligation. Bonus still applies.
+// Returns { fields, forced:Set, unchecked:Set, ddWire:boolean, tier|null }.
+function _docEffectiveFields(result, tierSel) {
+  const base = (result && result.fields) || {};
+  const out = {};
+  for (const k in base) out[k] = base[k];
+  const forced = new Set();
+  const unchecked = new Set();
+  let ddWire = false;
+  const tiers = (result && result.tiers) || [];
+  const idx = (typeof tierSel === 'number') ? tierSel : null;
+  if (idx == null || idx < 0 || idx >= tiers.length) return { fields: out, forced, unchecked, ddWire, tier: null };
+  const t = tiers[idx];
+  // Headline bonus becomes the chosen tier's bonus at HIGH confidence (explicit
+  // user pick) — clone the entry so we never mutate the cached parse result.
+  const prevBonus = out.signupBonusAmount || {};
+  out.signupBonusAmount = {
+    value: t.bonus, confidence: 'high',
+    snippet: t.snippet || prevBonus.snippet || '',
+    note: 'From selected tier'
+  };
+  forced.add('signupBonusAmount');
+  const kind = t.threshold_kind;
+  const setFunding = () => {
+    const prevFund = out.requiredFundingAmount || {};
+    out.requiredFundingAmount = {
+      value: t.threshold_min, confidence: 'medium',
+      snippet: t.snippet || prevFund.snippet || '',
+      note: kind === 'dd_total' ? 'From selected tier (DD total)' : 'From selected tier'
+    };
+    forced.add('requiredFundingAmount');
+  };
+  if (kind === 'deposit' || kind === 'balance') {
+    setFunding();
+  } else if (kind === 'dd_total') {
+    setFunding();
+    ddWire = true;
+  } else if (kind === 'spend') {
+    // Leave the parser's funding value as-is but force its row UNCHECKED so the
+    // misread lowest rung doesn't get applied (user can opt back in).
+    if (out.requiredFundingAmount && out.requiredFundingAmount.value != null && out.requiredFundingAmount.value !== '') {
+      unchecked.add('requiredFundingAmount');
+    }
+  }
+  return { fields: out, forced, unchecked, ddWire, tier: t };
+}
+
+// Render the "Select your tier" radio group. NONE pre-selected (never auto).
+// Each row: formatted threshold → bonus, plus the muted verbatim snippet (<=120c,
+// escaped) and a tiny "→ funding amount / maintain-balance requirement" target
+// hint. A trailing "No tier" radio keeps the manual/headline values. `sel` is
+// _docTierSel (null / -1 / index).
+function _docRenderTierGroup(result, sel) {
+  const tiers = (result && result.tiers) || [];
+  if (tiers.length < 2) return '';
+  const rows = tiers.map((t, i) => {
+    const checked = (sel === i) ? 'checked' : '';
+    const threshold = escapeHtml(_docTierThresholdLabel(t));
+    const bonus = escapeHtml('$' + formatMoneyInput(t.bonus));
+    const target = escapeHtml(_docTierThresholdTargetDesc(t));
+    const snip = String(t.snippet || '').slice(0, 120);
+    const snipLine = snip ? `<span class="doc-tier-snippet">"${escapeHtml(snip)}"</span>` : '';
+    return `
+      <label class="doc-tier-opt">
+        <input type="radio" name="doc-tier-pick" class="doc-tier-radio" value="${i}" ${checked} />
+        <span class="doc-tier-body">
+          <span class="doc-tier-line">
+            <span class="doc-tier-thresh">${threshold}</span>
+            <svg class="doc-tier-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            <span class="doc-tier-bonus">${bonus}</span>
+            <span class="doc-tier-target">→ ${target}</span>
+          </span>
+          ${snipLine}
+        </span>
+      </label>`;
+  }).join('');
+  const noneChecked = (sel === -1) ? 'checked' : '';
+  const noneRow = `
+    <label class="doc-tier-opt doc-tier-none">
+      <input type="radio" name="doc-tier-pick" class="doc-tier-radio" value="-1" ${noneChecked} />
+      <span class="doc-tier-body">
+        <span class="doc-tier-line"><span class="doc-tier-thresh">No tier — keep manual/headline values</span></span>
+      </span>
+    </label>`;
+  return `
+    <div class="doc-tier-group" data-doc-tier-group>
+      <div class="doc-tier-head">Select your tier</div>
+      <div class="doc-tier-sub">This offer has ${tiers.length} bonus tiers. Pick the one you'll pursue — it fills the bonus and its deposit/requirement below. None is selected by default.</div>
+      <div class="doc-tier-opts">${rows}${noneRow}</div>
+    </div>`;
+}
+
 // Render the preview list from a parse result into #doc-import-preview. Every
 // parsed value + snippet is escaped. Checkbox defaults: checked for high/medium,
 // unchecked for low. Overwrite visibility: if the target form field already has
@@ -10672,12 +10911,37 @@ function _docConfDot(conf) {
 function renderDocPreview(result) {
   const host = document.getElementById('doc-import-preview');
   if (!host) return;
-  const fields = (result && result.fields) || {};
+  // Layer the current tier selection over the raw parser fields: a chosen tier
+  // overrides signupBonusAmount (+ requiredFundingAmount for a deposit tier) and
+  // force-checks those rows; no selection / "No tier" leaves the parser values
+  // untouched (headline bonus stays low/unchecked). `fields` below is always the
+  // EFFECTIVE map so the rows re-render straight from _docTierSel.
+  const eff = _docEffectiveFields(result, _docTierSel);
+  const fields = eff.fields;
+  const forced = eff.forced;
+  const unchecked = eff.unchecked || new Set();
   const keys = DOC_FIELD_MAP.map(e => e.key).filter(k => fields[k] && fields[k].value != null && fields[k].value !== '');
+  // Resolve a row's checked state with precedence (P2b — preserve user choices
+  // across tier switches): a tier-FORCED row is always checked (tier wins); a
+  // tier-force-UNCHECKED row (e.g. the misread funding row on a spend tier) is
+  // unchecked; otherwise a remembered explicit user choice (_docUserChecks) wins;
+  // else the default rule (AI/low → unchecked, deterministic high/medium →
+  // checked). Rows a PREVIOUS tier forced but the current one doesn't fall
+  // through to the user's remembered pre-tier choice, or the default.
+  const defaultChecked = (f) => !f._ai && ((f.confidence || 'low') === 'high' || (f.confidence || 'low') === 'medium');
+  const resolveChecked = (key) => {
+    if (forced.has(key)) return true;
+    if (unchecked.has(key)) return false;
+    if (Object.prototype.hasOwnProperty.call(_docUserChecks, key)) return !!_docUserChecks[key];
+    return defaultChecked(fields[key]);
+  };
+  // The tier picker renders ABOVE the field rows whenever the parse carried a
+  // >=2 ladder — even if (edge case) no ordinary field rows survived.
+  const tierGroup = _docHasTiers(result) ? _docRenderTierGroup(result, _docTierSel) : '';
   if (!keys.length) {
     const nFailed = Number(result && result._aiFailed) || 0;
     const failLine = nFailed ? `<div class="doc-ai-note">${nFailed} AI suggestion${nFailed === 1 ? '' : 's'} failed verification and ${nFailed === 1 ? 'was' : 'were'} discarded.</div>` : '';
-    host.innerHTML = `<div class="doc-import-empty">No fields could be read. Fill the form manually.</div>${failLine}`;
+    host.innerHTML = `${tierGroup}<div class="doc-import-empty">No fields could be read. Fill the form manually.</div>${failLine}`;
     return;
   }
   const rows = keys.map(key => {
@@ -10689,9 +10953,10 @@ function renderDocPreview(result) {
     // AI (LLM-sourced) fields always default UNCHECKED and low-confidence,
     // regardless of any confidence the model implied — the user opts in per
     // field after eyeballing the grounding quote. Deterministic fields keep the
-    // existing high/medium = checked default.
+    // existing high/medium = checked default. A tier-FORCED row (the user picked
+    // a tier) is always checked and shows the tier's confidence.
     const isAi = !!f._ai;
-    const checked = (!isAi && (conf === 'high' || conf === 'medium')) ? 'checked' : '';
+    const checked = resolveChecked(key) ? 'checked' : '';
     let curr = '';
     try { curr = meta.current(); } catch (e) { curr = ''; }
     const overwrite = curr && curr !== display
@@ -10723,10 +10988,11 @@ function renderDocPreview(result) {
   const aiFailNote = aiFailed
     ? `<div class="doc-ai-note">${aiFailed} AI suggestion${aiFailed === 1 ? '' : 's'} failed verification and ${aiFailed === 1 ? 'was' : 'were'} discarded.</div>`
     : '';
-  // Deterministic (non-AI) fields default checked at high/medium; AI fields
-  // never do — so the initial apply count excludes them.
-  const applyCount = keys.filter(k => { const f = fields[k]; return !f._ai && (f.confidence === 'high' || f.confidence === 'medium'); }).length;
+  // Count exactly the rows that render checked (same precedence as the rows),
+  // so the "Apply N" number matches the boxes on screen.
+  const applyCount = keys.filter(k => resolveChecked(k)).length;
   host.innerHTML = `
+    ${tierGroup}
     <div class="doc-preview-head">Review ${keys.length} field${keys.length === 1 ? '' : 's'} — uncheck anything you don't want. Values only fill the form; nothing saves until you press Save.</div>
     <div class="doc-fields">${rows}</div>
     ${aiFailNote}
@@ -10736,6 +11002,21 @@ function renderDocPreview(result) {
       <span class="doc-apply-hint">Fills the form for your review — then Save as usual.</span>
     </div>
     <label class="doc-tpl-save"><input type="checkbox" id="doc-save-template" /> <span>Also save these terms as a template</span></label>`;
+}
+
+// Re-render the preview after a tier radio changes. `sel` is the new selection
+// (null / -1 / index). Cheapest correct mechanism: stash it and re-run
+// renderDocPreview from the cached parse — the field rows recompute their values
+// + checked state from _docEffectiveFields, so switching tiers, or picking "No
+// tier", reverts/updates in one pass with no per-row DOM surgery.
+function docTierSelect(sel) {
+  if (!_docLastParse || !_docHasTiers(_docLastParse)) return;
+  // Remember the user's current per-row checkbox choices BEFORE swapping the
+  // selection, so unrelated toggles survive the re-render (P2b).
+  _docCaptureUserChecks();
+  _docTierSel = (typeof sel === 'number' && sel >= -1) ? sel : null;
+  renderDocPreview(_docLastParse);
+  docImportUpdateApplyCount();
 }
 
 // Live-update the "Apply N selected" count as checkboxes toggle.
@@ -10749,6 +11030,36 @@ function docImportUpdateApplyCount() {
 // Cache of the last parse result for Apply (avoids re-parsing / re-escaping).
 let _docLastParse = null;
 
+// Tier-picker selection state (step 4b). `null` = no radio chosen yet (the
+// initial, never-auto-selected state); an integer 0..n-1 = that tier index in
+// _docLastParse.tiers; -1 = the explicit "No tier — keep manual/headline
+// values" radio. Reset to null on every fresh parse and on Clear so a stale
+// selection can never leak across parses.
+let _docTierSel = null;
+
+// Remembered EXPLICIT checkbox choices by data-doc-key (P2b). Keyed only when
+// the user has toggled a row (or when captured pre-tier-switch); untracked keys
+// fall through to the default-checked rule. Survives tier switches so unchecking
+// an unrelated row or opting into an AI/low row persists across selections, while
+// tier-forced/unchecked rows still win. Reset on every fresh parse and on Clear.
+let _docUserChecks = {};
+// Snapshot the current DOM checkbox state into _docUserChecks (called before a
+// tier-change re-render so manual toggles since the last render are remembered).
+// Rows the CURRENT selection force-checks/unchecks are skipped — their box shows
+// the tier's forced value, not a user choice, so capturing it would wrongly
+// pin that value once a later tier stops forcing the row.
+function _docCaptureUserChecks() {
+  const host = document.getElementById('doc-import-preview');
+  if (!host) return;
+  const eff = _docEffectiveFields(_docLastParse, _docTierSel);
+  const skip = (key) => eff.forced.has(key) || (eff.unchecked && eff.unchecked.has(key));
+  host.querySelectorAll('.doc-field').forEach(row => {
+    const key = row.getAttribute('data-doc-key');
+    const cb = row.querySelector('.doc-check');
+    if (key && cb && !skip(key)) _docUserChecks[key] = cb.checked;
+  });
+}
+
 // Parse handler — reads the textarea, runs parseDocPost inside try/catch so a
 // throw can never break the modal, and renders the preview (or a graceful
 // error). Empty/garbage paste → inline muted message, form untouched.
@@ -10758,6 +11069,10 @@ function docImportParse() {
   const preview = document.getElementById('doc-import-preview');
   if (!ta) return;
   let raw = ta.value || '';
+  // Every parse (success OR failure) starts from a clean tier selection AND a
+  // clean remembered-checkbox map — no stale state may survive a re-parse.
+  _docTierSel = null;
+  _docUserChecks = {};
   if (!raw.trim()) {
     if (status) { status.textContent = 'Paste a post first.'; status.className = 'doc-import-status muted'; }
     if (preview) preview.innerHTML = '';
@@ -10889,6 +11204,8 @@ async function docImportFetch() {
     }
     _docMergeLlmFields(result, data.llm, data.html);
     _docLastParse = result;
+    _docTierSel = null;   // fresh fetch → no tier selection carried over
+    _docUserChecks = {};
     const nFields = Object.keys(result.fields || {}).filter(k => result.fields[k] && result.fields[k].value != null && result.fields[k].value !== '' && DOC_FIELD_BY_KEY[k]).length;
     const nAi = Object.keys(result.fields || {}).filter(k => result.fields[k] && result.fields[k]._ai).length;
     renderDocPreview(result);
@@ -10915,17 +11232,44 @@ async function docImportFetch() {
 function docImportApply() {
   const host = document.getElementById('doc-import-preview');
   if (!host || !_docLastParse) return;
+  // Apply the SAME effective field map the preview rendered from, so a chosen
+  // tier's bonus / funding values (not the raw parser headline) flow into the
+  // form. Field rows write through the ordinary DOC_FIELD_MAP.apply() paths.
+  const eff = _docEffectiveFields(_docLastParse, _docTierSel);
   let applied = 0;
   host.querySelectorAll('.doc-field').forEach(row => {
     const cb = row.querySelector('.doc-check');
     if (!cb || !cb.checked) return;
     const key = row.getAttribute('data-doc-key');
     const meta = DOC_FIELD_BY_KEY[key];
-    const f = _docLastParse.fields[key];
+    const f = eff.fields[key];
     if (!meta || !f) return;
     try { meta.apply(f.value); applied++; }
     catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: ' + key); }
   });
+  // Tier-specific extras beyond the field rows applied above:
+  //   • balance → ALSO add a maintain_balance user row (requirement semantics +
+  //     deadline/hold); the funding field already carried the locked capital.
+  //   • dd_total → wire the legacy DD model (a user req row alone is invisible to
+  //     completeness/cash-flow): flip offerType→direct-deposit and generate dated
+  //     DD rows whose amounts come from the just-applied funding = the DD total,
+  //     so the offer is NOT a draft and projects DD capital.
+  //   • Always → drop a provenance line into Notes so the chosen tier is auditable.
+  if (eff.tier) {
+    const t = eff.tier;
+    try {
+      const req = _docTierReqDescriptor(_docLastParse, t);
+      if (req) { _docAddUserReq(req.type, req.over); applied++; }
+    } catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: tier req'); }
+    if (eff.ddWire) {
+      try { _docWireDdModel(); applied++; }
+      catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: dd wire'); }
+    }
+    try {
+      const prov = `Tier selected: ${_docTierThresholdLabel(t)} → $${formatMoneyInput(t.bonus)}` + (t.snippet ? ` — ${String(t.snippet).slice(0, 120)}` : '');
+      _docAppendNote(prov);
+    } catch (e) { if (typeof logError === 'function') logError(ErrCode.RENDER, e, 'docImportApply: tier note'); }
+  }
   // Refresh the requirements section once more so any user rows + derived rows
   // reflect the freshly-applied legacy values (funding/debit → derived rows).
   if (typeof refreshRequirementsSection === 'function') refreshRequirementsSection();
@@ -10944,6 +11288,8 @@ function docImportClear() {
   if (preview) preview.innerHTML = '';
   if (status) { status.textContent = ''; status.className = 'doc-import-status'; }
   _docLastParse = null;
+  _docTierSel = null;
+  _docUserChecks = {};
 }
 
 // Toggle the import body open/closed.
@@ -11794,7 +12140,17 @@ function showOfferModal(offerId = null, seed = null) {
     form.addEventListener('change', (ev) => {
       if (!ev.target) return;
       // DoC-import preview checkbox toggled → live-update the "Apply N" count.
-      if (ev.target.classList && ev.target.classList.contains('doc-check')) { docImportUpdateApplyCount(); return; }
+      if (ev.target.classList && ev.target.classList.contains('doc-check')) {
+        // Record the user's explicit choice so it survives tier switches (P2b).
+        const row = ev.target.closest('.doc-field');
+        const key = row ? row.getAttribute('data-doc-key') : null;
+        if (key) _docUserChecks[key] = ev.target.checked;
+        docImportUpdateApplyCount();
+        return;
+      }
+      // DoC-import tier radio chosen → re-render the preview from the new
+      // selection (updates bonus/funding rows + their checked state live).
+      if (ev.target.classList && ev.target.classList.contains('doc-tier-radio')) { docTierSelect(Number(ev.target.value)); return; }
       if (ev.target.name === 'offerType') syncDdSectionUI();
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
