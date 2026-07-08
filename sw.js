@@ -25,7 +25,8 @@
 'use strict';
 
 const APP_VERSION = '2026.07.08e';
-const CACHE_NAME = 'yv-precache-' + APP_VERSION;
+const CACHE_PREFIX = 'yv-precache-';
+const CACHE_NAME = CACHE_PREFIX + APP_VERSION;
 
 /* The 17 split modules — kept in lockstep with the <head> import map. */
 const MODULES = [
@@ -55,7 +56,12 @@ self.addEventListener('activate', function (event) {
     caches.keys()
       .then(function (names) {
         return Promise.all(names.map(function (name) {
-          return name === CACHE_NAME ? null : caches.delete(name);
+          // CacheStorage is origin-scoped and cmr2334.github.io serves ALL of
+          // the owner's project pages, so only evict THIS app's own stale
+          // precaches (yv-precache-* other than the current version); leave
+          // every other origin key (unrelated / future apps) untouched.
+          return (name !== CACHE_NAME && name.indexOf(CACHE_PREFIX) === 0)
+            ? caches.delete(name) : null;
         }));
       })
       .then(function () { return self.clients.claim(); })

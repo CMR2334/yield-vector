@@ -2908,17 +2908,49 @@ document.addEventListener('click', (e) => {
    SERVICE WORKER (Path B — offline capability; design §1 + contract §5d)
    Registers ./sw.js, which precaches index.html + all 17 versioned module
    URLs and serves them network-first with a cache fallback, so an offline
-   reload boots the split app from Cache Storage. On controllerchange a
-   freshly-activated worker takes over: reload ONCE (once-flag guards against
-   reload loops) so the page never runs under a stale controller — the iOS
-   standalone-PWA case. Registration failures are swallowed (no console noise).
+   reload boots the split app from Cache Storage.
+
+   controllerchange reload policy (once-flag guards against reload loops):
+   • FIRST install (no controller served THIS load) — the page already loaded
+     fresh from the network, so a claim reload is pointless: skip it.
+   • REAL update (a new worker supersedes the one that served us) — reload so
+     the page never runs under a stale controller (the iOS standalone-PWA
+     case), but never mid-edit: if a modal is open, defer until it closes so
+     the owner's unsaved form edits survive (state persists only on save).
+   Registration failures are swallowed (no console noise).
    ============================================================ */
 if ('serviceWorker' in navigator) {
+  // Captured before the SW can claim: false on a first install (page is
+  // already fresh from network), true only when a later worker supersedes the
+  // one that served us — i.e. a genuine update worth reloading for.
+  const _hadController = !!navigator.serviceWorker.controller;
   let _swReloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  // The app's one modal surface: #modal-root gains/loses the `open` class
+  // (js/modals-forms.js showOfferModal…/closeModal). A reload while it is open
+  // would discard the owner's in-progress form edits.
+  const _modalOpen = () => {
+    const m = document.getElementById('modal-root');
+    return !!(m && m.classList.contains('open'));
+  };
+  const _reloadOnce = () => {
     if (_swReloaded) return;          // once-flag: never loop reloads
     _swReloaded = true;
     location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swReloaded) return;
+    if (!_hadController) return;      // first install: already fresh — no reload
+    if (!_modalOpen()) { _reloadOnce(); return; }
+    // Update landed mid-edit. Defer, then reload the instant the modal closes
+    // — poll-free, by observing #modal-root's class attribute. The pending
+    // update converges without clobbering unsaved edits; if the modal never
+    // reopens-and-stays, the next natural navigation runs under the new worker.
+    const root = document.getElementById('modal-root');
+    if (!root) { _reloadOnce(); return; }
+    const obs = new MutationObserver(() => {
+      if (!_modalOpen()) { obs.disconnect(); _reloadOnce(); }
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ['class'] });
   });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
