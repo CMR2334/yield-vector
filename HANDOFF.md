@@ -17,7 +17,23 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-08, Round 70)
+## Current state (as of 2026-07-08, Round 72)
+
+- **R72 (module split SHIPPED LIVE — run 2026-07-08-module-split-efficiency, step 3):**
+  `index.html` (~15k lines) → **17 native ES modules** under `js/` + a ~30-line entry bootstrap +
+  Path-B network-first service worker (`sw.js`: precache `yv-precache-<APP_VERSION>`,
+  api.github.com/gist NEVER cached, controllerchange→reload). 8 commits `affca79..6f0c58b`,
+  pushed; live URL confirmed serving the module build (sw.js SHA-match). Every phase gated:
+  fidelity 67/67, pins 20/20, feed byte-identity via line-multiset proofs, preview E2E, 380px,
+  and a true-offline reload (17/17 modules fromServiceWorker, zero errors). Codex-reviewed per
+  phase (P0: 1 P1 fixed — bare console-test aliases; P1: 1 P3 accepted — import-block comments;
+  P2: CLEAN; P3: 2 P2s — SW cache cleanup was origin-wide + update reload could fire mid-edit —
+  both fixed+proven in `b18e323`, pushed). Zero code lost — byte-multiset verified.
+  **APP_VERSION intentionally still 2026.07.08e until step 5**; the bump now touches THREE
+  places: the import-map `?v=` literals, `js/runtime-status.js`, `sw.js`. Corpus harness now
+  imports module source (extraction-identity proven). Remaining: step 4 (ranked consolidations
+  under the deletion ratchet) + step 5 (ARCHITECTURE.md, bump 2026.07.09a, tag, changelog).
+  Run checkpoint = the authoritative record.
 
 - **R71 (handoff, nothing new on disk beyond docs):** the module-split run is PARKED at its
   plan gate awaiting a fresh session. Authoritative handoff (mission, exact phase, amended
