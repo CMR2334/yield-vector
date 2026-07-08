@@ -99,7 +99,6 @@ function copyText(text) {
 }
 
 
-const STATUSES = ['prospect', 'selected', 'applied', 'funded', 'completed', 'skipped'];
 const STATUS_LABELS = {
   prospect: 'Prospect',
   selected: 'Selected',
@@ -107,14 +106,6 @@ const STATUS_LABELS = {
   funded: 'Funded',
   completed: 'Completed',
   skipped: 'Skipped'
-};
-const STATUS_CHIP_CLASS = {
-  prospect: 'chip-muted',
-  selected: 'chip-accent',
-  applied: 'chip-accent',
-  funded: 'chip-accent',
-  completed: 'chip-success',
-  skipped: 'chip-muted'
 };
 
 /* ============================================================

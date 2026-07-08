@@ -1695,7 +1695,6 @@ function renderHeroChart(svg) {
   }
 
   // Hover interactions
-  const hoverArea = svg.querySelector('#chart-hover-area');
   const hoverLine = svg.querySelector('#chart-hover-line');
   const hoverDot = svg.querySelector('#chart-hover-dot');
 

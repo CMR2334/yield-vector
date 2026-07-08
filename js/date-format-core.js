@@ -247,7 +247,7 @@ function relativeDays(d) {
 /* ============================================================
    CURRENCY FORMATTING
    ============================================================ */
-function formatCurrency(n, opts = {}) {
+function formatCurrency(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   const sign = n < 0 ? '-' : '';
   const abs = Math.abs(n);
