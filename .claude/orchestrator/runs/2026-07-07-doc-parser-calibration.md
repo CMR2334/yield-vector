@@ -1,11 +1,11 @@
 ---
 run: 2026-07-07-doc-parser-calibration
 task: "Can you look up the BoA one, and the 30-50 most recent bank account offer posts yourself? Would prefer it to pull ones that are either nationally available or relevant to WI residents versus ones specific to states I am not eligible. [Context: calibrate DoC import v1 parser against a real corpus; build tier picker + stale-content demotion; owner will not supply or score posts.]"
-status: in-progress
+status: done
 created: 2026-07-07T13:30:00-05:00
 config_snapshot: { planner: fable, executor: opus, worker: sonnet, codex: { planner: review-before-approval, executor: review-after, worker: review-after } }
 plan_approved: true (user, after codex critique + 13 revisions)
-current_step: 5
+current_step: 6
 ---
 ## Context
 Yield Vector's DoC import v1 (`parseDocPost`, shipped last night, v2026.07.08b @ `6b101bd`) was validated only against 5 synthesized fixtures. Owner reports a real failure class: tiered offers (BofA "up to $2,500" where the real bonus/hold tiers live in the post body) and stale content in living posts (values outside the newest "Update M/D/YY" section are outdated). This run: harvest a real corpus (BofA post + 30-50 recent bank-account bonus posts, nationwide-or-WI-eligible only), independently hand-label expected extractions, score the current parser, implement tier-aware parsing (preview tier picker) + date-segmentation demotion + synonym gaps found, re-score, ship. Owner explicitly time-constrained: agents do ALL harvesting and labeling.
@@ -59,16 +59,16 @@ Outcome:
 Files:
 Commit:
 
-### 5. Re-score + docs + ship  [tier: executor] [codex: review-after→light review] [status: in-progress] (amended: raw harness output captured verbatim for the owner's verifiability ask; backfill 2 stale CHANGELOG Commit fields)
+### 5. Re-score + docs + ship  [tier: executor] [codex: review-after→light review] [status: done] (amended: raw harness output captured verbatim for the owner's verifiability ask; backfill 2 stale CHANGELOG Commit fields)
 Intent: Re-run step-3 harness on the SAME corpus → before/after accuracy table; commit corpus manifest + label tables to `docs/fixtures/doc-corpus/` (facts only); HANDOFF R68 + CHANGELOG + APP_VERSION 2026.07.08c. Planner reviews, commits, pushes.
 Expected files: index.html (version), docs/fixtures/doc-corpus/*, HANDOFF.md, CHANGELOG.md
-Outcome:
-Files:
-Commit:
+Outcome: VERBATIM machine logs (baseline via git-extracted 6b101bd parser, same harness): accuracy 73.4%→84.9% (152/207→186/219), recall 57.8%→70.7%, high-conf-wrong 26→2, calibration inverted→correct (96.7>87.1); parity 55/55, fidelity 63/63, pins 12/12. Persisted docs/fixtures/doc-corpus/ (47 files: manifest, excluded, 31 gold labels + adjudication, repo-relative harness, fetch-posts re-hydrator, verification-log.md w/ honest-limits paragraph, .gitignore blocking post bodies); jsdom documented as npm i --no-save prerequisite (zero-dep preserved); HANDOFF R68 + Current state; CHANGELOG entry + 2 older backfills; README bullet; APP_VERSION 2026.07.08c. Light review (Sonnet): 1 P3 (CHANGELOG pending-wording for already-committed 4a/4b) — fixed by planner pre-commit. Number-reconciliation flag honored: 84.9 (post-adjudication truth) ≠ 85.4 (pre-Codex WIP) — surfaced everywhere, not smoothed.
+Files: index.html, HANDOFF.md, CHANGELOG.md, README.md, docs/fixtures/doc-corpus/* (47)
+Commit: 7cd064d + c8ce308 (sha backfill) — PUSHED with eedb027+0126e2a as 6b101bd..c8ce308
 
-### 6. Synthesis  [tier: planner] [status: pending]
+### 6. Synthesis  [tier: planner] [status: done]
 Intent: Report to owner: corpus composition, before/after accuracy, what specifically improved (BofA case demonstrated), residual gaps + whether v2-LLM assist is still worth deploying for the remainder.
 Expected files: none (chat)
-Outcome:
-Files:
-Commit:
+Outcome: Delivered in chat 2026-07-07 (verbatim-grounded numbers, BofA tier-picker walkthrough, residual-gap list, v2-deploy verdict: still worth it for prose long-tail — waiver ×11, posting windows ×5, funding-in-prose ×7 — exactly the fields the tripwired LLM assist targets).
+Files: none
+Commit: n/a

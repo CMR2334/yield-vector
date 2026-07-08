@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 68)
+## Current state (as of 2026-07-07, Round 69)
 
-- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08c`
+- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08d`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -176,6 +176,103 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor — owner UX batch)
+**Round 69 — 13 owner UX items across the offer card, modal, overview & charts; v2026.07.08d**
+(Two folded batches — items 1-6 below, then A-G. Single uncommitted release; version stays 2026.07.08d.)
+- **[1] De-dupe requirement dates vs the legacy "Fund date."** `renderRequirementChecklist`
+  now builds a `shownDates` set from the dates the card already prints ABOVE it —
+  `lockStartDate` (Fund date), `withdrawalEligibleDate` (Withdrawal date), and each
+  `directDepositEffectiveDate` (the `.offer-dds` block) — and a **derived** row whose
+  computed deadline equals one of those drops its date suffix (row + done state still
+  render). The legacy `.offer-dates` block keeps owner-preferred placement/format; the
+  MODAL editing surface is untouched (keeps every "Due <date>"). Verified: BMO card shows
+  the fund date exactly once; a synthetic offer with `daysAfter…Deposit=0` (deposit
+  deadline == fund date) suppresses the checklist date, while a 30-day window still shows it.
+- **[2] Clickable DoC link on the card.** New `offerDocLink(o)` renders a quiet "DoC ↗"
+  (`--text-tertiary`, hover `--accent`) only when `offer.docUrl` is set — `target="_blank"
+  rel="noopener"`, escapeAttr'd href, inline `stopPropagation`. Sits in a new
+  `.offer-card-foot` shared right-aligned with the Updated stamp (wrapper omitted when both
+  empty). Verified: click opens no modal, no bubble; absent when docUrl empty.
+- **[3] More offer colors.** Appended 4 well-separated hues to `OFFER_COLOR_PALETTE`
+  (12→16, order preserved): `green #16a34a`, `purple #9333ea`, `fuchsia #c026d3`,
+  `magenta #ec4899` (label "Pink" — the `pink` key was already Cobalt). No brown, no
+  near-duplicates; picker is data-driven so no other change needed.
+- **[4] Tighten the "$"-to-digit gap (repeat request — finally landed).** `.field-box`/
+  `.dd-row` prefix `margin-right` 4px→2px; base `.input-group .input` `padding-left`
+  28px→24px. Measured (BMO modal): f-funding/f-bonus **4px→2px**, req-row amount **7.33px→3.33px**.
+  No clipping/caret issues at desktop or 380px.
+- **[5] Strip SUB amounts from displayed offer names.** New `displayOfferName()` strips a
+  trailing `$N` (display-only) across **every user-visible name surface** — card subtitle,
+  offers table, combo picker, Overview churn rows (`renderOverviewChurnSection`), hero-chart
+  offer labels (`renderHeroChart`'s `displayName`), and the template picker row + delete/replace
+  confirms. Stored `offerName` untouched, and **feed titles are left raw**: the shared
+  `buildReminderItems` name builder (`nm`) stays raw so Shortcut matching / feed byte-identity
+  hold — that is the one same-pattern helper deliberately NOT stripped (it feeds the feed, not a
+  display; my first pass mislabeled it a churn helper and stripped it, then reverted). Import
+  side: the DoC parser's offerName extraction strips trailing `$N` / `$X-$Y` / "up to $N" tails,
+  with a new `testDocParserRegressions` pin (now 13/13). Verified: BMO stored
+  `"Premier Checking $600"` → card/table/combo/churn/chart/template all render
+  `"Premier Checking"`; feed still carries `"…$600"`.
+- **[6] Requirements-row box alignment.** The modal's `.modal .input[type=number|date] {height:44px!important}`
+  tap-target rule hit the req-row number inputs (no `.field-box` reset there), so the deadline "d"
+  and count "×" boxes rendered 44px vs the 34px money box. Added a `.modal .req-row .input[type=…]`
+  reset (34px, 6px vertical padding). Measured: deadline box **44px→34px**; every req-row control now 34px.
+- **[A] Conditional "Closed date" field.** New `.yv-date` field by the status selects in the offer
+  modal, shown iff `accountStatus==='closed' && !PRE_ACCOUNT_SUB_STATUSES.has(subStatus)` — the EXACT
+  `reconcileClosedDate` stamp guard mirrored, so what's visible is what anchors churn. `refreshClosedDateField()`
+  live-toggles it on status change (defaults today on a fresh flip-to-closed, still backdatable; clears the
+  input when hidden so a stale date can't submit). `readOfferForm` reads `closed_date` BEFORE
+  `reconcileClosedDate` runs, so a user value always wins (reconcile only fills a blank). Verified: backdate
+  `2026-01-01` kept, blank→today stamped, `churnEligibleDate` computes `2026-07-01` from the backdate
+  (null → needs-date state).
+- **[B] Chart tooltip bank-only (repeat).** The hero "Available capital today" tooltip's per-offer rows now show
+  BANK NAME ONLY — added `bankName: o.bankName` to the 4 offer markers and the tooltip renders
+  `m.bankName || m.name || m.label` (events keep their name). Timeline tooltips were already bank-only
+  (`r.label = o.bankName` on the row label + bar `title`). Verified: ambiguous-bank marker → tooltip "BMO".
+- **[C] "Run again" on churn rows.** A quiet "Run again" button (sibling to Snooze) on eligible-now + upcoming
+  rows → `churnRunAgain(id)` builds a seed via the exact template-Use pipeline
+  (`templateToOffer(offerToTemplate(o))`) → `showOfferModal(null, seed)` with a `Re-run of <bank> — <stripped
+  name>` notes line. Prior offer untouched; sibling structure means no row-nav bubble. Verified.
+- **[D] Tighten chart-label gaps.** `.chart-legend` (shared by the hero AND timeline legends) went from a 2-col
+  `1fr 1fr` grid (huge inter-column gap) to a `flex-wrap` row, `gap: 6px 14px` — comfortable adjacency,
+  both charts consistent.
+- **[E] Unified overview headers.** Removed the churn description line; the churn header now uses `.card-header`
+  markup (like Upcoming actions), and `.overview-grid .card-header h2` is restyled to EXACTLY match the hero
+  `.hero-label` (14px/600/uppercase/0.02em/`--text-tertiary`; 13px at mobile). Verified all three identical.
+- **[F] Churn card = Upcoming-actions width.** Moved `renderOverviewChurnSection()` INTO `.overview-grid` with
+  `grid-column: span 2` (matching `.overview-main`) so the two cards are same-width siblings (806px desktop,
+  full-width ≤720/≤480). **Gotcha fixed:** the base `.churn-section{grid-column:span 2}` was declared AFTER the
+  responsive `@media` overrides, so span-2 leaked into the mobile 1-col grid and spawned a phantom column
+  (380px overflow); moved the base rule ABOVE the media queries so the overrides win in source order.
+- **[G] Checklist checkbox alignment.** `.offer-req-item` `align-items: baseline → center` + dropped the
+  `.offer-req-check` `margin-top:1px` — the checkbox now centers on its text line (measured offset 0).
+- **Review fixes (1×P1 + 2×P2, index.html only):**
+  - **[P1] Closed-date flap wiped backdates.** `refreshClosedDateField` used to CLEAR the input on hide and
+    re-stamp today on re-show, so a Closed→Open→Closed toggle silently replaced a historical `closed_date`
+    with today. Fixed by hiding via **`disabled` instead of clearing** — a disabled input is absent from
+    FormData (stale date can't submit) but KEEPS its value, so the flap restores the backdate. Prefill
+    precedence on an empty field: (1) the input's preserved value, (2) the offer's stored `closed_date`
+    (`data-stored` attr), (3) today. Reopen→SAVE still clears: the disabled field is absent from FormData →
+    `readOfferForm` sets `closed_date: dateIso(undefined) || null` → **null** (overrides the prior-offer spread,
+    since `parseDateInput(undefined)===null`), and `reconcileClosedDate`'s close→open branch confirms the null.
+    The `.yv-date` picker is delegation-based (`closest('.yv-date')`), so it still works once the field is
+    re-enabled. Verified repro matrix: flap keeps `1-1-2026` (save→`2026-01-01`, churn→`2026-07-01`); fresh
+    flip-to-closed still prefills today; reopen→save clears to null.
+  - **[P2-1] docUrl scheme gate (XSS).** `offerDocLink` rendered any `docUrl` as an href and `escapeAttr`
+    doesn't restrict schemes, so an imported `javascript:`/`data:` docUrl became a working XSS link. Now the
+    link renders ONLY when `docUrl` matches `/^https?:\/\//i` (else nothing); a commented security invariant
+    marks the guard. Verified: `javascript:`/`data:`/mixed-case → no link; http/https → link.
+  - **[P2-2] Name-strip gaps.** `displayOfferName()` now also applied at: (a) `convertOfferToCommitment`
+    `commitmentName` (build-side), (b) `renderCommitmentsTable` name cell (render-side, covers legacy stored
+    names), (c) the capital-event "Linked offer" `<option>` labels — the Name autofill reads the option's
+    `textContent`, so that one edit covers both the dropdown and the auto-filled event Name. Feed stays raw.
+    Verified BMO: convert→commitment `"BMO — Premier Checking"`, all dropdown labels + autofill amount-free.
+- **Gates (both batches):** `node --check` (extracted inline JS) clean; preview E2E each item + console clean;
+  feed code path untouched (no diff hunk in `computeReminderFeed`/`buildReminderItems`) and, after removing
+  the in-memory test-churnable offer, the feed returns to baseline (no `churn-eligible` delta); 380px full pass,
+  no horizontal scroll. Test offers were in-memory only (never `App.update`d), so storage/feed are pristine.
+- **Pending:** working-tree changes for the planner to review/commit (do not self-commit).
 
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate — parser-calibration run)
 **Round 68 — DoC parser calibrated against a real 31-post corpus; tier-aware parsing + tier picker; v2026.07.08c**

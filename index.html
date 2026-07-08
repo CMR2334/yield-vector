@@ -213,15 +213,32 @@ a { color: inherit; text-decoration: none; }
   align-items: start;
 }
 .overview-main { grid-column: span 2; }
+/* R69 (Item F): the churn card spans the same 2 columns as "Upcoming actions".
+   MUST be declared here — before the media queries below — so the ≤720/≤480
+   `grid-column` overrides win in source order (a later base rule elsewhere would
+   otherwise force span-2 into the mobile 1-col grid and spawn a phantom column). */
+.churn-section { grid-column: span 2; }
+/* R69 (Item E): unify the two in-grid section headers ("Upcoming actions",
+   "Upcoming churn dates") with the hero "Available capital today" label —
+   identical 14px / 600 / uppercase / 0.02em / tertiary treatment. */
+.overview-grid .card-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+}
 @media (max-width: 720px) {
-  /* Stat cards stay 3-per-row; Upcoming and At-a-glance span full width */
+  /* Stat cards stay 3-per-row; Upcoming, At-a-glance, and churn span full width */
   .overview-main  { grid-column: 1 / -1; }
   .overview-aside { grid-column: 1 / -1; }
+  .churn-section  { grid-column: 1 / -1; }
 }
 @media (max-width: 480px) {
   .overview-grid  { grid-template-columns: 1fr; }
   .overview-main  { grid-column: auto; }
   .overview-aside { grid-column: auto; }
+  .churn-section  { grid-column: auto; }
 }
 
 .snapshot-card {
@@ -714,9 +731,13 @@ a { color: inherit; text-decoration: none; }
 .chart-tooltip .tt-row .label { opacity: 0.7; }
 
 .chart-legend {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+  /* R69 (Item D): the 2-column 1fr grid spread the legend chips across
+     half-widths, leaving an "excessively large" gap between the two columns.
+     A wrapping flex row sits them comfortably next to each other instead —
+     shared by the hero AND timeline legends so both charts stay consistent. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
   margin-top: var(--space-4);
   font-size: 12px;
   color: var(--text-secondary);
@@ -839,11 +860,13 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
-/* Upcoming churn dates (F6) — bottom-of-Overview section. Mounts after
-   .overview-grid as a block-level sibling, so it's naturally full-width (no
-   grid-column needed — the parent isn't a grid). Rows reuse the offer-color
-   stripe + tap-to-edit idiom from .action-row but with a simpler two-line body. */
-.churn-section { margin-top: var(--space-4); }
+/* Upcoming churn dates (F6) — R69 Item F: now a GRID sibling of "Upcoming
+   actions". It sits inside .overview-grid spanning the same 2 columns as
+   .overview-main so the two cards read as siblings at the same width (the grid
+   gap supplies the spacing — no margin-top). Its `grid-column` (base span-2 +
+   the ≤720/≤480 overrides) is declared up in the .overview-grid block so the
+   responsive rules win in source order. Rows reuse the offer-color stripe +
+   tap-to-edit idiom from .action-row but with a simpler two-line body. */
 .churn-list { display: flex; flex-direction: column; gap: 2px; }
 .churn-group-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
@@ -995,7 +1018,7 @@ a { color: inherit; text-decoration: none; }
 .offer-card[style*="--offer-color"]:not(.included) { border-left-color: var(--offer-color); }
 .offer-card.draft { opacity: 0.85; border-style: dashed; border-color: var(--warning); }
 
-/* Color picker (Add/Edit Offer modal). Twelve circular swatches plus
+/* Color picker (Add/Edit Offer modal). Sixteen circular swatches plus
    a "no color" cross at the start. Used swatches dim to 0.18 alpha
    and become non-interactive. Selected swatch gets a ring. */
 .color-picker {
@@ -1153,6 +1176,21 @@ a { color: inherit; text-decoration: none; }
 /* Quiet freshness stamp — smallest tier, tertiary text, right-aligned so it
    reads as a corner annotation rather than card content. */
 .offer-updated { margin-top: var(--space-2); font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-tertiary); text-align: right; }
+/* R69 (Item 2): a quiet DoC/source affordance on the card, shown only when the
+   offer has a docUrl. Shares the card's smallest text tier (10px uppercase) and
+   sits on the same footer line as the Updated stamp — right-aligned, muted,
+   accent on hover. Never competes with real content. */
+.offer-card-foot { display: flex; align-items: baseline; justify-content: flex-end; gap: 10px; margin-top: var(--space-2); }
+.offer-card-foot .offer-updated { margin-top: 0; }
+.offer-doc-link {
+  flex: 0 0 auto;
+  font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase;
+  color: var(--text-tertiary); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
+  padding: 2px 0; /* a touch of vertical tap area without shifting the line */
+  transition: color 0.12s;
+}
+.offer-doc-link:hover, .offer-doc-link:focus-visible { color: var(--accent); }
 
 .offer-chips {
   display: flex;
@@ -1286,9 +1324,9 @@ a { color: inherit; text-decoration: none; }
   position: static;
   flex: 0 0 auto;
   transform: none;
-  /* R62: same "$"-ties-to-value treatment as the field-box variant —
-     snug gap + value-tone color (overrides the base muted tertiary). */
-  margin-right: 4px;
+  /* R62→R69: same "$"-ties-to-value treatment as the field-box variant —
+     halved gap (4px → 2px) + value-tone color (overrides the base tertiary). */
+  margin-right: 2px;
   color: var(--text-strong);
 }
 .dd-row .input:focus,
@@ -1539,13 +1577,15 @@ a { color: inherit; text-decoration: none; }
 }
 .offer-req-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-tertiary); margin-bottom: 4px; }
 .offer-req-item {
-  display: flex; align-items: baseline; gap: 8px;
+  /* R69 (Item G): center the checkbox against its text line — `baseline`
+     dropped the box below the label's cap height (owner screenshot). */
+  display: flex; align-items: center; gap: 8px;
   font-size: 12px; padding: 3px 0; cursor: pointer;
   border-radius: var(--radius-sm);
   -webkit-tap-highlight-color: transparent;
 }
 .offer-req-check {
-  flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px;
+  flex: 0 0 auto; width: 15px; height: 15px;
   border: 1.5px solid var(--border-strong); border-radius: 4px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-inverse);
@@ -2068,10 +2108,10 @@ a { color: inherit; text-decoration: none; }
   position: static;
   flex: 0 0 auto;
   transform: none;
-  /* R62: tie the "$" to the value — snug gap (reads connected, low end of
-     the 4-6px target) and darkened from the muted label tone to the value
-     tone (--text-strong) so it parses as part of the amount, not the label. */
-  margin-right: 4px;
+  /* R62→R69: tie the "$" to the value. Owner re-flagged the gap as still too
+     wide, so halve it (4px → 2px) — the "$" now sits right against the first
+     digit. Value tone (--text-strong) so it parses as part of the amount. */
+  margin-right: 2px;
   font-size: 16px;
   color: var(--text-strong);
 }
@@ -2193,7 +2233,11 @@ a { color: inherit; text-decoration: none; }
 
 .input-group .input-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 14px; pointer-events: none; }
 .input-group .input-suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 13px; pointer-events: none; }
-.input-group .input { padding-left: 28px; }
+/* R69: tighten the "$"-to-digit gap on the absolute-prefix variant (req-row
+   amount, settings, commitment/event money) — the "$" sits at left:12px, so
+   28px left-padding left ~7px of dead space before the first digit. 24px
+   roughly halves it (~3px) without the glyph colliding with the value. */
+.input-group .input { padding-left: 24px; }
 .input-group.with-suffix .input { padding-right: 60px; }
 
 /* ============================================================
@@ -2266,6 +2310,23 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.35 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
+}
+/* R69 (Item 6): requirement-row number/date inputs are NOT inside a .field-box,
+   so the 44px tap-target rule above forced the count "×" and deadline "d" boxes
+   to 44px while the sibling text/money inputs sized to the req-row's own 34px —
+   leaving those boxes visibly TALLER (owner screenshot). Re-assert the req-row's
+   compact 34px height + 6px vertical padding so every control in a requirement
+   row shares one height/baseline. Left/right padding (incl. the with-suffix
+   26px clearance) is untouched. */
+.modal .req-row .input[type="date"],
+.modal .req-row .input[type="datetime-local"],
+.modal .req-row .input[type="time"],
+.modal .req-row .input[type="number"] {
+  min-height: 0 !important;
+  height: 34px !important;
+  line-height: normal !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
 }
 
 /* DD-requirement controls are meant to read as a compact inline rule
@@ -2634,6 +2695,7 @@ table.data-table {
   .hero { padding: var(--space-4) var(--space-3); border-radius: var(--radius-lg); }
   .hero-amount { font-size: 36px; }
   .hero-label { font-size: 13px; letter-spacing: 0.02em; } /* R62: match tightened desktop value */
+  .overview-grid .card-header h2 { font-size: 13px; } /* R69 Item E: keep the unified headers matched to .hero-label at mobile */
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr 1fr; }
   .grid-cols-2.mobile-stack { grid-template-columns: 1fr; }
   .stat-card { padding: var(--space-4); }
@@ -2821,7 +2883,7 @@ const STORAGE_KEY = 'capital-planner-v1';
    the PWA is served from cache, this is the only reliable way to confirm
    which build a phone is actually running. package.json `version` is
    dev-only metadata and tracked separately. */
-const APP_VERSION = '2026.07.08c';
+const APP_VERSION = '2026.07.08d';
 
 /* --- Diagnostics & error logging ----------------------------------------
    The app runs on a phone with no console, so an uncaught error would
@@ -3126,6 +3188,15 @@ function requirementDisplayLabel(row) {
   if (row.label && String(row.label).trim()) return String(row.label).trim();
   const meta = REQUIREMENT_TYPE_META[row.type];
   return meta ? meta.label : (row.type || 'Requirement');
+}
+
+// DISPLAY-ONLY (Item 5a): strip a trailing bonus amount from an offer's shown
+// name (owner: "BMO — Premier Checking $600" → the $600 is redundant, the bonus
+// renders separately). Removes only a trailing "$N" token (optionally preceded
+// by a dash). The STORED offerName is never touched, and feed titles keep the
+// raw name. Used by the card subtitle, offers table, and combo picker rows.
+function displayOfferName(name) {
+  return String(name == null ? '' : name).replace(/\s*[-–—]?\s*\$[\d,]+(?:\.\d+)?$/, '').trim();
 }
 
 // The absolute calendar deadline for a requirement row, as an ISO string, or
@@ -3647,7 +3718,7 @@ function restorePreV2Backup() {
 const CONFIDENCE_LABELS = { confirmed: 'Confirmed', likely: 'Likely', uncertain: 'Uncertain' };
 
 /* ============================================================
-   OFFER COLOR PALETTE — 12 swatches, names not hex so the palette
+   OFFER COLOR PALETTE — 16 swatches, names not hex so the palette
    can be re-tuned without breaking saved offers. Per-bank identity
    coding for the card border, timeline bar, and chart marker stroke.
 
@@ -3677,7 +3748,15 @@ const OFFER_COLOR_PALETTE = [
   { name: 'pink',    hex: '#2563eb', label: 'Cobalt' },
   { name: 'violet',  hex: '#8b5cf6', label: 'Violet' },
   { name: 'brown',   hex: '#3f3f46', label: 'Graphite' },
-  { name: 'slate',   hex: '#475569', label: 'Slate' }
+  { name: 'slate',   hex: '#475569', label: 'Slate' },
+  // R69: 4 more well-separated hues (owner: "more colors"). No brown, no
+  // near-duplicates — green fills the lime→emerald gap; purple/fuchsia/pink
+  // fill the wide violet→rose void. Keys are new+stable (note 'pink' was
+  // already taken by Cobalt, so hot-pink uses the 'magenta' key).
+  { name: 'green',   hex: '#16a34a', label: 'Green' },
+  { name: 'purple',  hex: '#9333ea', label: 'Purple' },
+  { name: 'fuchsia', hex: '#c026d3', label: 'Fuchsia' },
+  { name: 'magenta', hex: '#ec4899', label: 'Pink' }
 ];
 const OFFER_COLOR_BY_NAME = Object.fromEntries(OFFER_COLOR_PALETTE.map(c => [c.name, c.hex]));
 
@@ -3702,7 +3781,7 @@ function usedOfferColors(excludeOfferId) {
   return used;
 }
 
-// First palette color not currently in use. Returns '' if all 12 are
+// First palette color not currently in use. Returns '' if all 16 are
 // taken so callers can decide what to do (toast + no color, prompt
 // to clear one, etc.). Excludes the offer being edited so re-saving
 // without a color change doesn't false-positive.
@@ -6201,7 +6280,7 @@ function convertOfferToCommitment(offer) {
   if (!start || !end) return null;
   return {
     id: uid('cmt'),
-    commitmentName: offer.offerName ? `${offer.bankName} — ${offer.offerName}` : offer.bankName,
+    commitmentName: (() => { const dn = displayOfferName(offer.offerName); return dn ? `${offer.bankName} — ${dn}` : offer.bankName; })(),
     sourceBonusOfferId: offer.id,
     amount: Number(offer.requiredFundingAmount),
     startDate: start,
@@ -6631,8 +6710,8 @@ function renderOverview() {
           <div class="snap snap-bonus"><span class="snap-v${(() => { const t = formatCurrency(expectedBonusTotal); return t.length >= 8 ? ' snap-v-sm' : ''; })()}">${formatCurrency(expectedBonusTotal)}</span><span class="snap-l">Bonus pool</span></div>
         </div>
       </aside>
+      ${renderOverviewChurnSection()}
     </div>
-    ${renderOverviewChurnSection()}
   `;
 }
 
@@ -6683,7 +6762,7 @@ function renderOverviewChurnSection() {
   upcoming.sort((a, b) => a.d - b.d);
   snoozed.sort((a, b) => (a.o.bankName || '').localeCompare(b.o.bankName || ''));
 
-  const offerName = (o) => `${o.bankName}${o.offerName ? ' — ' + o.offerName : ''}`;
+  const offerName = (o) => { const dn = displayOfferName(o.offerName); return `${o.bankName}${dn ? ' — ' + dn : ''}`; };
 
   // A visible (non-snoozed) row: navigation main area + a subtle snooze menu.
   // The clickable nav div and the snooze controls are SIBLINGS inside a wrap so
@@ -6705,6 +6784,7 @@ function renderOverviewChurnSection() {
         ${waitChip}
       </div>
       <div class="churn-snooze">
+        <button type="button" class="btn btn-ghost btn-xs churn-run-btn" data-action="churn-run-again" data-id="${idAttr}" title="Start a fresh offer from this one's terms">Run again</button>
         <button type="button" class="btn btn-ghost btn-xs churn-snooze-btn" data-action="churn-snooze-toggle" data-id="${idAttr}" aria-expanded="false" aria-controls="${menuId}" title="Snooze this churn reminder">Snooze</button>
         <div class="churn-snooze-menu" id="${menuId}" hidden>
           <button type="button" class="btn btn-ghost btn-xs" data-action="churn-snooze" data-id="${idAttr}" data-snooze="30">30 days</button>
@@ -6760,11 +6840,8 @@ function renderOverviewChurnSection() {
 
   return `
     <section class="card churn-section">
-      <div class="section-header">
-        <div>
-          <h2>Upcoming churn dates</h2>
-          <p>Offers you can earn again once their cooling-off period passes.</p>
-        </div>
+      <div class="card-header">
+        <h2>Upcoming churn dates</h2>
       </div>
       <div class="churn-list">${body}</div>
     </section>
@@ -7589,7 +7666,7 @@ function renderComboCard(r, rank, candidates, currentMask) {
       <div class="combo-offers">
         ${offers.map(o => `
           <div class="combo-offer">
-            <span class="name">${escapeHtml(o.bankName)}${o.offerName ? ' · ' + escapeHtml(o.offerName) : ''}</span>
+            <span class="name">${escapeHtml(o.bankName)}${(() => { const dn = displayOfferName(o.offerName); return dn ? ' · ' + escapeHtml(dn) : ''; })()}</span>
             <span class="amount">${formatCompactCurrency(o.signupBonusAmount)} / ${formatCompactCurrency(o.requiredFundingAmount)}</span>
           </div>
         `).join('')}
@@ -7650,6 +7727,17 @@ function requirementChecklistCounts(o) {
 function renderRequirementChecklist(o) {
   const reqs = Array.isArray(o.requirements) ? o.requirements : [];
   if (reqs.length === 0) return '';
+  // Item 1: each date renders ONCE on the card. The legacy .offer-dates block
+  // (Fund / Withdrawal date) and the .offer-dds block already print these dates
+  // ABOVE the checklist and own that placement (owner preference). So a DERIVED
+  // checklist row whose computed deadline equals an already-shown date drops its
+  // date suffix here — the row + done state still render, just no duplicate date.
+  // The modal editing surface is unaffected (it keeps every computed date).
+  const shownDates = new Set(
+    [lockStartDate(o), withdrawalEligibleDate(o)]
+      .concat((Array.isArray(o.directDeposits) ? o.directDeposits : []).map(directDepositEffectiveDate))
+      .filter(Boolean)
+  );
   const rows = reqs.map(r => ({ row: r, dlISO: requirementDeadlineISO(o, r) }));
   rows.sort((a, b) => {
     // Pending above done.
@@ -7666,7 +7754,7 @@ function renderRequirementChecklist(o) {
     <div class="offer-req-item ${row.done ? 'done' : ''}" data-action="toggle-req-done" data-id="${o.id}" data-req-id="${escapeAttr(row.id)}" role="button" tabindex="0" aria-pressed="${row.done ? 'true' : 'false'}" title="${row.done ? 'Mark not done' : 'Mark done'}">
       <span class="offer-req-check">${row.done ? checkSvg : ''}</span>
       <span class="offer-req-label">${escapeHtml(requirementDisplayLabel(row))}</span>
-      <span class="offer-req-date">${dlISO ? formatDateMedium(dlISO) : ''}</span>
+      <span class="offer-req-date">${(dlISO && !(row.source === 'derived' && shownDates.has(dlISO))) ? formatDateMedium(dlISO) : ''}</span>
     </div>`).join('');
   return `
     <div class="offer-req-checklist">
@@ -7840,6 +7928,23 @@ function offerUpdatedStamp(o) {
   return `<div class="offer-updated">${label}</div>`;
 }
 
+// Item 2: quiet "DoC ↗" source affordance for the card. Rendered only when the
+// offer carries a docUrl. Opens the post in a new tab (rel=noopener); the href
+// is escapeAttr'd. stopPropagation keeps a tap from ever bubbling into a
+// card-open/edit action. Returns '' when there's no source URL.
+function offerDocLink(o) {
+  if (!o || !o.docUrl) return '';
+  const raw = String(o.docUrl).trim();
+  // SECURITY INVARIANT (P2-1): docUrl only becomes a live href when it is an
+  // http(s) URL. escapeAttr escapes quotes but does NOT restrict the scheme, so
+  // an imported/crafted `javascript:` or `data:` docUrl would otherwise render a
+  // working XSS link. Anywhere docUrl (or any user/imported string) is turned
+  // into an href, apply THIS SAME guard.
+  if (!/^https?:\/\//i.test(raw)) return '';
+  const href = escapeAttr(raw);
+  return `<a class="offer-doc-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="Open the source DoC post" aria-label="Open source post (new tab)">DoC <span aria-hidden="true">↗</span></a>`;
+}
+
 function renderOfferCard(o) {
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
@@ -7861,7 +7966,7 @@ function renderOfferCard(o) {
           aria-label="Include in scenario" />
         <div style="flex:1;min-width:0;">
           <div class="offer-name">${escapeHtml(o.bankName || 'Untitled offer')}</div>
-          <div class="offer-bank">${escapeHtml(o.offerName || '')}</div>
+          <div class="offer-bank">${escapeHtml(displayOfferName(o.offerName))}</div>
         </div>
         <button class="btn-icon" data-action="edit-offer" data-id="${o.id}" aria-label="Edit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
@@ -7938,7 +8043,13 @@ function renderOfferCard(o) {
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
         ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
-      ${offerUpdatedStamp(o)}
+      ${(() => {
+        // Item 2: DoC source link + Updated stamp share one right-aligned footer.
+        // Skip the wrapper entirely when neither is present (no empty gap).
+        const doc = offerDocLink(o);
+        const stamp = offerUpdatedStamp(o);
+        return (doc || stamp) ? `<div class="offer-card-foot">${doc}${stamp}</div>` : '';
+      })()}
     </div>
   `;
 }
@@ -8264,7 +8375,7 @@ function renderOffersTable(offers) {
               <tr>
                 <td>
                   <div style="font-weight:500;">${escapeHtml(o.bankName)}</div>
-                  <div style="font-size:11px;color:var(--text-tertiary);">${escapeHtml(o.offerName || '')}</div>
+                  <div style="font-size:11px;color:var(--text-tertiary);">${escapeHtml(displayOfferName(o.offerName))}</div>
                 </td>
                 <td class="num">${formatCurrency(o.requiredFundingAmount)}</td>
                 <td class="num" style="color:var(--success);font-weight:600;">${formatCurrency(o.signupBonusAmount)}</td>
@@ -8539,7 +8650,7 @@ function renderCommitmentsTable() {
           ${App.state.commitments.map(c => `
             <tr>
               <td>
-                <div style="font-weight:500;">${escapeHtml(c.commitmentName.replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, '').trim())}</div>
+                <div style="font-weight:500;">${escapeHtml(displayOfferName(c.commitmentName.replace(/(\s*[-–—]\s*|\s+)Bonus\s*$/i, '').trim()))}</div>
                 ${c.sourceBonusOfferId ? `<div style="font-size:11px;color:var(--text-tertiary);">Linked to offer</div>` : ''}
               </td>
               <td class="num">${formatCurrency(c.amount)}</td>
@@ -8895,7 +9006,8 @@ function renderHeroChart(svg) {
   }
   const displayName = (o) => {
     const ambiguous = (bankActiveCount.get(o.bankName) || 0) > 1;
-    return ambiguous && o.offerName ? `${o.bankName} — ${o.offerName}` : o.bankName;
+    const dn = displayOfferName(o.offerName);
+    return ambiguous && dn ? `${o.bankName} — ${dn}` : o.bankName;
   };
   const markers = [];
   for (const o of App.state.offers) {
@@ -8912,7 +9024,7 @@ function renderHeroChart(svg) {
         if (!eff) return;
         const i = Math.round((eff - start) / 86400000);
         if (i < 0 || i >= proj.length) return;
-        markers.push({ i, type: 'dd-fund', label: `DD ${idx + 1} — ${name}`, name, color: '#2d9cdb', offerColor, amount: Number(dd.amount) || 0 });
+        markers.push({ i, type: 'dd-fund', label: `DD ${idx + 1} — ${name}`, name, bankName: o.bankName, color: '#2d9cdb', offerColor, amount: Number(dd.amount) || 0 });
       });
     }
     // Held lump-sum fund marker (indigo) for the held types — new-funds-held
@@ -8922,12 +9034,12 @@ function renderHeroChart(svg) {
       const fund = parseDate(lockStartDate(o));
       if (fund) {
         const i = Math.round((fund - start) / 86400000);
-        if (i >= 0 && i < proj.length) markers.push({ i, type: 'fund', label: `Fund ${name}`, name, color: '#5b5cf6', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
+        if (i >= 0 && i < proj.length) markers.push({ i, type: 'fund', label: `Fund ${name}`, name, bankName: o.bankName, color: '#5b5cf6', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
       }
     }
     if (withd) {
       const i = Math.round((withd - start) / 86400000);
-      if (i >= 0 && i < proj.length) markers.push({ i, type: 'withdraw', label: `Withdraw ${name}`, name, color: '#10b981', offerColor, amount: Number(o.requiredFundingAmount) || 0, bonus: Number(o.signupBonusAmount) || 0 });
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'withdraw', label: `Withdraw ${name}`, name, bankName: o.bankName, color: '#10b981', offerColor, amount: Number(o.requiredFundingAmount) || 0, bonus: Number(o.signupBonusAmount) || 0 });
     }
     // Deposit/DD-completion deadline marker. For DD offers this is the
     // "complete a qualifying DD within X days" deadline; for held offers
@@ -8937,7 +9049,7 @@ function renderHeroChart(svg) {
     if (ddl && o.offerType !== 'held-and-dd') {
       const i = Math.round((ddl - start) / 86400000);
       const label = o.offerType === 'direct-deposit' ? `DD deadline: ${name}` : `Deposit deadline: ${name}`;
-      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label, name, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
+      if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label, name, bankName: o.bankName, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
     }
   }
   // Events on the chart: recurring events produce one marker per
@@ -9238,7 +9350,7 @@ function renderHeroChart(svg) {
         // washed out / dull on the dark BG. Bumped to weight 600 so
         // the contrast against the ~7:1 dark BG is comfortable.
         // Override .label's baseline opacity:0.7 inline.
-        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};opacity:1;font-weight:600;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.name || m.label)}</span></div>`;
+        html += `<div class="tt-row" style="margin-top:3px;"><span class="label" style="color:${evColor};opacity:1;font-weight:600;">${markerTypeLabel(m.type)}</span><span style="color:${idColor};font-weight:600;">${escapeHtml(m.bankName || m.name || m.label)}</span></div>`;
         if (m.type === 'fund' && m.amount) html += `<div class="tt-row"><span class="label">Deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'dd-fund' && m.amount) html += `<div class="tt-row"><span class="label">DD amount</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
         if (m.type === 'deposit-deadline' && m.amount) html += `<div class="tt-row"><span class="label">Required deposit</span><span style="color:${idColor};">${formatCurrency(m.amount)}</span></div>`;
@@ -10100,7 +10212,16 @@ function parseDocPost(raw) {
     // Offer name = the descriptive tail of the title (e.g. "Premier Checking").
     const om = firstLine.match(/(?:\$[\d,]+|\d[\d,]*\s*(?:points|miles|membership rewards))\s+(.+?)(?:\s+bonus)?$/i);
     if (om && om[1]) {
-      const name = om[1].replace(/\bbonus\b/i, '').replace(/\s+/g, ' ').trim();
+      // Item 5b: never embed a trailing bonus amount in the proposed offer name
+      // — strip a trailing "$N", "$X-$Y" range, or "up to $N" tail so future
+      // imports don't carry the amount into offerName (it's captured as the
+      // bonus separately). The DISPLAY side (displayOfferName) also guards, but
+      // fixing it at import keeps stored data clean going forward.
+      const name = om[1]
+        .replace(/\bbonus\b/i, '')
+        .replace(/\s*[-–—]?\s*(?:up to\s+)?\$[\d,]+(?:\.\d+)?(?:\s*[-–—]\s*\$?[\d,]+(?:\.\d+)?)?$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
       if (name && name.split(/\s+/).length <= 6) put('offerName', name, 'medium', firstLine);
     }
   }
@@ -11421,6 +11542,12 @@ function testDocParserRegressions() {
     { name: 'P2b glance-in-base: glance ETF row still parsed → 30',
       html: '<article><p><strong>Update 5/20/2026</strong>: Bonus lowered to $250 (was $350).</p><p><strong>Offer at a glance</strong></p><ul><li>Maximum bonus amount: $350</li><li>Expiration date: 12/31/2026</li><li>Early account termination fee: $30 if closed within 180 days</li></ul></article>',
       key: 'early_termination_fee', want: 30 },
+    // Item 5b — the proposed offerName must NOT carry a trailing bonus amount.
+    // "Ridgeline $500 Premier Checking $600" → offerName "Premier Checking":
+    // the "$600" tail is stripped at import so it never lands in stored data.
+    { name: 'Item5b trailing $600 stripped from offerName',
+      html: '<article><p>Ridgeline $500 Premier Checking $600</p><p>Open a Ridgeline account to earn your bonus.</p></article>',
+      key: 'offerName', want: 'Premier Checking' },
   ];
   let pass = 0, fail = 0; const failures = [];
   for (const c of cases) {
@@ -11481,7 +11608,8 @@ function templateRowChips(tpl) {
 
 // One template row: title (bank — offer), chips, savedAt muted, Use + delete.
 function renderTemplateRow(tpl) {
-  const name = tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : (tpl.bankName || 'Untitled offer');
+  const dn = displayOfferName(tpl.offerName);
+  const name = dn ? `${tpl.bankName} — ${dn}` : (tpl.bankName || 'Untitled offer');
   const saved = tpl.savedAt ? `Saved ${escapeHtml(formatDateMedium(tpl.savedAt))}` : '';
   return `
     <div class="tpl-row" data-tpl-row="${escapeAttr(tpl.tplId)}">
@@ -11572,7 +11700,7 @@ function useTemplate(tplId) {
 function deleteTemplate(tplId) {
   if (!tplId) return;
   const tpl = (App.state.templates || []).find(t => t && t.tplId === tplId);
-  const label = tpl ? (tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : tpl.bankName) : 'this template';
+  const label = tpl ? (() => { const dn = displayOfferName(tpl.offerName); return dn ? `${tpl.bankName} — ${dn}` : tpl.bankName; })() : 'this template';
   if (!confirm(`Delete the template "${label}"?`)) return;
   App.update(s => {
     s.templates = (s.templates || []).filter(t => t && t.tplId !== tplId);
@@ -11869,6 +11997,13 @@ function showOfferModal(offerId = null, seed = null) {
             </div>
             <span class="field-hint">Closed force-excludes the offer from the cash projection (money is back).</span>
           </div>
+          <div class="field" id="f-closed-date-field" style="display:${(o.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(o.subStatus)) ? '' : 'none'};">
+            <div class="field-box">
+              <label for="f-closed">Closed date</label>
+              <input id="f-closed" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(o.closed_date))}" name="closed_date" data-picker-mode="plain" data-stored="${escapeAttr(o.closed_date || '')}" ${(o.accountStatus === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(o.subStatus)) ? '' : 'disabled'} />
+            </div>
+            <span class="field-hint">When the account was closed — anchors churn eligibility when the churn anchor is "account closed". Backdate freely; leave blank to default to today on save.</span>
+          </div>
           <div class="field">
             <div class="field-box">
               <label for="f-confidence">Confidence</label>
@@ -12164,7 +12299,7 @@ function showOfferModal(offerId = null, seed = null) {
         const acct = form.querySelector('#f-accountstatus');
         if (acct) acct.value = defaultAccountForSub(ev.target.value);
       }
-      if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') { syncSignupLabel(); refreshLifecycleStrip(); }
+      if (ev.target.id === 'f-substatus' || ev.target.id === 'f-accountstatus') { syncSignupLabel(); refreshLifecycleStrip(); refreshClosedDateField(); }
       // Debit-requirement Yes/No → show or hide the count/deadline fields.
       if (ev.target.name === 'debitRequired') {
         const wrap = form.querySelector('#debit-fields-wrap');
@@ -12542,6 +12677,45 @@ function refreshLifecycleStrip() {
   host.innerHTML = renderPipelineStrip(offer, { slim: true }) + renderLifecycleInfo(offer);
 }
 
+// R69 (Item A): show/hide the conditional "Closed date" field to mirror EXACTLY
+// the reconcileClosedDate stamp guard — visible iff the account is closed AND the
+// sub-status isn't a pre-account one — so what the user sees is exactly what
+// anchors churn. On a fresh flip-to-closed with no date yet, default to today
+// (still editable/backdatable). When hidden, clear the value so a stale date can
+// never submit ("what's visible = what anchors").
+function refreshClosedDateField() {
+  const form = document.getElementById('offer-form');
+  if (!form) return;
+  const wrap = form.querySelector('#f-closed-date-field');
+  const input = form.querySelector('#f-closed');
+  if (!wrap || !input) return;
+  const sub = (form.querySelector('#f-substatus') || {}).value || 'prospect';
+  const acct = (form.querySelector('#f-accountstatus') || {}).value || 'closed';
+  const show = acct === 'closed' && !PRE_ACCOUNT_SUB_STATUSES.has(sub);
+  if (show) {
+    // Prefill precedence when the field is empty: (1) the input's OWN preserved
+    // value — implicit: we never clear on hide, so a Closed→Open→Closed flap
+    // keeps the user's backdate; (2) the offer's stored closed_date (data-stored);
+    // (3) today, only when truly nothing exists yet (a genuine fresh close).
+    if (!input.value.trim()) {
+      const stored = input.getAttribute('data-stored') || '';
+      input.value = stored ? formatDateDisplay(stored) : formatDateDisplay(isoDate(TODAY));
+    }
+    input.disabled = false;
+    wrap.style.display = '';
+  } else {
+    // Hide by DISABLING, not clearing (P1 fix): a disabled input is absent from
+    // FormData — so a stale/hidden date can never submit — while KEEPING its typed
+    // value, so toggling Closed→Open→Closed restores the user's backdate instead
+    // of silently stamping today. The reopen→SAVE clear still works: the disabled
+    // field is absent from FormData, `readOfferForm` sets `closed_date:
+    // dateIso(undefined) || null` → null (overriding the prior-offer spread), and
+    // reconcileClosedDate's closed→open branch confirms the null.
+    input.disabled = true;
+    wrap.style.display = 'none';
+  }
+}
+
 // Recompute ONLY the live deadline-date lines in the section (no re-render), so
 // changing the sign-up date re-dates every row without disturbing focus.
 function refreshRequirementDates() {
@@ -12821,6 +12995,11 @@ function readOfferForm(idArg, isEdit) {
     // field. dateIso → '' when empty; store null (not '') so the "no date"
     // consumers (expectedBonusWindow, safeToCloseDate) treat it uniformly.
     bonus_received_date: dateIso(data.bonus_received_date) || null,
+    // Lifecycle (F3 / R69 Item A): the account-closed anchor date, read from the
+    // conditional "Closed date" field by the status selects. Overrides the prior
+    // spread so the user's value is authoritative; reconcileClosedDate (below)
+    // only fills it when left blank on a fresh close, so a backdate always wins.
+    closed_date: dateIso(data.closed_date) || null,
     // Churnability (F6): read the Advanced churn sub-group. churnable is a
     // tri-state select ('' → null unknown, 'true' → true, 'false' → false), NOT
     // a money/number field. Wait-months is a plain null-safe number; anchor
@@ -13018,7 +13197,8 @@ function showEventModal(eventId = null) {
               <select id="e-offer" class="select" name="sourceBonusOfferId">
                 <option value="">— Select offer —</option>
                 ${App.state.offers.filter(o => o.status !== 'skipped').map(o => {
-                  const lbl = o.bankName + (o.offerName ? ' — ' + o.offerName : '');
+                  const dn = displayOfferName(o.offerName);
+                  const lbl = o.bankName + (dn ? ' — ' + dn : '');
                   return `<option value="${o.id}" ${e.sourceBonusOfferId === o.id ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
                 }).join('')}
               </select>
@@ -13425,6 +13605,7 @@ function onClick(e) {
     case 'toggle-req-done': toggleRequirementDone(id, target.dataset.reqId); break;
     case 'lifecycle-mark-waiting': lifecycleMarkWaiting(id); break;
     case 'lifecycle-dismiss-suggest': lifecycleDismissSuggest(id); break;
+    case 'churn-run-again': churnRunAgain(id); break;
     case 'churn-snooze-toggle': toggleChurnSnoozeMenu(target); break;
     case 'churn-snooze': churnSnooze(id, target.dataset.snooze); break;
     case 'churn-unsnooze': churnUnsnooze(id); break;
@@ -13720,7 +13901,8 @@ function addOrReplaceTemplate(tpl, { silent = false } = {}) {
   const identity = templateIdentity(tpl);
   const existingIdx = (App.state.templates || []).findIndex(t => templateIdentity(t) === identity);
   if (existingIdx >= 0 && !silent) {
-    const label = tpl.offerName ? `${tpl.bankName} — ${tpl.offerName}` : tpl.bankName;
+    const dn = displayOfferName(tpl.offerName);
+    const label = dn ? `${tpl.bankName} — ${dn}` : tpl.bankName;
     if (!confirm(`A template for "${label}" already exists. Replace it with the current terms?`)) return false;
   }
   App.update(s => {
@@ -13856,6 +14038,22 @@ function churnUnsnooze(offerId) {
     o.churn_snoozed_until = null;
   });
   toast('Churn unsnoozed');
+}
+
+// R69 (Item C): "Run again" on a churn row — spin up a FRESH, unsaved offer from
+// this one's saved terms via the EXACT template-Use pipeline (offerToTemplate →
+// templateToOffer → showOfferModal(null, seed)), tagged with a re-run note for
+// provenance. The prior offer is untouched — nothing saves until the user
+// confirms the new modal. No App.update here; showOfferModal owns the render.
+function churnRunAgain(offerId) {
+  if (!offerId) return;
+  const o = (App.state.offers || []).find(x => x && x.id === offerId);
+  if (!o) return;
+  const seed = templateToOffer(offerToTemplate(o));
+  const dn = displayOfferName(o.offerName);
+  const reRun = `Re-run of ${o.bankName}${dn ? ' — ' + dn : ''}`;
+  seed.notes = seed.notes ? `${seed.notes}\n${reRun}` : reRun;
+  showOfferModal(null, seed);
 }
 
 function duplicateOffer(id) {

@@ -10,3 +10,7 @@ Deal Stack Calculator.html
 
 # Personal schedule workbook — private data; must never enter the public repo
 schedule_tmp.xlsx
+
+# wrangler local artifacts (deploy config stays local per cloudflare/README)
+.wrangler/
+cloudflare/wrangler.jsonc
