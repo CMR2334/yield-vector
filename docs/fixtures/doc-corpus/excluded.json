@@ -1,0 +1,185 @@
+[
+  {
+    "url": "https://www.doctorofcredit.com/sc-oh-in-ky-nc-park-national-bank-300-500-checking-bonus/",
+    "title": "[SC, OH, IN, KY, NC] Park National Bank $300-$500 Checking Bonus",
+    "state_list": [
+      "SC",
+      "OH",
+      "IN",
+      "KY",
+      "NC"
+    ],
+    "reason": "Explicit state list ['SC', 'OH', 'IN', 'KY', 'NC'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ca-travis-credit-union-250-checking-bonus/",
+    "title": "[CA] Travis Credit Union $475 Checking Bonus",
+    "state_list": [
+      "CA"
+    ],
+    "reason": "Explicit state list ['CA'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/mn-blaze-credit-union-150-checking-bonus-direct-deposit-not-required/",
+    "title": "[MN] Blaze Credit Union $250 Checking Bonus, Direct Deposit Not Required",
+    "state_list": [
+      "MN"
+    ],
+    "reason": "Explicit state list ['MN'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ny-reliant-community-credit-union-150-checking-bonus-25-referral-bonus/",
+    "title": "[NY only] Reliant Community Credit Union $150 Checking Bonus + $25 Referral Bonus",
+    "state_list": [
+      "NY"
+    ],
+    "reason": "Explicit state list ['NY'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ny-pa-first-heritage-federal-credit-union-100-checking-bonus/",
+    "title": "[NY, PA] First Heritage Federal Credit Union $250 Checking Bonus",
+    "state_list": [
+      "NY",
+      "PA"
+    ],
+    "reason": "Explicit state list ['NY', 'PA'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/wa-id-or-only-becu-400-checking-bonus/",
+    "title": "[WA, ID & OR only] BECU $300 Checking Bonus",
+    "state_list": [
+      "WA",
+      "ID",
+      "OR"
+    ],
+    "reason": "Explicit state list ['WA', 'ID', 'OR'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ar-mo-ks-co-az-academy-bank-500-checking-bonus/",
+    "title": "[AR, MO, KS, CO, AZ] Academy Bank/Armed Forces Bank $500 Checking Bonus",
+    "state_list": [
+      "AR",
+      "MO",
+      "KS",
+      "CO",
+      "AZ"
+    ],
+    "reason": "Explicit state list ['AR', 'MO', 'KS', 'CO', 'AZ'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ca-in-branch-columbia-bank-250-checking-bonus/",
+    "title": "[CA, In Branch] Columbia Bank $250 Checking Bonus",
+    "state_list": [
+      "CA"
+    ],
+    "reason": "Explicit state list ['CA'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/la-in-branch-only-la-capitol-federal-credit-union-up-to-650-business-checking-bonus/",
+    "title": "[LA, In Branch Only] La Capitol Federal Credit Union Up To $650 Business Checking Bonus",
+    "state_list": [
+      "LA"
+    ],
+    "reason": "Explicit state list ['LA'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/co-wy-stagepoint-federal-credit-union-300-checking-bonus/",
+    "title": "[CO, WY] StagePoint Federal Credit Union $300 Checking Bonus",
+    "state_list": [
+      "CO",
+      "WY"
+    ],
+    "reason": "Explicit state list ['CO', 'WY'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ar-il-mo-ks-in-branch-only-southern-bank-250-checking-bonus/",
+    "title": "[AR, IL, MO, KS, In Branch Only] Southern Bank $250 Checking Bonus",
+    "state_list": [
+      "AR",
+      "IL",
+      "MO",
+      "KS"
+    ],
+    "reason": "Explicit state list ['AR', 'IL', 'MO', 'KS'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/az-co-bank-of-colorado-300-checking-bonus/",
+    "title": "[CO] Bank of Colorado $500 Checking Bonus",
+    "state_list": [
+      "CO"
+    ],
+    "reason": "Explicit state list ['CO'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/ct-only-union-savings-bank-300-checking-savings-bonus/",
+    "title": "[CT only] Union Savings Bank $400 Checking + Savings Bonus",
+    "state_list": [
+      "CT"
+    ],
+    "reason": "Explicit state list ['CT'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/mi-community-choice-credit-union-100-checking-bonus/",
+    "title": "[MI] Community Choice Credit Union $100 Referral Checking Bonus",
+    "state_list": [
+      "MI"
+    ],
+    "reason": "Explicit state list ['MI'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/fl-only-community-first-credit-union-of-florida-100-checking-sign-up-bonus-no-bonus-requirements/",
+    "title": "[FL only] Community First Credit Union of Florida $200 Checking Sign Up Bonus",
+    "state_list": [
+      "FL"
+    ],
+    "reason": "Explicit state list ['FL'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/id-only-idaho-central-credit-union-iccu-150-checking-bonus-direct-deposit-not-required/",
+    "title": "[ID, WA, OR only] Idaho Central Credit Union (ICCU) $250 Checking Bonus  Direct Deposit Not Required",
+    "state_list": [
+      "ID",
+      "WA",
+      "OR"
+    ],
+    "reason": "Explicit state list ['ID', 'WA', 'OR'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/fl-in-ky-oh-tn-republic-bank-200-checking-bonus-2/",
+    "title": "[FL, IN, KY, OH & TN] Republic Bank $400 Checking Bonus",
+    "state_list": [
+      "FL",
+      "IN",
+      "KY",
+      "OH",
+      "TN"
+    ],
+    "reason": "Explicit state list ['FL', 'IN', 'KY', 'OH', 'TN'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/mt-bank-150-checking-bonus-tn-available-online-ct-dc-de-md-nj-ny-pa-va-wv/",
+    "title": "M&T Bank $400 Checking & Savings Bonus \u2013 Available Online [CT, DC, DE, MA, MD, ME, NH, NJ, NY, PA, VA, VT, WV]",
+    "state_list": [
+      "CT",
+      "DC",
+      "DE",
+      "MA",
+      "MD",
+      "ME",
+      "NH",
+      "NJ",
+      "NY",
+      "PA",
+      "VA",
+      "VT",
+      "WV"
+    ],
+    "reason": "Explicit state list ['CT', 'DC', 'DE', 'MA', 'MD', 'ME', 'NH', 'NJ', 'NY', 'PA', 'VA', 'VT', 'WV'] does not contain WI"
+  },
+  {
+    "url": "https://www.doctorofcredit.com/northeastern-pa-only-fidelity-bank-400-checking/",
+    "title": "[Northeastern PA only] Fidelity Bank $600/$500 Checking Bonus",
+    "state_list": [],
+    "reason": "Availability 'Northeastern PA only' \u2014 no WI"
+  }
+]

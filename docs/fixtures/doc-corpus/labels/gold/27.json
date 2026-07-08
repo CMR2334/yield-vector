@@ -1,0 +1,112 @@
+{
+  "id": 27,
+  "url": "https://www.doctorofcredit.com/sofi-checking-5000-direct-deposit-required/",
+  "bank": "SoFi",
+  "product": "checking & savings (hybrid)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 815,
+  "tiers": [
+    {
+      "threshold_min": 1000,
+      "threshold_max": 1999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 50,
+      "hold_days": null,
+      "deadline_days": 25,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 2000,
+      "threshold_max": 4999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 100,
+      "hold_days": null,
+      "deadline_days": 25,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 300,
+      "hold_days": null,
+      "deadline_days": 25,
+      "state_gate": null
+    }
+  ],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 1000,
+      "count": null,
+      "deadline_days": 25,
+      "frequency": "total",
+      "verbatim": "Qualifying Direct Deposits of $1,000.00 or greater from employer/payroll/benefits provider via ACH within 25-day Evaluation Period"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 5000,
+  "dd_count": null,
+  "dd_timeframe_days": 25,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": 14,
+  "churn": {
+    "limit_language_verbatim": "existing SoFi Checking and Savings customers who have not previously set up Direct Deposit transactions into their SoFi Checking and Savings account as of the beginning of the Promotion Period are eligible",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-04-13",
+    "2026-03-26",
+    "2026-03-03",
+    "2026-01-05",
+    "2025-12-08",
+    "2025-11-28",
+    "2025-11-24",
+    "2025-11-06",
+    "2025-11-02",
+    "2025-10-13",
+    "2025-09-08",
+    "2025-09-01",
+    "2025-07-30",
+    "2025-07-23",
+    "2025-07-19",
+    "2025-07-02",
+    "2025-06-02",
+    "2025-06-12",
+    "2025-06-04",
+    "2025-05-25",
+    "2025-05-12",
+    "2025-05-04",
+    "2025-04-07",
+    "2025-03-18"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total (direct-from-SoFi flat tier)",
+      "stale_value": "$300 max direct-from-SoFi tier (as in original 'offer at a glance' box and the base tiers list)",
+      "current_value": "$400 direct-from-SoFi as of 3/26/26 update",
+      "evidence": "Update 3/26/26: SoFi is now offering $400 and Rakuten will be offering $400 starting March 27th"
+    },
+    {
+      "field": "bonus_total (affiliate stack, Swagbucks)",
+      "stale_value": "up to $505 (11/6/25 peak)",
+      "current_value": "$415 via Swagbucks as of 4/13/26 update, stacked with $400 direct SoFi = $815 total per post title",
+      "evidence": "Update 4/13/26: $415 on Swagbucks + $400 from SoFi"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "May 31 2022 / July 31 2022 / September 30 2022 (all struck)",
+      "current_value": "January 31, 2023 (last unstruck value in summary box; likely itself stale relative to the actual open-ended nature of the ongoing offer given 2026 updates)",
+      "evidence": "<del>May 31, 2022 July 31, 2022</del> <del>September 30, 2022</del> January 31, 2023"
+    }
+  ],
+  "notes": "This post's tier structure (from the 'The Offer' section prose, unstruck/current) is $50/$1k-$1,999, $100/$2k-$4,999, $300/$5,000+ direct from SoFi — but multiple Update paragraphs (most recently 3/26/26 and 4/13/26) describe the current headline SoFi bonus as $400 (not $300) plus a stacking $415 Swagbucks affiliate bonus, matching the post title 'SoFi Checking & Savings $400 + $415 Signup Bonus'. Per rules, main/current fields should reflect the title's stated current combo ($400 + $415 = $815), but the article's own tiers[] table (the only place mechanics/thresholds are spelled out) still shows the older $50/$100/$300 tier structure — the increase to $400 for the top tier is mentioned only in prose updates without a full re-stated tier table. Treating this as the careful-churner reading: bonus_total set to $715 (top DD tier $300 + Swagbucks $415, the two components explicitly named as currently stacking in the 4/13/26 update) is a defensible reading, but the $400 SoFi standalone figure from 3/26/26 is arguably more current than the $300 embedded in the tiers list. Flagging as an ambiguity for adjudication: the tiers[] thresholds/DD amounts are almost certainly still accurate but the top bonus amount (300 vs 400) is stale relative to the most recent update text, and no full replacement tier table was published in article prose. Also note expiration date is very likely just a leftover artifact (2023) on what is clearly a rolling/ongoing evergreen offer as of 2026; recorded per rules as-is from the last unstruck fact, but almost certainly stale/not enforced.",
+  "_gold_provenance": "single(C)+ruling"
+}

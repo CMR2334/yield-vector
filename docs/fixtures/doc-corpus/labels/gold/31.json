@@ -1,0 +1,130 @@
+{
+  "id": 31,
+  "url": "https://www.doctorofcredit.com/il-only-wintrust-bank-300-checking-bonus/",
+  "bank": "Wintrust Bank (WTFC affiliate network: Town Bank WI, WinTrust IL, Dyer Bank IN, WinTrust Florida, WinTrust MI)",
+  "product": "checking (Total Access Checking) + statement savings",
+  "availability_verbatim": "IL & FL, IN & WI only [Branch locator]. Must also be a U.S. Citizen No longer necessary",
+  "bonus_total": 500,
+  "tiers": [
+    {
+      "threshold_min": 500,
+      "threshold_max": 500,
+      "threshold_kind": "dd_total",
+      "bonus": 300,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 2000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 500,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    }
+  ],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "online_banking",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Enroll in online banking"
+    },
+    {
+      "type": "estatements",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Activate eStatements"
+    },
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": 2,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Complete monthly direct deposits totaling $500 or more for two consecutive months after the first calendar month account is opened (for $300 bonus)"
+    },
+    {
+      "type": "direct_deposit_amt",
+      "amount": 2000,
+      "count": 2,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Complete monthly direct deposits totaling $2,000 or more for two consecutive months after the first calendar month account is opened (for $500 bonus)"
+    },
+    {
+      "type": "deposit",
+      "amount": 15000,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "total",
+      "verbatim": "deposit $15,000 or more during the month of account opening and maintain it for three months (statement savings, separate offer no longer bundled)"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees, according to fee schedule",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 2000,
+  "dd_count": 2,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": 30,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "This Total Access Checking account bonus offer is not available to existing or closed checking account customers of Wintrust Financial Corporation and its subsidiaries (WTFC) or its active employees.",
+    "wait_months": null,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2025-11-06",
+    "2025-09-29",
+    "2025-05-19",
+    "2025-02-05",
+    "2024-02-10",
+    "2023-07-04",
+    "2023-03-25",
+    "2023-01-23",
+    "2022-01-02",
+    "2020-10-08",
+    "2020-04-06",
+    "2019-11-09",
+    "2019-10-06"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "$300 checking bonus (original/title-slug figure and lower checking tier)",
+      "current_value": "$500 checking bonus per Update 11/6/25 ('Checking bonus now $500')",
+      "evidence": "Update 11/6/25: Checking bonus now $500."
+    },
+    {
+      "field": "savings bonus bundling",
+      "stale_value": "$200 savings bonus bundled with checking bonus (per Update 10/8/20)",
+      "current_value": "as of 9/29/25 update, deal came back with 'no $200 savings bonus this time' though a separate statement savings product with its own bonus (not detailed) exists; 4/6/20 update says savings bonus no longer offered at all at that point in history",
+      "evidence": "Update 9/29/25: Deal is back, no $200 savings bonus this time. Savings bonus is available here: [separate statement savings product link]"
+    },
+    {
+      "field": "availability",
+      "stale_value": "IL & FL, IN & WI only (title/summary box)",
+      "current_value": "MI added per Update 5/19/25",
+      "evidence": "Update 5/19/25: Available in MI as well."
+    },
+    {
+      "field": "expiration",
+      "stale_value": "September 30th, 2019 / None listed / 12/31/20 (all struck)",
+      "current_value": "12/31/2021 (last unstruck value in summary box) — itself likely stale given deal has been extended repeatedly through 2025 per updates, with no later specific date replacing it in the summary box",
+      "evidence": "<del>September 30th, 2019 None listed 12/31/20</del> 12/31/2021"
+    }
+  ],
+  "notes": "This post has two historically bundled bonus lines (checking $300/$500-tier, and a separate statement savings bonus that was added 10/8/19, then discontinued 4/6/20, then reintroduced without the $200 figure by 9/29/25 as an unlinked/undetailed separate product). Per current (most recent) update, checking-only bonus_total = 500 (top DD tier). The original two-bonus combo implied by post title '$500 Checking + $200 Savings' is NOT the current state — the $200 savings figure is stale/superseded and no current savings bonus amount is stated in the article body, so bonus_total reflects checking-only. tiers[] models only the checking DD-based tiers since the savings component's current bonus amount is unspecified. Availability now spans IL, FL, IN, WI, MI. Credit card funding up to $1,200. ChexSystems: Yes (pulls). Household limit: None.",
+  "_gold_provenance": "single(C)"
+}

@@ -1,0 +1,66 @@
+{
+  "id": 20,
+  "url": "https://www.doctorofcredit.com/il-wi-mn-in-az-fl-ks-mo-bmo-harris-350-checking-300-savings-bonus/",
+  "bank": "BMO Harris (BMO Bank)",
+  "product": "Smart Advantage Checking / Premier Account",
+  "availability_verbatim": "AZ, CA, CO, FL, IA, IL, IN, MN, NM, NV, OR, UT, WA, WI",
+  "bonus_total": 400,
+  "tiers": [],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 10000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Receive a $1,000 cash bonus when you have a cumulative total of $20,000 in qualifying direct deposits post to your account within 90 days of account opening (top targeted-mailer tier, not currently reliably accessible)"
+    }
+  ],
+  "monthly_fee": 25,
+  "fee_waiver": "Smart Advantage Checking has no monthly fee; BMO Harris Premier Account $25/mo fee waived with $10,000 min daily balance OR $25,000 combined balances with Relationship Waiver OR a BMO Harris Financial Advisors investment account",
+  "early_termination_fee": 50,
+  "etf_window_days": 90,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": 90,
+  "bonus_post_max_days": 130,
+  "bonus_post_min_days": 100,
+  "churn": {
+    "limit_language_verbatim": "not available for existing BMO Harris personal checking customers or those who have closed a BMO Harris personal checking account within the past 12 months",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-02-02",
+    "2025-09-10",
+    "2025-05-07",
+    "2025-02-04",
+    "2024-11-03",
+    "2024-09-10"
+  ],
+  "superseded_values": [
+    {
+      "field": "availability",
+      "stale_value": "Nationwide now ('Offer at a glance' box)",
+      "current_value": "restricted to residents of AZ, CA, CO, FL, IA, IL, IN, MN, NM, NV, OR, UT, WA, or WI at time of application",
+      "evidence": "Top-of-article Update (undated, most recent): 'Now location restricted again to residents in Arizona, California, Colorado, Florida, Iowa, Illinois, Indiana, Minnesota, New Mexico, Nevada, Oregon, Utah, Washington, or Wisconsin'"
+    },
+    {
+      "field": "bonus_total",
+      "stale_value": "$2,000 (2/2/26 YMMV update, itself struck through) / $560 ('Offer at a glance' box, dated to ~2024)",
+      "current_value": "$400 (only the public offer is currently functional per most recent update)",
+      "evidence": "Most recent live update (undated, above the struck 2/2/26 entry): 'Currently only the public $400 bonus is available, the previous up to $1,000-$2,000 offers don't work as the link contains an expired code. The only way they will work is if you have a targeted mailer with a unique code.'"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "September 9, 2024 ('Offer at a glance' box)",
+      "current_value": "no reliable current date captured; most recent update text is undated and only describes the offer as currently location-restricted, not an end date",
+      "evidence": "'Offer at a glance' expiration box was never updated past September 9, 2024 despite update chain continuing well into 2026"
+    }
+  ],
+  "notes": "This post has one of the most tangled update chains in the corpus: successive updates repeatedly change the bonus amount ($300->$350->$400->$600->targeted $1,000-$2,000->back to public $400-only), the state-restriction status (nationwide vs. restricted, multiple times), and reference multiple sub-offers (checking-only, checking+savings, targeted mailer, meet-a-banker gift card) some of which are struck through as no longer offered. I applied the careful-churner reading: only the publicly, reliably accessible offer as of the MOST RECENT (undated, top-of-page) update is captured as current - i.e., the $400 checking bonus (Smart Advantage Account, $4,000+ in qualifying DDs within 90 days), restricted to the 14-state list. The $600 Offer-A/Offer-B tier structure, the targeted $1,000-$2,000 tiers, and the savings/money-market bonus components described lower in the article are all superseded or conditional on a targeted mailer and were excluded from tiers[] to avoid presenting inaccessible offers as the current standard terms; this is flagged as an open issue since a stricter reading could argue for including them as conditional tiers. Monthly fee/ETF/fee-waiver/bonus-timing figures were taken from the (older, unreconciled) Fine Print detail since no update contradicts those specific figures, but given the post's overall volatility this should be treated with lower confidence than other posts.",
+  "_gold_provenance": "single(B)+ruling"
+}

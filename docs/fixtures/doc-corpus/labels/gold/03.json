@@ -1,0 +1,132 @@
+{
+  "id": 3,
+  "url": "https://www.doctorofcredit.com/u-s-bank-400-900-business-checking-bonus/",
+  "bank": "U.S. Bank",
+  "product": "Business Checking (Platinum/Silver)",
+  "availability_verbatim": "Nationwide (excludes NY & FL and any other state without a branch unless existing relationship)",
+  "bonus_total": 1500,
+  "tiers": [
+    {
+      "threshold_min": 5000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 400,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 25000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 1200,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 25000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 1500,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-09-27",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 25000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit at least $25,000 in new money within 30 days of account opening (Platinum, $1,200 tier)"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 25000,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": null,
+      "verbatim": "Maintain at least that balance for 60 days after opening the account"
+    },
+    {
+      "type": "transactions",
+      "amount": null,
+      "count": 6,
+      "deadline_days": null,
+      "frequency": "total",
+      "verbatim": "Complete 6 qualifying transactions (increased from prior req per 1/15/26 update)"
+    },
+    {
+      "type": "deposit",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit at least $5,000 in new money within 30 days (Silver/Business Essentials, $400 tier)"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Promo code Q3BUS26 for $1,500 tier valid through 09/27/2026"
+    }
+  ],
+  "monthly_fee": 30,
+  "fee_waiver": "Silver: no fee with paperless statements. Platinum: $30/mo waived with active U.S. Bank Payment Solutions Merchant Account OR $25,000 avg collected checking balance / $75,000 combined avg business deposits+credit balances",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "Q3BUS26",
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": 12,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-07-06",
+    "2026-04-03",
+    "2026-01-15",
+    "2025-11-19",
+    "2025-10-16",
+    "2025-10-01"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "1200 (per 'Offer at a glance' box max and og:description)",
+      "current_value": "1500",
+      "evidence": "Update 7/6/26: $1,500 offer still active with code Q3BUS26 valid through 09/27/2026"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "2026-01-14 (per Offer at a glance box)",
+      "current_value": "2026-09-27",
+      "evidence": "Update 7/6/26 gives newest valid-through date for the $1,500 tier"
+    },
+    {
+      "field": "requirements(transactions)",
+      "stale_value": "no transaction count in original Fine Print",
+      "current_value": "6 qualifying transactions required",
+      "evidence": "Update 1/15/26: 'Requires six qualifying transactions now'"
+    },
+    {
+      "field": "tiers(bonus=1000)",
+      "stale_value": "$1,000 for Platinum tier",
+      "current_value": "$1,200 for Platinum tier",
+      "evidence": "Update 10/1/25: $1,000 bonus has been increased to $1,200"
+    }
+  ],
+  "notes": "Very messy living-document post; the structured 'Offer' section (with promo code Q2DIG26, $1,200/$400 tiers) was never rewritten to incorporate the newer $1,500 tier, which only appears in prose Update paragraphs referencing different promo codes over time (Q4SFS25 -> Q1BUS26 -> Q2BUS26 -> Q3BUS26). Treated bonus_total as 1500 per the newest (7/6/26) update since that is the current maximum a careful reader would pursue, though the exact deposit threshold for the $1,500 tier is not restated in the newest update (assumed same $25k+ tier as $1,200, per 11/19/25 update mentioning 'the lower tiers are better as well at $900 with $10k and $500 with $5k' - implying the $1,500 tier's own deposit anchor was $25k-30k historically). This is a genuine ambiguity - the $1,500 tier's exact deposit requirement is not explicitly restated post-updates, only its bonus amount and promo code/expiration. Household/churn cooldown reduced to 12 months per verdict paragraph ('Given the churn period is now only 12 months').",
+  "_gold_provenance": "single(A)+ruling"
+}

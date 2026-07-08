@@ -1,0 +1,76 @@
+{
+  "id": 10,
+  "url": "https://www.doctorofcredit.com/existing-customers-ameriprise-400-checking-up-to-1000-savings-bonus/",
+  "bank": "Ameriprise Financial (Ameriprise Bank)",
+  "product": "checking + savings (dual bonus)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 1400,
+  "tiers": [
+    {
+      "threshold_min": 25000,
+      "threshold_max": 49999.99,
+      "threshold_kind": "deposit",
+      "bonus": 350,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 50000,
+      "threshold_max": 99999.99,
+      "threshold_kind": "deposit",
+      "bonus": 650,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 100000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 1000,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-12-29",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 1500,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Set up qualifying direct deposit(s) into your Checking Account of at least $1,500 within 90 calendar days"
+    },
+    {
+      "type": "deposit",
+      "amount": 25000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Make eligible deposits totaling $25,000 or more within 30 calendar days and maintain that balance or more for 90 calendar days"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 1500,
+  "dd_count": null,
+  "dd_timeframe_days": 90,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Clients who have previously received any Ameriprise Bank Checking Account bonus are not eligible; same for Savings Account bonus",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [],
+  "superseded_values": [],
+  "notes": "Existing-customers-only offer (title tag) but body/terms don't explicitly restate an 'existing customer as of X date' cutoff — author notes this is unusual vs normal Ameriprise offers. Checking bonus $400 (flat, not tiered) + savings bonus tiered $350/$650/$1000 based on deposit amount = combined max $1,400. bonus_total set to $1,400 (checking $400 + top savings tier $1,000) per max achievable combined bonus; tiers[] reflects only the savings-account tiering structure since checking is a flat $400 add-on requirement, captured separately in requirements[]. Savings account also earns 3.05% APY (not part of bonus_total). Household limit: none listed. EATF and hard/soft pull for EATF specifically not stated (soft pull confirmed for account opening, but EATF fee itself listed as 'Unknown' in offer-at-a-glance and 'Unsure' in Avoiding Fees section).",
+  "_gold_provenance": "double base=C+adjudication"
+}

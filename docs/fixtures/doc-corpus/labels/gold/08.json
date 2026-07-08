@@ -1,0 +1,79 @@
+{
+  "id": 8,
+  "url": "https://www.doctorofcredit.com/navy-federal-credit-union-200-new-member-bonus/",
+  "bank": "Navy Federal Credit Union",
+  "product": "New Member Checking",
+  "availability_verbatim": "Nationwide but must be eligible for NFCU membership",
+  "bonus_total": 250,
+  "tiers": [],
+  "expiration": "2025-11-30",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Monthly non-payroll ACH or payroll allotment totaling at least $500 and recurring for at least 3 out of 4 consecutive months"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Promo code AM250CHK"
+    },
+    {
+      "type": "deposit",
+      "amount": 5,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "$5 minimum balance required to open/maintain Membership Share Savings Account and obtain bonus"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees on this account",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "AM250CHK",
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Limit 1 $200 bonus per member",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-07-02",
+    "2026-05-28",
+    "2026-01-01"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "200 (per Offer at a glance box, title, and Fine Print terms which reference a $200/$500 EasyStart certificate bonus)",
+      "current_value": "250",
+      "evidence": "Update 7/2/26: Bonus now $250"
+    },
+    {
+      "field": "requirements",
+      "stale_value": "Open a 12-month Special EasyStart Share certificate (no DD needed, per original Fine Print terms dated for 11/1/2025-11/30/2025 offer)",
+      "current_value": "Open a checking account with $500+ recurring DD for 3 of 4 months",
+      "evidence": "Update 5/28/26: New $200 bonus available until 6/30/26. Requires opening a checking account this time and a direct deposit"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "2025-11-30 (per Offer at a glance box, tied to old EasyStart certificate promo)",
+      "current_value": "unclear - update text says 6/30/26 for the newest iteration but no single current date is definitively restated after the 7/2/26 bonus-amount bump",
+      "evidence": "Update 5/28/26 states 'available until 6/30/26'; the 7/2/26 update only changes the amount, not confirmed to extend the date"
+    }
+  ],
+  "notes": "AMBIGUOUS/messy post: the structured Fine Print and 'Offer at a glance' box describe an OLDER now-superseded promo (12-month EasyStart Share certificate, no DD, $5/$200-$500 tiers, valid 11/1/2025-11/30/2025 only). Two later Update paragraphs (5/28/26 and 7/2/26) describe a DIFFERENT, newer promo (checking account + recurring DD, now $250) that was never folded into the structured sections. Treated expiration as the last explicitly stated date (2025-11-30) per the info box since the newer updates do not clearly restate a new expiration despite implying a live 6/30/26 offer; flagging this as a genuine ambiguity for adjudication - a careful churner reading only the top updates would likely believe the offer is still live past 11/30/2025 given the 7/2/26 'Bonus now $250' update, but the structured box's expiration date was never corrected. bonus_total taken as 250 (newest update) since instructions say updates supersede specific facts.",
+  "_gold_provenance": "single(A)+ruling"
+}

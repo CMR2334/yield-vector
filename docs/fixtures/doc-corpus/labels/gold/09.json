@@ -1,0 +1,51 @@
+{
+  "id": 9,
+  "url": "https://www.doctorofcredit.com/lake-michigan-credit-union-100-referral-checking-bonus/",
+  "bank": "Lake Michigan Credit Union",
+  "product": "Referral Program (checking)",
+  "availability_verbatim": "$5 donation to ALS works for anybody to join. Out of state requires appointment.",
+  "bonus_total": 250,
+  "tiers": [],
+  "expiration": "2025-04-04",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": 2,
+      "deadline_days": 60,
+      "frequency": "total",
+      "verbatim": "Referred friend holds two or more recurring direct deposits totaling $500 or more for 60 days"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees on this account",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": 2,
+  "dd_timeframe_days": 60,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Accounts closed within the last 180 days make you ineligible for the $250 referral bonus (per unmarked/undated warning at top)",
+    "wait_months": 6,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-07-02"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "100 (per Offer at a glance box, title, meta description)",
+      "current_value": "250",
+      "evidence": "Update 7/2/26: Bonus has been increased to $250 from $100"
+    }
+  ],
+  "notes": "AMBIGUOUS: there is an undated warning paragraph at the very top of the post (above the 7/2/26 dated update) stating LMCU is approving-then-restricting accounts, closing accounts opened 2nd-6th (of an unspecified month) for a 'system error,' and that DoC is REMOVING this offer from the best-bank-bonus page - this reads as the newest/most-current content (site convention places newest first) but carries no 'Update M/D/YY' marker so it was not added to update_dates. Given this warning, a careful churner should treat this offer as effectively dead/high-risk despite the nominal $250 bonus_total and 2025-04-04 expiration (also stale/inconsistent - predates the 7/2/26 increase, meaning the true current expiration is unstated). Captured the warning under churn.limit_language_verbatim since it directly describes an account-closure consequence, but this is a stopgap - the real signal is 'do not pursue this offer.' Flagging for adjudication whether this post should be treated as effectively withdrawn.",
+  "eligibility": "include",
+  "_gold_note": "likely withdrawn",
+  "_gold_provenance": "single(A)+ruling"
+}

@@ -1,0 +1,60 @@
+{
+  "id": 22,
+  "url": "https://www.doctorofcredit.com/chime-earn-10000-swagbucks-for-opening-a-new-account-receiving-a-direct-deposit/",
+  "bank": "Chime",
+  "product": "checking (via Chime direct offers, or affiliate portals Swagbucks/MyPoints)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 350,
+  "tiers": [],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 200,
+      "count": 2,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "receive two consecutive direct deposits, each of $200 or higher"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 200,
+  "dd_count": 2,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-03-27",
+    "2026-02-27",
+    "2026-02-16",
+    "2025-01-18",
+    "2025-04-02",
+    "2025-03-13"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "$155 (Swagbucks) / $182 (MyPoints) as of original 'offer at a glance' box",
+      "current_value": "$350 direct-from-Chime offers as of 3/27/26 update",
+      "evidence": "Update 3/27/26: There are two bonuses directly from Chime: $350 (V2)... $350 (V3)"
+    },
+    {
+      "field": "bonus_total (affiliate route)",
+      "stale_value": "up to $540/$490 (4/2/25 peak)",
+      "current_value": "$300 on Finder (2/27/26 update)",
+      "evidence": "Update 2/27/26: $300 on Finder currently"
+    }
+  ],
+  "notes": "This post is unusually volatile/affiliate-driven: the 'offer at a glance' summary box (Maximum bonus amount: $155-$182) reflects only the original Swagbucks/MyPoints affiliate figures and is NOT updated to match the most recent 3/27/26 update describing two direct $350 Chime offers (V2 requires debit card spend, V3 requires multiple direct deposits). Per labeling rules, CURRENT terms = the most recent update paragraph, so bonus_total = 350 (the direct Chime offer) rather than the stale summary-box $155-$182. Requirement details (spend amount for V2, DD count/amount for V3) are not given in the update text itself, only linked out; the two-consecutive-$200-DD requirement documented in requirements[] is from the main (Swagbucks/MyPoints) offer body text, which is the only requirement detail actually spelled out in article prose. This is a borderline case — flagged as an ambiguity for adjudication since 'current terms' vs. 'documented mechanics' point to different sub-offers.",
+  "_gold_provenance": "single(C)+ruling"
+}

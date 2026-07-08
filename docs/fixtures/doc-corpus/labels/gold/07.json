@@ -1,0 +1,92 @@
+{
+  "id": 7,
+  "url": "https://www.doctorofcredit.com/young-americans-bank-150-checking-bonus-direct-deposit-not-required-under-22-years-old-only/",
+  "bank": "Young Americans Bank",
+  "product": "Checking + Savings/CD bundle",
+  "availability_verbatim": "Any legal resident of the US under 22 yrs old; must be at least 10 to open checking",
+  "bonus_total": 150,
+  "tiers": [
+    {
+      "threshold_min": null,
+      "threshold_max": null,
+      "threshold_kind": "other",
+      "bonus": 50,
+      "hold_days": 30,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": null,
+      "threshold_max": null,
+      "threshold_kind": "other",
+      "bonus": 50,
+      "hold_days": 60,
+      "deadline_days": 60,
+      "state_gate": null
+    },
+    {
+      "threshold_min": null,
+      "threshold_max": null,
+      "threshold_kind": "other",
+      "bonus": 50,
+      "hold_days": 90,
+      "deadline_days": 90,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-07-31",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 10,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": null,
+      "verbatim": "Day 30: Open both accounts with minimums ($10 checking, $5 savings, $100 CD)"
+    },
+    {
+      "type": "estatements",
+      "amount": null,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": null,
+      "verbatim": "Day 60: Keep both accounts open and enroll in eStatements"
+    },
+    {
+      "type": "custom",
+      "amount": null,
+      "count": 1,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Day 90: Keep both accounts open and complete one mobile deposit"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Promo code YABTCC0726"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees on these accounts",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "YABTCC0726",
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [],
+  "superseded_values": [],
+  "notes": "Age-gated: any US resident under 22 (min age 10 to open checking). Application may currently be dead ('This application is currently unavailable' per top of post) - flagged in notes since this affects offer viability but does not change the terms. Bonus is a 3-stage milestone structure ($50 at day 30/60/90) rather than a true deposit/balance tier, so tiers[] modeled loosely with threshold_kind 'other' and null thresholds since there is no dollar threshold gating each stage - only time and account-open-status. Requirement minimums ($10 checking/$5 savings/$100 CD) captured under a single 'deposit' requirement for the day-30 stage.",
+  "_gold_provenance": "single(A)"
+}

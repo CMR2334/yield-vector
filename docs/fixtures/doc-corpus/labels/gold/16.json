@@ -1,0 +1,90 @@
+{
+  "id": 16,
+  "url": "https://www.doctorofcredit.com/oh-mi-pa-ky-wv-huntington-bank-200-checking-promotion-no-direct-deposit-requirement/",
+  "bank": "Huntington Bank",
+  "product": "Perks Checking / Platinum Perks Checking",
+  "availability_verbatim": "IL, IN, KY, MI, OH, PA, WV (online link); expanded to AL,AR,CO,FL,GA,IL,IN,KY,LA,MI,MN,MS,MO,NC,OH,OK,PA,SC,TN,TX,WV,WI per 5/10/26",
+  "bonus_total": 600,
+  "tiers": [
+    {
+      "threshold_min": 500,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 400,
+      "hold_days": 90,
+      "deadline_days": 90,
+      "state_gate": "Illinois, Indiana, Kentucky, Michigan, Ohio, Pennsylvania, West Virginia (original 7); also Alabama, Arkansas, Colorado, Florida, Georgia, Louisiana, Minnesota, Mississippi, Missouri, North Carolina, Oklahoma, South Carolina, Tennessee, Texas, Wisconsin (added 5/10/26 via online-only link, Cadence Bank acquisition states)"
+    },
+    {
+      "threshold_min": 25000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 600,
+      "hold_days": 60,
+      "deadline_days": 60,
+      "state_gate": "Illinois, Indiana, Kentucky, Michigan, Ohio, Pennsylvania, West Virginia only (Platinum Perks $600 tier not confirmed extended to the newer 5/10/26 states)"
+    }
+  ],
+  "expiration": "2026-09-30",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Receive a qualifying direct deposit of $500+ within 90 days of account opening (Perks Checking, $400 bonus)"
+    },
+    {
+      "type": "deposit",
+      "amount": 25000,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": "total",
+      "verbatim": "Make at least $25,000 in total deposits within 60 days (Platinum Perks checking, $600 bonus)"
+    },
+    {
+      "type": "custom",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Must be a U.S. Citizen (maybe not enforced in-branch)"
+    }
+  ],
+  "monthly_fee": 10,
+  "fee_waiver": "Perks Checking $10/mo waived with $1,000 total monthly deposits or $5,000 relationship balances (checking+savings). Platinum Perks $25/mo waived with $25,000 relationship balances (checking+savings)",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": null,
+  "dd_timeframe_days": 90,
+  "bonus_post_min_days": 90,
+  "bonus_post_max_days": 104,
+  "churn": {
+    "limit_language_verbatim": "Huntington reserves the right to limit an individual to one account-related gift incentive per rolling 12-month period across all deposit account relationships; not available to existing checking customers or those with checking accounts closed within the last six months",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-05-10"
+  ],
+  "superseded_values": [
+    {
+      "field": "availability",
+      "stale_value": "Illinois, Indiana, Kentucky, Michigan, Ohio, Pennsylvania, West Virginia (per Offer at a glance box and title)",
+      "current_value": "adds Alabama, Arkansas, Colorado, Florida, Georgia, Louisiana, Minnesota, Mississippi, Missouri, North Carolina, Oklahoma, South Carolina, Tennessee, Texas, Wisconsin",
+      "evidence": "Update 5/10/26: new online-only link valid in more states due to Cadence Bank acquisition, lists the expanded state set including Wisconsin"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "2023-02-07 (per Offer at a glance box, struck-through history of many prior extensions)",
+      "current_value": "2026-09-30",
+      "evidence": "'Extended through 2026-09-30' paragraph appears above the 5/10/26 update, i.e. is the newest content"
+    }
+  ],
+  "notes": "STATE-GATED TIERS (flagged as important per task instructions): the $400 Perks Checking (DD-based) tier applies to the full expanded state list from the 5/10/26 update, including Wisconsin. The $600 Platinum Perks tier ($25k deposit) is NOT explicitly confirmed to extend to the newer states - the 5/10/26 update text only discusses the online-only link in the context of the base offer and doesn't restate the Platinum tier's availability, so state_gate for that tier is narrowed to the original 7-state list as a conservative read; this is a judgment call a careful churner should verify before assuming Platinum Perks is available in WI. bonus_total = 600 (max across both tiers). Also note a possible dead state: 5/10/26 update mentions 'Maybe OK isn't working?' per a linked reader comment - not modeled as a field change. Bonus posts within 14 days of meeting requirements, and account must stay open 90 days first, so bonus_post window modeled as 90 (min, when 90-day hold ends) to 104 (max, +14 days for processing).",
+  "_gold_provenance": "double base=A+adjudication"
+}

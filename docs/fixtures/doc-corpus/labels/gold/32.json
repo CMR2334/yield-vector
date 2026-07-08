@@ -1,0 +1,57 @@
+{
+  "id": 32,
+  "url": "https://www.doctorofcredit.com/bask-bank-300-checking-bonus-live-from-11-1-25/",
+  "bank": "Bask Bank",
+  "product": "checking (Interest Checking)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 300,
+  "tiers": [],
+  "expiration": "2026-04-30",
+  "requirements": [
+    {
+      "type": "debit_txns",
+      "amount": 50,
+      "count": 5,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Complete five or more monthly purchases, totaling a minimum of $50, using your Bask debit card"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 1500,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Maintain an average monthly balance of at least $1,500 in your Bask Interest Checking Account"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Offer is available to new Bask Interest Checking customers who do not have an existing Interest Checking Account as of October 31, 2025.",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2025-11-03"
+  ],
+  "superseded_values": [
+    {
+      "field": "status",
+      "stale_value": "not yet live ('remember it doesn't go live until November 1')",
+      "current_value": "live as of Update 11/3/25 ('Now live')",
+      "evidence": "Update 11/3/25: Now live."
+    }
+  ],
+  "notes": "Bonus paid in three $100 monthly installments (earn $100/month for up to 3 months = $300 total), each month requiring 5+ debit purchases totaling $50+ AND a $1,500 avg monthly balance; not modeled as tiers[] since it's a single recurring requirement paid repeatedly rather than escalating deposit thresholds. Account Opening Period: Nov 1, 2025 - Jan 31, 2026 (closing an existing Interest Checking Account during this window disqualifies you from opening a new one to re-qualify). Post is tagged [Expired] and the top-of-article line confirms 'Deal has ended' as of the corpus snapshot; expiration date recorded as the stated April 30, 2026 date from the summary box (last known expiration before the deal ended, consistent with the [Expired] tag observed at scrape time). If account remains unfunded 15 business days, Bask may close it. ChexSystems: Yes, not sensitive. Credit card funding: none. No direct deposit required.",
+  "_gold_provenance": "single(C)"
+}

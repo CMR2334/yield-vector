@@ -1,0 +1,98 @@
+{
+  "id": 23,
+  "url": "https://www.doctorofcredit.com/az-ca-fl-in-mi-nj-ny-oh-wi-flagstar-bank-250-350-checking-bonus/",
+  "bank": "Flagstar Bank",
+  "product": "Flagstar Ready Checking / Flagstar Elite Checking",
+  "availability_verbatim": "Arizona, California, Florida, Indiana, Michigan, New Jersey, New York, Ohio, and Wisconsin",
+  "bonus_total": 500,
+  "tiers": [
+    {
+      "threshold_min": 500,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 300,
+      "hold_days": 90,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 500,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 500,
+      "hold_days": 90,
+      "deadline_days": 60,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-05-31",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": 1,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Have one or more direct deposits totaling $500 or more"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 500,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Maintain an average daily balance of $500+"
+    },
+    {
+      "type": "deposit",
+      "amount": 50,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Minimum $50 deposit to open checking account"
+    }
+  ],
+  "monthly_fee": 15,
+  "fee_waiver": "Ready Checking: no fee with eStatements enrollment (or as of 5/1/26, $10 fee reduced to $5 with one, waived with two, of: eStatements, $500+ DD, $1,000+ avg balance, or age <=24). Elite Checking: $15 fee waived with active military/veteran status OR $25,000 avg daily balance in combined Flagstar accounts",
+  "early_termination_fee": null,
+  "etf_window_days": 180,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": 1,
+  "dd_timeframe_days": 90,
+  "bonus_post_min_days": 91,
+  "bonus_post_max_days": 104,
+  "churn": {
+    "limit_language_verbatim": "If you have been paid a checking cash bonus previously, you are ineligible to receive this offer; limited to one checking bonus per household",
+    "wait_months": null,
+    "anchor": "bonus_received"
+  },
+  "update_dates": [
+    "2026-04-11",
+    "2026-02-27",
+    "2026-02-07"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total / tiers",
+      "stale_value": "$250/$350",
+      "current_value": "$300/$500",
+      "evidence": "Update 1/4/25: Bonus has now been increased to $300/$500 from $250/$350"
+    },
+    {
+      "field": "monthly_fee (Ready Checking)",
+      "stale_value": "$3, no eStatements requirement to fully waive",
+      "current_value": "$10 base, reducible to $5 or waivable with 1-2 of: eStatements/DD $500+/avg balance $1,000+/age<=24",
+      "evidence": "Update 4/11/26: Will be getting harder to waive the monthly fee starting 5/1/26...Monthly Service Charge will increase from $3 to $10"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "April 30, 2024 ('Offer at a glance' box, and matching Fine Print bullet)",
+      "current_value": "May 31, 2026 (most recent extension per 4/11/26 update)",
+      "evidence": "Update 4/11/26: Offer has also been extended to May 31, 2026"
+    }
+  ],
+  "notes": "Post title and manifest both flag this as [Expired] with 'Monthly Fee Increasing' - consistent with the 4/11/26 update describing the 5/1/26 fee change and an extension only to May 31, 2026 (which has since lapsed relative to the update chain's latest date). Tiers: Ready Checking = $300 bonus (avg daily balance $500+, DD $500+, both within 90 days); Elite Checking = $500 bonus (same requirements, but account must be funded within 60 days vs Ready's 90 days per Fine Print). Fine print retroactively describes the un-updated 91-104 day bonus-posting window and the '$250 credit for Ready/$350 for Elite' bonus amounts, which are stale relative to the 1/4/25 update; I used the updated $300/$500 figures as current per rules.",
+  "_gold_provenance": "double base=B+adjudication"
+}

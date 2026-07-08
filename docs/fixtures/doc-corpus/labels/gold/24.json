@@ -1,0 +1,40 @@
+{
+  "id": 24,
+  "url": "https://www.doctorofcredit.com/mercury-fintech-500-business-checking-bonus/",
+  "bank": "Mercury (Fintech)",
+  "product": "business checking",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 500,
+  "tiers": [],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "deposit $5,000 within the first 90 days"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [],
+  "superseded_values": [],
+  "notes": "Post is tagged [Expired]; body confirms 'Bonus has now ended' but honors applications submitted before March 24 at 3pm MT. Bonus mechanics ($500 for $5,000 deposit within 90 days) are captured as the last-known terms per rules. Hard/soft pull, ChexSystems, credit card funding, and EATF all listed as Unknown in the summary box — no article text resolves these.",
+  "_gold_provenance": "single(C)"
+}

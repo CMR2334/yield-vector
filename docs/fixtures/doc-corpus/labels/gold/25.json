@@ -1,0 +1,76 @@
+{
+  "id": 25,
+  "url": "https://www.doctorofcredit.com/american-express-business-checking-50000-membership-rewards-points-bonus/",
+  "bank": "American Express",
+  "product": "business checking",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": null,
+  "tiers": [],
+  "expiration": "2026-07-31",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit $5,000 within 30 days of account opening"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": null,
+      "verbatim": "Maintain an average balance of $5,000 for 60 days after account opening"
+    },
+    {
+      "type": "transactions",
+      "amount": null,
+      "count": 5,
+      "deadline_days": 60,
+      "frequency": "total",
+      "verbatim": "Make 5 or more qualifying transactions within 60 days (mobile deposits, ACH, Wire, Bill Payments)"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "no monthly fees to worry about",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "This Welcome Offer is only available to select businesses who were solicited directly by American Express...Offer cannot be forwarded, transferred, or used more than once.",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-04-09",
+    "2024-05-27",
+    "2023-12-12",
+    "2024-01-12",
+    "2024-01-07",
+    "2023-11-07"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total (points)",
+      "stale_value": "60,000 points (previous best bonus, referenced but not this post's own historical value)",
+      "current_value": "70,000 points is the newest/highest offer sent via targeted email per 4/9/26 update, superseding the 50,000 base offer that is this post's headline/title",
+      "evidence": "Update 4/9/26: New 70,000 offer has been sent out, ends 7/31/2026...via e-mail"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "12/12/2023 (summary box, stale)",
+      "current_value": "7/31/2026 (per 4/9/26 update describing the new 70k targeted offer)",
+      "evidence": "Update 4/9/26: New 70,000 offer has been sent out, ends 7/31/2026"
+    }
+  ],
+  "notes": "Points bonus, not cash — bonus_total left null per labeling rules (points bonuses -> bonus_total null + note). Title/post is nominally the 50,000-point offer; a targeted 70,000-point variant exists per the most recent (4/9/26) update but is described as a separate/YMMV targeted mailer, not a universal upgrade to the base 50k offer — both terms and requirements described are for the 50,000-point offer (deposit $5k/maintain 60 days/5 transactions). Post is tagged [YMMV] and requires having been solicited directly by Amex; this is a targeted/soft-launch offer, not broadly available despite 'Nationwide' availability tag. Direct deposit not required. Foreign transaction fee 2.7%; outgoing domestic wires $20; other ACH/incoming wires free.",
+  "_gold_provenance": "single(C)+ruling"
+}

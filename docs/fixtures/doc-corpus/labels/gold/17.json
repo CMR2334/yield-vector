@@ -1,0 +1,61 @@
+{
+  "id": 17,
+  "url": "https://www.doctorofcredit.com/mn-wi-royal-credit-union-200-checking-bonus/",
+  "bank": "Royal Credit Union",
+  "product": "Checking Account",
+  "availability_verbatim": "MN, WI only",
+  "bonus_total": 400,
+  "tiers": [],
+  "expiration": "2026-06-12",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 400,
+      "count": 2,
+      "deadline_days": 60,
+      "frequency": "total",
+      "verbatim": "Receive a direct deposit of at least $400 within 60 days of account opening (two consecutive direct deposits must be confirmed and received)"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees",
+  "early_termination_fee": null,
+  "etf_window_days": 180,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 400,
+  "dd_count": 2,
+  "dd_timeframe_days": 60,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "Member cannot have had a previously opened or closed checking account with RoyalCU in the last twelve (12) months",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-05-17"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "200",
+      "current_value": "400",
+      "evidence": "Update 5/17/26: Deal is back, now $400 until June 12, 2026. Requires two conescutive direct deposits of $400+ instead of $200 (bonus was only $200 before)"
+    },
+    {
+      "field": "requirements[0].amount",
+      "stale_value": "200",
+      "current_value": "400",
+      "evidence": "same update: DD threshold raised from $200+ to $400+ alongside the bonus increase"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "September 30th, 2019 (original fine print, stale)",
+      "current_value": "no reliable current end date captured; update mentions 'until June 12, 2026' in the update paragraph but no fine-print box reflects it",
+      "evidence": "post opens with 'Deal has ended' banner and title tag is '[Expired]', but 5/17/26 update contradicts that by describing a live $400 offer through June 12, 2026"
+    }
+  ],
+  "notes": "Post has a top-of-article 'Deal has ended' notice AND title/manifest flag [Expired], but the most recent (5/17/26) update paragraph describes an active $400 bonus valid until June 12, 2026 - directly contradicting the expired banner. Treated per rules as picking the careful-churner reading: bonus_total/requirements reflect the 5/17/26 update figures since that is the most recent stated fact, but expiration is set to 'none stated' rather than guessing, and the conflict between 'expired' banner and 'deal is back' update is flagged as an open issue. All fine-print/EATF/fee detail below the update paragraphs is unreconciled 2019-era boilerplate (predates the 2024+ update chain) and was not assumed to still apply exactly, though no contradicting current figures were found for fees/EATF so those were kept as-is.",
+  "_gold_provenance": "single(B)+ruling"
+}

@@ -1,0 +1,68 @@
+{
+  "id": 28,
+  "url": "https://www.doctorofcredit.com/wells-fargo-325-checking-bonus-available-online/",
+  "bank": "Wells Fargo",
+  "product": "checking (Everyday Checking)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 400,
+  "tiers": [],
+  "expiration": "2026-07-07",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 1000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Receive a total of $1,000 or more in qualifying direct deposits within 90 calendar days from account opening"
+    }
+  ],
+  "monthly_fee": 15,
+  "fee_waiver": "waived with $500 min daily balance (increasing to $1,500 for fee periods on/after 10/25/25), OR $5,000+ qualifying deposit/investment balances (on/after 10/25/25), OR $500+ total qualifying electronic deposits, OR primary owner age 17-24, OR linked Campus ATM/Debit Card, OR qualifying military DD",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 1000,
+  "dd_count": null,
+  "dd_timeframe_days": 90,
+  "bonus_post_min_days": 90,
+  "bonus_post_max_days": 120,
+  "churn": {
+    "limit_language_verbatim": "You have received a bonus for opening a Wells Fargo consumer checking account within the past 12 months",
+    "wait_months": 12,
+    "anchor": "bonus_received"
+  },
+  "update_dates": [
+    "2026-05-20",
+    "2026-04-08",
+    "2026-02-26",
+    "2024-02-26",
+    "2024-01-17",
+    "2023-11-14",
+    "2023-10-11",
+    "2023-08-22",
+    "2023-07-05",
+    "2023-05-23",
+    "2023-04-11",
+    "2023-02-28",
+    "2023-02-27",
+    "2023-01-17"
+  ],
+  "superseded_values": [
+    {
+      "field": "requirements (DD amount)",
+      "stale_value": "$1,000 then later a struck $3,000, both struck in current article text",
+      "current_value": "$1,000 or more (final/current value, unstruck)",
+      "evidence": "Receive a total of <del>$1,000</del> <del>$3,000</del> $1,000 or more in qualifying direct deposits"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "January 6, 2023 (Fine Print section literal text, and multiple struck prior dates in summary box)",
+      "current_value": "July 7, 2026 per most recent Update 5/20/26",
+      "evidence": "Update 5/20/26: Extended until July 7, 2026."
+    }
+  ],
+  "notes": "bonus_total is $400 per post title and 'The Offer' section header text ('$400 bonus'), though the article slug/older title reference is '$325' — that $325 figure does not appear anywhere in the current unstruck body text and is treated as fully superseded/legacy naming only reflected in the URL slug, not in-content, so not recorded as a superseded_values entry (no verbatim evidence of $325 appearing as a stated current or past bonus amount in the text itself). DD requirement fluctuated between $1,000 and $3,000 in struck-through history but final/current unstruck value is $1,000. Household limit: none. Hard/soft pull: mixed reports, likely doesn't pull for ChexSystems specifically (soft pull confirmed for the application itself).",
+  "_gold_provenance": "single(C)"
+}

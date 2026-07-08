@@ -1,0 +1,109 @@
+{
+  "id": 18,
+  "url": "https://www.doctorofcredit.com/il-in-mn-wi-only-associated-bank-500-checking-bonus/",
+  "bank": "Associated Bank",
+  "product": "Associated Access Checking",
+  "availability_verbatim": "IA, IL, IN, KS, MI, MN, MO, OH and WI",
+  "bonus_total": 600,
+  "tiers": [
+    {
+      "threshold_min": 1000,
+      "threshold_max": 4999.99,
+      "threshold_kind": "balance",
+      "bonus": 300,
+      "hold_days": 60,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": 9999.99,
+      "threshold_kind": "balance",
+      "bonus": 400,
+      "hold_days": 60,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 10000,
+      "threshold_max": null,
+      "threshold_kind": "balance",
+      "bonus": 600,
+      "hold_days": 60,
+      "deadline_days": 90,
+      "state_gate": null
+    }
+  ],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Receive recurring direct deposits totaling $500 or more within 90 days of account opening"
+    },
+    {
+      "type": "estatements",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "opt into eStatements otherwise you'll be charged $4"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fee if enrolled in eStatements (otherwise $4/mo)",
+  "early_termination_fee": null,
+  "etf_window_days": 365,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": null,
+  "dd_timeframe_days": 90,
+  "bonus_post_max_days": 120,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "not available for customers who have received a new personal checking account monetary bonus within the last 24 months and have or have had an Associated Bank checking account within the last 12 months",
+    "wait_months": 24,
+    "anchor": "bonus_received"
+  },
+  "update_dates": [
+    "2026-07-01",
+    "2026-05-29",
+    "2026-04-20",
+    "2026-04-30",
+    "2024-12-31",
+    "2024-06-18"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "400 (11/3/21 update text) / 500 (title)",
+      "current_value": "600",
+      "evidence": "Update 7/13/23: This is now a $600 checking bonus (never reverted by any later update)"
+    },
+    {
+      "field": "tiers",
+      "stale_value": "fine print table: $1,000-$4,999.99->$200, $5,000-$9,999.99->$300, $10,000+->$500",
+      "current_value": "Offer section: $1,000-$4,999.99->$300, $5,000-$9,999.99->$400, $10,000+->$600",
+      "evidence": "Fine Print bullet 'Determining your bonus' retains older $200/$300/$500 figures inconsistent with the $600-max Offer section bullets and the 'Offer at a glance' box (both of which say max $600)"
+    },
+    {
+      "field": "availability",
+      "stale_value": "IL, MN, WI (page title/older availability)",
+      "current_value": "IA, IL, IN, KS, MI, MN, MO, OH and WI",
+      "evidence": "Update 3/3/22: This is available in more states now, terms now state 'IA, IL, IN, KS, MI, MN, MO, OH and WI'"
+    },
+    {
+      "field": "credit card funding limit",
+      "stale_value": "$1,200",
+      "current_value": "$3,000",
+      "evidence": "Credit card funding: Up to <del>$1,200</del> $3,000, no American Express cards"
+    }
+  ],
+  "expired_since": "December 30, 2022 (per Offer-at-a-glance expiration box, itself likely stale given 2026 update chain)",
+  "notes": "Fine Print's balance-tier dollar table is an unreconciled older version inconsistent with the Offer section and the Offer-at-a-glance max bonus figure; treated Offer section + at-a-glance ($600 max) as current per rules. 'Offer at a glance' expiration date (December 30, 2022) is clearly stale relative to the 2026 update chain (extended repeatedly through July 31, 2026 per most recent 7/1/26 update) but no fine-print box was updated to reflect a coherent current end date, so expiration set to 'none stated' rather than guessed.",
+  "_gold_provenance": "single(B)"
+}

@@ -1,0 +1,118 @@
+{
+  "id": 26,
+  "url": "https://www.doctorofcredit.com/chase-business-total-checking-750-bonus-no-direct-deposit-required/",
+  "bank": "Chase",
+  "product": "Business Complete Checking / Performance Business Checking / Platinum Business Checking",
+  "availability_verbatim": "Nationwide - online or in branch",
+  "bonus_total": 1500,
+  "tiers": [
+    {
+      "threshold_min": 2000,
+      "threshold_max": 19999.99,
+      "threshold_kind": "deposit",
+      "bonus": 500,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 20000,
+      "threshold_max": 99999.99,
+      "threshold_kind": "deposit",
+      "bonus": 750,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 100000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 1500,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-10-15",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 2000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit new money within 30 days of coupon enrollment & maintain that balance for 60 days from offer enrollment"
+    },
+    {
+      "type": "transactions",
+      "amount": null,
+      "count": 5,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Complete 5 qualifying transactions within 90 days of account opening (debit card purchases, QuickDeposit/QuickAccept, ACH credits, wires)"
+    }
+  ],
+  "monthly_fee": 15,
+  "fee_waiver": "Waived with $2,000 min daily balance, or $2,000 net purchases on linked Chase Ink Business Card, or $2,000 deposits from QuickAccept/Chase Merchant Services, or linked Chase Private Client Checking account, or qualifying military status",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": 15,
+  "churn": {
+    "limit_language_verbatim": "You can receive only one new business checking account opening related bonus every two years from the last enrollment date and only one bonus per account",
+    "wait_months": 24,
+    "anchor": "account_opened"
+  },
+  "update_dates": [
+    "2026-10-15",
+    "2026-05-16",
+    "2026-05-01",
+    "2026-02-02",
+    "2025-09-29",
+    "2025-08-26",
+    "2025-04-08",
+    "2025-03-18",
+    "2024-11-21",
+    "2024-07-15",
+    "2024-05-29",
+    "2024-04-06",
+    "2024-01-21",
+    "2024-01-07",
+    "2023-11-29",
+    "2023-11-23"
+  ],
+  "superseded_values": [
+    {
+      "field": "expiration",
+      "stale_value": "2024-10-17 (per Offer at a glance box, struck-through history of prior dates)",
+      "current_value": "2026-10-15",
+      "evidence": "'Extended to 10/15/2026' paragraph is the newest content, above the 5/16/26 update"
+    },
+    {
+      "field": "tiers(bonus=400)",
+      "stale_value": "$400 bonus for $2,000 deposit (per structured Offer section bullet list)",
+      "current_value": "$500 bonus for $2,000 deposit via direct link",
+      "evidence": "Body text within the Offer section itself notes 'But you can get $500 with $2,000 deposit at this link' - and Update 5/1/26 confirms 'direct link offer for the $500 bonus for $2,000 deposit'"
+    },
+    {
+      "field": "bonus_total",
+      "stale_value": "750 (per title, meta description, Offer at a glance box)",
+      "current_value": "1500",
+      "evidence": "Update 5/1/26: 'This is now up to $1,500 and similar to the targeted $1,500 bonus'"
+    },
+    {
+      "field": "early_termination_fee",
+      "stale_value": "bonus forfeit if account closed within six months (per original Fine Print struck-through)",
+      "current_value": "None",
+      "evidence": "Offer-at-a-glance box shows struck-through 'Six months, bonus forfeit' followed by 'None' as current; Our Verdict section also confirms Chase removed the 6-month clawback clause from their bonuses"
+    }
+  ],
+  "notes": "Complex/messy post: page title and meta only reference $300-$750, but body Offer-at-a-glance box gives current range $300-$750 while updates (5/1/26) say max is now $1,500 with a new $100,000/$1,500 tier layered on top of the same $20k/$750 and $2k/$400-or-$500 tiers - the structured tier bullet list under 'The Offer' does include the $1,500/$100k tier already (so it appears the list WAS updated for the top tier but the Offer-at-a-glance summary box's max ($750) was not). Took the tier list in the Offer section as authoritative for tiers/bonus_total since it already reflects the $1,500 top tier; the $400->$500 substitution for the bottom tier is the one genuine textual contradiction (structured list says $400, same-paragraph prose says $500 via a different/better link) - resolved by using $500 per the more specific/newer direct-link language a careful churner would use. Bonus deposited within 15 days after all requirements met.",
+  "_gold_provenance": "double base=A+adjudication"
+}

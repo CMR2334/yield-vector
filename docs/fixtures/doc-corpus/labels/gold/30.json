@@ -1,0 +1,89 @@
+{
+  "id": 30,
+  "url": "https://www.doctorofcredit.com/wells-fargo-400-825-business-checking-bonus/",
+  "bank": "Wells Fargo",
+  "product": "business checking (Initiate Business Checking)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 825,
+  "tiers": [
+    {
+      "threshold_min": 2500,
+      "threshold_max": 24999.99,
+      "threshold_kind": "deposit",
+      "bonus": 400,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 25000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 825,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-07-07",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 2500,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "deposit $2,500 or more to your new business checking account by day 30 and maintain minimum daily collected balance of $2,500 through day 60"
+    },
+    {
+      "type": "deposit",
+      "amount": 25000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "deposit $25,000 or more by day 30 and maintain minimum daily collected balance of $25,000 through day 60"
+    }
+  ],
+  "monthly_fee": 10,
+  "fee_waiver": "$10/mo (increasing to $15 for fee periods on/after 3/1/26); waived with $500 min daily balance (increasing to $2,000 on/after 3/1/26), OR $1,000 avg ledger balance (removed as an option on/after 3/1/26), OR own a Premier/Private Bank Checking account, OR (effective 3/1/26) $5,000 combined account balance",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Limit one business checking bonus offer per business entity or business owner within last 24 months",
+    "wait_months": 24,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-05-07",
+    "2025-12-05"
+  ],
+  "superseded_values": [
+    {
+      "field": "expiration",
+      "stale_value": "June 30, 2025 (summary box, stale)",
+      "current_value": "July 7, 2026 per most recent Update 5/7/26 ('Extended until July 7, 2026')",
+      "evidence": "Update 5/7/26: Extended until July 7, 2026."
+    },
+    {
+      "field": "$825 bonus availability",
+      "stale_value": "temporarily reported not available (12/5/25)",
+      "current_value": "confirmed still working, just requires copy-pasting link or incognito mode",
+      "evidence": "Update 12/5/25: $825 bonus currently not available. Still working, just copy and paste link or try incognito mode"
+    },
+    {
+      "field": "churn.wait_months / limit language",
+      "stale_value": "unspecified/no explicit household or per-entity cooldown stated originally",
+      "current_value": "explicit 'one bonus per business entity or business owner within last 24 months' added per 5/7/26 update",
+      "evidence": "Update 5/7/26: Terms now have 'Limit one business checking bonus offer per business entity or business owner within last 24 months'"
+    }
+  ],
+  "notes": "Two separate direct links exist for the $400 and $825 tiers (both require the Initiate Business Checking account). bonus_total = 825 (top tier). Credit card funding up to $300. Household limit: None listed in summary box, but body update adds an explicit 24-month per-entity/owner limit (captured in churn). ChexSystems: mixed reports, likely doesn't pull. Hard/soft pull: soft.",
+  "_gold_provenance": "single(C)"
+}

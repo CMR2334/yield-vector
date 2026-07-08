@@ -1,0 +1,121 @@
+{
+  "id": 19,
+  "url": "https://www.doctorofcredit.com/mn-wi-mi-fl-ga-wings-credit-union-300-checking-bonus/",
+  "bank": "Wings Credit Union",
+  "product": "First Class Checking",
+  "availability_verbatim": "Nationwide with $5 donation",
+  "bonus_total": 500,
+  "tiers": [
+    {
+      "threshold_min": 3000,
+      "threshold_max": 3999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 300,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 4000,
+      "threshold_max": 4999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 400,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 500,
+      "hold_days": null,
+      "deadline_days": null,
+      "state_gate": null
+    }
+  ],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "online_banking",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Enroll in digital banking & eStatements"
+    },
+    {
+      "type": "debit_txns",
+      "amount": 5,
+      "count": 10,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Complete 10 or more net PIN or signature-based debit card or credit card purchases of $5 or more each"
+    },
+    {
+      "type": "direct_deposit_amt",
+      "amount": 3000,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "monthly",
+      "verbatim": "Establish recurring qualified payroll direct deposit(s) totaling $3,000 monthly to get $300"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Use promo code WINGS26"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "First Class Checking has no monthly fees",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "WINGS26",
+  "dd_required": true,
+  "dd_amount": 3000,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "Cannot have been a previous member (owner of a Primary Share account) of Wings Credit Union within 12 months of promotional account application; cannot have previously received a new account bonus",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-05-30",
+    "2025-11-18",
+    "2025-11-08"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "400 (previous offer referenced in Our Verdict as 'not as good as')",
+      "current_value": "500",
+      "evidence": "Update 11/8/25: Deal is back...; Our Verdict compares to a prior $400 bonus post"
+    },
+    {
+      "field": "availability",
+      "stale_value": "Nationwide with $5 donation ('Offer at a glance' box)",
+      "current_value": "restricted to specific counties in MN, WI, MI, FL, GA (per 5/30/26 update)",
+      "evidence": "Update 5/30/26: New $500 bonus. But location is restricted per terms: [lists specific counties in MN, WI, MI, FL, GA]"
+    },
+    {
+      "field": "fine print debit txn requirement",
+      "stale_value": "15 net PIN/signature debit purchases of $25+ each",
+      "current_value": "10 (Offer section) / 5 (fine print, both struck '15')",
+      "evidence": "Offer section: 'Complete <del>15</del> 10 or more...purchases of $5 or more each'; Fine Print separately: 'Complete <del>15</del> 5 or more...purchases of $25 or more each' - the two sections disagree on both count (10 vs 5) and dollar minimum ($5 vs $25) after the strikethrough edit"
+    },
+    {
+      "field": "referral bonus",
+      "stale_value": "$50/$50",
+      "current_value": "$100/$100",
+      "evidence": "Update 11/18/25: Referral bonus is up to $100/$100 now (previously $50/$50)"
+    }
+  ],
+  "notes": "SIGNIFICANT CONFLICT: the manifest's availability_raw and this post's own 'Offer at a glance' box both say 'Nationwide with $5 donation', but the most recent (5/30/26) update explicitly restricts the new $500 bonus to residents of specific counties within MN, WI, MI, FL, and GA - contradicting the nationwide claim. Per instructions to pick the careful-churner reading, I treated availability as county-restricted (the more recent, more specific, more restrictive statement) rather than nationwide, and flagged this as a superseded_value plus open issue. Debit-card requirement fields (count/dollar-min) are internally inconsistent between the Offer section and Fine Print after strikethrough edits (10 vs 5 purchases; $5 vs $25 minimum); I used the Offer section's post-strikethrough figures (10 purchases of $5+) as primary since it is presented as the current summary, but this is a genuine ambiguity worth flagging.",
+  "_gold_provenance": "single(B)+ruling"
+}

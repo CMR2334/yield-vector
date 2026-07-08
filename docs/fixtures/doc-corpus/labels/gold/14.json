@@ -1,0 +1,129 @@
+{
+  "id": 14,
+  "url": "https://www.doctorofcredit.com/connexus-credit-union-300-checking-bonus/",
+  "bank": "Connexus Credit Union",
+  "product": "Xtraordinary Checking Account",
+  "availability_verbatim": "Anybody can join via Connexus Association + $5 donation; free in select MN/IL/OH/WI counties",
+  "bonus_total": 250,
+  "tiers": [
+    {
+      "threshold_min": 0,
+      "threshold_max": 4999.99,
+      "threshold_kind": "balance",
+      "bonus": 0,
+      "hold_days": null,
+      "deadline_days": 120,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": 9999.99,
+      "threshold_kind": "balance",
+      "bonus": 150,
+      "hold_days": null,
+      "deadline_days": 120,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 10000,
+      "threshold_max": 14999.99,
+      "threshold_kind": "balance",
+      "bonus": 200,
+      "hold_days": null,
+      "deadline_days": 120,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 15000,
+      "threshold_max": null,
+      "threshold_kind": "balance",
+      "bonus": 250,
+      "hold_days": null,
+      "deadline_days": 120,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-07-19",
+  "requirements": [
+    {
+      "type": "debit_txns",
+      "amount": 500,
+      "count": 15,
+      "deadline_days": 120,
+      "frequency": "monthly",
+      "verbatim": "Make 15 debit card purchases or accumulate $500 in debit card spending"
+    },
+    {
+      "type": "estatements",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Subscribe to eStatements"
+    },
+    {
+      "type": "direct_deposit_amt",
+      "amount": 500,
+      "count": null,
+      "deadline_days": 120,
+      "frequency": "monthly",
+      "verbatim": "Make one monthly deposit of at least $500 from either a direct deposit or an ACH deposit"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "open a new Xtraordinary Checking Account with promo code XTRABONUS"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "XTRABONUS",
+  "dd_required": true,
+  "dd_amount": 500,
+  "dd_count": null,
+  "dd_timeframe_days": 120,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "not valid for existing members with any Connexus Checking Account currently open or closed on or after 7/1/2025",
+    "wait_months": null,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-07-01",
+    "2026-06-16"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "300",
+      "current_value": "250",
+      "evidence": "Update 6/16/26: Maximum bonus is now $250 (previously $300) and tiers are worse"
+    },
+    {
+      "field": "tiers[2].bonus",
+      "stale_value": "200 (previously)",
+      "current_value": "150",
+      "evidence": "$5,000-$9,999.99 will earn $150 (previously $200)"
+    },
+    {
+      "field": "tiers[3].bonus",
+      "stale_value": "300 (previously)",
+      "current_value": "200",
+      "evidence": "$10,000-$14,999.99 will earn $200 (previously $300)"
+    },
+    {
+      "field": "tiers[4].threshold_min",
+      "stale_value": "10000 (previously required for $300)",
+      "current_value": "15000",
+      "evidence": "$15,000 and over will earn $250 (previously only required $10,000+ for $300)"
+    }
+  ],
+  "notes": "Requirements must be met for two month-end periods (not necessarily consecutive) within 120 days of account opening; bonus is based on averaging the average daily balance from the first two qualifying monthly periods. The Fine Print section retains an older, unreconciled tier table ($999.99 and below/$1,000-$4,999.99/$5,000-$9,999.99/$10,000+ -> $0/$100/$200/$300) that appears to be un-updated boilerplate from an earlier version of this offer; I used the Offer section's explicitly-marked current figures (which reference 'previously' amounts) as ground truth. Separate Inactivity Fee (not an ETF) applies to accounts with no activity in 90 days and balance under $100.",
+  "_gold_provenance": "single(B)"
+}

@@ -1,0 +1,103 @@
+{
+  "id": 12,
+  "url": "https://www.doctorofcredit.com/u-s-bank-450-100-checking-bonus/",
+  "bank": "U.S. Bank",
+  "product": "Smartly Checking",
+  "availability_verbatim": "Nationwide (excludes NY & FL and states without a branch unless existing relationship)",
+  "bonus_total": 450,
+  "tiers": [
+    {
+      "threshold_min": 3000,
+      "threshold_max": 4999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 250,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": 7999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 350,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 8000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 450,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-09-08",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 3000,
+      "count": 2,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "combined total of your direct deposits is between $3,000 and $4,999.99"
+    },
+    {
+      "type": "online_banking",
+      "amount": null,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "enroll in the U.S. Bank Mobile App or online banking within 90 days"
+    },
+    {
+      "type": "promo_code",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "must use the promo code 2024JUL at account opening"
+    }
+  ],
+  "monthly_fee": 12,
+  "fee_waiver": "Waived with $1,500+ monthly direct deposits, OR $1,500 avg balance, OR business checking owner, OR eligible customer group (youth/young adult/senior/military), OR Smart Rewards Gold Tier+",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": "2024JUL",
+  "dd_required": true,
+  "dd_amount": 3000,
+  "dd_count": 2,
+  "dd_timeframe_days": 90,
+  "bonus_post_max_days": 60,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "cannot have an existing U.S. Bank consumer checking account, had one in the last 12 months, or received other checking bonus offers within the past 12 months",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-06-25",
+    "2026-06-19",
+    "2026-04-08",
+    "2026-03-04",
+    "2025-11-26"
+  ],
+  "superseded_values": [
+    {
+      "field": "expiration",
+      "stale_value": "January 28, 2026 (struck)",
+      "current_value": "September 8, 2026",
+      "evidence": "<del>January 28, 2026</del> <del>April 6, 2026</del> September 8, 2026"
+    },
+    {
+      "field": "bonus_total",
+      "stale_value": "$400 deal (6/19/26 interim)",
+      "current_value": "$450",
+      "evidence": "Update 6/25/26: $450 is back at this new link"
+    }
+  ],
+  "notes": "Fine print section retains stale DD thresholds ($2,000-$4,999.99 for $250, etc.) that conflict with the 'Offer at a glance' / Offer section figures ($3,000-$4,999.99 for $250); treated fine print as stale boilerplate not updated alongside the offer refresh, current figures taken from top-of-page Offer section. Promo code 2024JUL appears to be legacy/stale text carried from an older version of the post but is the only code given.",
+  "_gold_provenance": "single(B)"
+}

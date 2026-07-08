@@ -1,0 +1,117 @@
+{
+  "id": 21,
+  "url": "https://www.doctorofcredit.com/citi-300-checking-bonus/",
+  "bank": "Citi (Citibank)",
+  "product": "Citi Checking (Regular Checking / Access Checking)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 1500,
+  "tiers": [
+    {
+      "threshold_min": 3000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 325,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 5000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 475,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": "Probably only NY, CT, MD, VA, DC, CA, NV, NJ, and select markets in FL and IL"
+    },
+    {
+      "threshold_min": 30000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 500,
+      "hold_days": 45,
+      "deadline_days": 45,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 200000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 1500,
+      "hold_days": 45,
+      "deadline_days": 45,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-10-26",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 3000,
+      "count": 2,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Deposit at least two (2) Enhanced Direct Deposits...within 90 calendar days...must equal $3,000 or more for the $325 bonus"
+    },
+    {
+      "type": "deposit",
+      "amount": 30000,
+      "count": null,
+      "deadline_days": 45,
+      "frequency": "total",
+      "verbatim": "Deposit New-to-Citibank Funds into your checking account within 45 calendar days from account opening"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 30000,
+      "count": null,
+      "deadline_days": 45,
+      "frequency": null,
+      "verbatim": "Maintain the required minimum balance in your Regular Checking account for an additional 45 days from the 46th day"
+    }
+  ],
+  "monthly_fee": 12,
+  "fee_waiver": "Waived each month the account has $250+ in Enhanced Direct Deposits",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 3000,
+  "dd_count": 2,
+  "dd_timeframe_days": 90,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "have not owned a Citi checking account in the last 365 days",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-05-29",
+    "2026-04-14",
+    "2026-01-13",
+    "2026-01-06"
+  ],
+  "superseded_values": [
+    {
+      "field": "tiers (removed)",
+      "stale_value": "$425 tier (DD $6,000+)",
+      "current_value": "removed entirely",
+      "evidence": "Update 1/13/26: Extended until 04/13/26, but $425 option is gone; body text shows '<del>$6,000+ for $425 bonus</del>' struck through"
+    },
+    {
+      "field": "tiers[2].bonus",
+      "stale_value": "750",
+      "current_value": "500",
+      "evidence": "Update 4/14/26: Deal has been extended to 10/26/26. Unfortunately the $750 tier has been reduced to only $500; body text shows '<del>$750</del> $500/$1,500 checking bonus'"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "7/8/24 ('Offer at a glance' box, and earlier 1/6/26 update mentioned 1/12/26 as the then-current end date)",
+      "current_value": "10/26/26",
+      "evidence": "Update 4/14/26: Deal has been extended to 10/26/26"
+    }
+  ],
+  "notes": "Four distinct sub-offers exist: $325 (DD $3,000, all states) and $475 (DD $5,000, newer 5/29/26 link, region-restricted per most recent update) checking-only bonuses; and $500/$1,500 balance-based bonuses (deposit new-to-Citi funds within 45 days, maintain for additional 45 days) requiring $30,000/$200,000 respectively. bonus_total set to 1500 (max rung across all tiers) per labeling rules. Referral bonus of $100 to referrer also exists (referred person gets standard bonus only, no referral bonus) - not counted in tiers. Extensive F.A.Q. section (offer tracker location, Citigold benefit access, savings-account stacking at 3.7% APY) is informational/how-to and not itself an offer term.",
+  "_gold_provenance": "single(B)"
+}

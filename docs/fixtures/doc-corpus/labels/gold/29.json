@@ -1,0 +1,49 @@
+{
+  "id": 29,
+  "url": "https://www.doctorofcredit.com/relay-financial-banking-300-signup-bonus-for-depositing-10000/",
+  "bank": "Relay Financial (partnered with Evolve Bank & Trust)",
+  "product": "business checking / small business banking & cash management",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 500,
+  "tiers": [],
+  "expiration": "none stated",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 10000,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "total",
+      "verbatim": "fund with $10,000 and receive bonus when you maintain it for 90 days"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "Relay has no monthly fees, no minimum balance, no overdraft fees (Starter Plan; Grow/Scale plans cost $30/$90 per month respectively)",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": 90,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-03-19"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "$300 (body text under 'The Offer' section: 'receive a $300 bonus')",
+      "current_value": "$500 per Update 3/19/26 ('Deal is back, this time $500 instead of $300') and post title/summary box",
+      "evidence": "Update 3/19/26: Deal is back, this time $500 instead of $300."
+    }
+  ],
+  "notes": "Internal inconsistency in the article itself: the top-of-post Update note and the 'Offer at a glance' summary box both state $500 as the current bonus amount, but the 'The Offer' section body prose (bulleted description of mechanics) was not updated and still literally reads 'receive a $300 bonus.' Per labeling rules (Update paragraphs are deltas superseding specific facts), bonus_total = 500 (current, per the explicit Update statement and summary box), with the stale $300 body-text figure recorded in superseded_values. Deposit requirement ($10,000, maintain 90 days) is unchanged/consistent across both old and new bonus amounts — same underlying deposit threshold. Terms note says technical T&Cs mention $20,000 deposit required but the actual displayed offer says $10,000 ('YMMV') — this is a separate ambiguity flagged in notes, not modeled as a tier since no second bonus tier or threshold is described, just uncertainty about which deposit figure applies; used the $10,000 figure since that is what the article states as 'the actual offer.' FDIC insurance via partner bank Evolve Bank & Trust noted explicitly.",
+  "_gold_provenance": "single(C)"
+}

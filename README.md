@@ -16,7 +16,7 @@ A single-file PWA for planning and tracking bank account opening bonuses (credit
 - **Cash flow projection** — day-by-day chart showing available capital, tied-up capital, and buffer floor
 - **Timeline view** — horizontal bar chart of all active commitments, color-coded by status
 - **Optimizer** — finds feasible bonus sequences within your capital budget (requires zero shortfall days)
-- **DoC import** — paste a Doctor of Credit post to auto-fill an offer for your review; an optional self-hosted Worker adds URL import (see below)
+- **DoC import** — paste a Doctor of Credit post to auto-fill an offer for your review; an optional self-hosted Worker adds URL import (see below). Tier-aware: multi-tier offers (e.g. a deposit ladder) surface a "select your tier" picker instead of guessing, and stale values from older "Update M/D/YY" sections are demoted. Parser accuracy is measured against a real, independently-labeled 31-post corpus — see [`docs/fixtures/doc-corpus/`](docs/fixtures/doc-corpus/) for the labels, harness, and reproducible before/after numbers
 - **Offer templates** — save an offer's terms (personal dates/notes stripped) as a reusable template and start new offers from it
 - **Cloud sync** — state synced via GitHub Gist; last-writer-wins conflict resolution
 - **iOS Reminders** — structured `_feed` on every Gist push; Apple Shortcut syncs deadlines to Reminders.app

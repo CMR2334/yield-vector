@@ -1,0 +1,65 @@
+{
+  "id": 5,
+  "url": "https://www.doctorofcredit.com/u-s-eagle-federal-credit-union-90-referral-bonus/",
+  "bank": "U.S. Eagle Federal Credit Union",
+  "product": "Referral Program (checking/certificate/loan)",
+  "availability_verbatim": "Select areas in NM, but can join with a $10 donation",
+  "bonus_total": 90,
+  "tiers": [],
+  "expiration": "2026-12-31",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Any checking account with direct deposit (no minimum mentioned) qualifies referred party for bonus"
+    },
+    {
+      "type": "custom",
+      "amount": 1000,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Alternative qualifier: a share certificate ($1,000 minimum)"
+    },
+    {
+      "type": "custom",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Alternative qualifier: a loan or credit card"
+    }
+  ],
+  "monthly_fee": 5,
+  "fee_waiver": "Life essentials checking $5 monthly fee waived with e-statements, or if primary account holder is under 18 or over 65",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Limited to 5 referrals ($450 total) per person, though each shareable link may be used for up to 25 simultaneous referrals; each new member may only be referred once",
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-07-04"
+  ],
+  "superseded_values": [
+    {
+      "field": "expiration",
+      "stale_value": "2026-06-30 (per Offer at a glance box and referral links)",
+      "current_value": "2026-12-31",
+      "evidence": "Update 7/4/26: T&Cs now state extended until 12/31/26 but referral links still say 6/30/26 - quoted promo terms confirm Promotional Period is 9/1/2025-12/31/2026"
+    }
+  ],
+  "notes": "This is a $90 REFERRAL bonus paid to both the referrer and the new member (bonus_total modeled as the per-person amount, i.e. what one person can earn from one successful referral). Direct deposit has no stated minimum amount, so dd_amount is null. New members can't share their own referral links until 30 days after signup. Ambiguity: T&Cs say 12/31/26 expiration but the actual referral links displayed still show 6/30/26 - took the newer T&C date as current per instructions (updates supersede), flagging the discrepancy since a churner might hit a dead link before 12/31.",
+  "_gold_provenance": "single(A)"
+}

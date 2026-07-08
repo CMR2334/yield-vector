@@ -1,0 +1,50 @@
+{
+  "id": 15,
+  "url": "https://www.doctorofcredit.com/bask-bank-20000-american-airlines-saving-bonus-50k-hold-for-90-days/",
+  "bank": "Bask Bank",
+  "product": "Bask Mileage Savings Account",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": null,
+  "tiers": [],
+  "expiration": "2026-08-30",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 50000,
+      "count": null,
+      "deadline_days": 15,
+      "frequency": "total",
+      "verbatim": "fund your Bask Mileage Savings Account with at least $50,000 within 15 days of account opening"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 50000,
+      "count": null,
+      "deadline_days": 120,
+      "frequency": null,
+      "verbatim": "maintain that balance for 90 consecutive days out of the first 120 days following the initial account opening"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "No monthly fees",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": null,
+    "wait_months": null,
+    "anchor": null
+  },
+  "update_dates": [
+    "2026-06-01"
+  ],
+  "superseded_values": [],
+  "notes": "Bonus is 20,000 American Airlines miles, not a cash bonus, so bonus_total is null. Account also earns 1.75 AA miles per $1 annually (not a cash APY - 0% interest). Miles valued at $0.42/point for 1099 tax reporting purposes per article. Hold requirement is 90 consecutive days within a 120-day window after the 15-day funding deadline (not a fixed hold_days from opening).",
+  "_gold_provenance": "single(B)"
+}

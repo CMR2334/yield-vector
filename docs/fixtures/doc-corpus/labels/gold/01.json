@@ -1,0 +1,103 @@
+{
+  "id": 1,
+  "url": "https://www.doctorofcredit.com/bank-of-america-400-750-business-checking-bonus/",
+  "bank": "Bank of America",
+  "product": "Business Advantage Banking (Business Checking)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 2500,
+  "tiers": [
+    {
+      "threshold_min": 5000,
+      "threshold_max": 14999.99,
+      "threshold_kind": "deposit",
+      "bonus": 400,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 15000,
+      "threshold_max": 49999.99,
+      "threshold_kind": "deposit",
+      "bonus": 750,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 50000,
+      "threshold_max": 99999.99,
+      "threshold_kind": "deposit",
+      "bonus": 1000,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 100000,
+      "threshold_max": 249999.99,
+      "threshold_kind": "deposit",
+      "bonus": 1500,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 250000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 2500,
+      "hold_days": 90,
+      "deadline_days": 30,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-12-31",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit New Money directly into new account within thirty (30) days of account opening"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 5000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Maintain a daily balance meeting the Balance Requirement during Maintenance Period (days 31-90)"
+    }
+  ],
+  "monthly_fee": 16,
+  "fee_waiver": "None for first 12 months; after that, waived with $5,000 combined average balance OR $500+ in net debit card purchases OR Preferred Rewards for Business membership",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_max_days": 60,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "not eligible if you were an owner or signer on a BofA Business Advantage Banking account within the last twelve (12) months",
+    "wait_months": 12,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-07-07"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "750 (pre-7/7/26 max tier)",
+      "current_value": "2500",
+      "evidence": "Update 7/7/26: There is a new bonus for up to $2,500"
+    }
+  ],
+  "notes": "Maintenance Period begins day 31 and ends day 90 after account opening (i.e., balance must be held for 60 days following the 30-day deposit window, with account open a total of 90 days). Credit card funding allowed up to $300 via debit card only (no CC funding). Deposit period = 30 days is treated as deadline_days; hold_days=90 represents total days from opening through end of Maintenance Period per bonus chart language.",
+  "_gold_provenance": "double base=B+adjudication"
+}

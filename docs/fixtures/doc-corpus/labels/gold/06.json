@@ -1,0 +1,99 @@
+{
+  "id": 6,
+  "url": "https://www.doctorofcredit.com/wells-fargo-premier-2500-bank-or-investing-bonus-requires-250000-in-cash-assets/",
+  "bank": "Wells Fargo",
+  "product": "Premier Checking (upgrade or new account)",
+  "availability_verbatim": "Nationwide, branch visit required",
+  "bonus_total": 2500,
+  "tiers": [],
+  "expiration": "2026-07-14",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 250000,
+      "count": null,
+      "deadline_days": 45,
+      "frequency": "total",
+      "verbatim": "Bring $250,000 or more in new deposits to qualifying linked accounts by Day 45"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 250000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Maintain at least a $250,000 balance through Day 90 after account upgrade or opening"
+    },
+    {
+      "type": "deposit",
+      "amount": 25,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Open Premier Checking account at a branch with minimum opening deposit of $25"
+    }
+  ],
+  "monthly_fee": 35,
+  "fee_waiver": "Waived each fee period with $250,000+ in statement-ending qualifying linked bank deposit + investment account balances; also waived for each fee period ending within first 64 days of opening",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": 30,
+  "churn": {
+    "limit_language_verbatim": "Not eligible if you received a bonus for opening a Wells Fargo Premier Checking account within the past 12 months",
+    "wait_months": 12,
+    "anchor": "bonus_received"
+  },
+  "update_dates": [
+    "2026-07-02",
+    "2026-04-15",
+    "2026-01-15",
+    "2025-12-28",
+    "2025-11-19",
+    "2025-10-03",
+    "2025-09-03",
+    "2025-08-21",
+    "2025-05-25",
+    "2025-04-17",
+    "2025-02-26",
+    "2025-01-09",
+    "2024-09-25",
+    "2024-07-04",
+    "2024-04-10",
+    "2024-02-09",
+    "2024-02-07",
+    "2024-01-10",
+    "2023-10-11",
+    "2023-07-05",
+    "2023-06-23",
+    "2023-05-07",
+    "2023-04-03"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "3500 (higher tier with $500,000 deposit, per og:description/title)",
+      "current_value": "2500",
+      "evidence": "Update 11/19/25: $3,500 link is expired/dead. The $2,500 link has been extended through 1/13/26"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "2026-04-14 (per Offer at a glance box)",
+      "current_value": "2026-07-14",
+      "evidence": "Update 4/15/26: Extended to 7/14/2026"
+    },
+    {
+      "field": "deposit requirement",
+      "stale_value": "$500,000 for $3,500 tier",
+      "current_value": "n/a - $3,500/$500k tier no longer offered",
+      "evidence": "Update 11/19/25 confirms $3,500 link dead"
+    }
+  ],
+  "notes": "Deal has an extremely long history of extensions (dozens of Update entries dating back to 2023); only the most recent are listed above for update_dates given the ≤ practical limit, but all visible 'Update M/D/YY' markers were captured. Newest update (7/2/26) says the link still works via incognito mode but does not explicitly state a new expiration date beyond the 7/14/26 figure from the prior (4/15/26) update, so treated 7/14/26 as still current. A previously-offered $3,500/$500,000 tier existed on and off historically but is currently dead per the 11/19/25 update, so NOT included as an active tier (tiers left empty, single flat $2,500/$250k offer). Bonus posts within 30 days after all requirements met. Separate related $525 Wells Fargo in-branch savings bonus mentioned but not part of this offer's fields.",
+  "_gold_provenance": "single(A)"
+}

@@ -1,0 +1,121 @@
+{
+  "id": 4,
+  "url": "https://www.doctorofcredit.com/il-in-ky-mi-mn-wi-in-branch-only-old-national-bank-500-business-checking-bonus/",
+  "bank": "Old National Bank",
+  "product": "Business Checking (Free/Essential Business Checking)",
+  "availability_verbatim": "IL, IN, KY, MI, MN & WI, In Branch Only (also ND per 10/29/25 update)",
+  "bonus_total": 800,
+  "tiers": [
+    {
+      "threshold_min": 4000,
+      "threshold_max": 19999.99,
+      "threshold_kind": "deposit",
+      "bonus": 400,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 20000,
+      "threshold_max": null,
+      "threshold_kind": "deposit",
+      "bonus": 800,
+      "hold_days": 60,
+      "deadline_days": 30,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-06-30",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 4000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit a total of $4,000 or more within 30 days of account opening ($400 tier)"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 4000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Maintain a minimum balance of $4,000 for days 31-90 of account opening"
+    },
+    {
+      "type": "online_banking",
+      "amount": null,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": null,
+      "verbatim": "Log in to Small Business Digital Banking within 30 days of account opening"
+    },
+    {
+      "type": "deposit",
+      "amount": 20000,
+      "count": null,
+      "deadline_days": 30,
+      "frequency": "total",
+      "verbatim": "Deposit a total of $20,000 or more within 30 days of account opening ($800 tier)"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": 20000,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Maintain a minimum balance of $20,000 for days 31-90 of account opening"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "Free business checking has no monthly fee (all states except WI); Essential business checking required in WI, fee status unclear",
+  "early_termination_fee": 25,
+  "etf_window_days": 180,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": null,
+  "churn": {
+    "limit_language_verbatim": "Not available to existing ONB business customers, incl. any owner/joint owner/authorized signer on an existing business deposit account, any business that closed a business deposit account within the past 36 months, or any customer who received a promotional bonus within the past 36 months",
+    "wait_months": 36,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-07-05",
+    "2026-06-30",
+    "2025-10-29",
+    "2025-09-30"
+  ],
+  "superseded_values": [
+    {
+      "field": "bonus_total",
+      "stale_value": "500 (per Offer at a glance box and title)",
+      "current_value": "800",
+      "evidence": "Update 7/5/26: Bonus used to be $500 for $7,000 deposit. Now it's either $400-$800 for $4,000-$20,000 deposit and maintenance period"
+    },
+    {
+      "field": "expiration",
+      "stale_value": "2025-09-30 (per Offer at a glance box)",
+      "current_value": "2026-06-30",
+      "evidence": "Update 7/5/26: 'Extended to 6/30/2026'"
+    },
+    {
+      "field": "availability",
+      "stale_value": "IL, IN, KY, MI, MN & WI only",
+      "current_value": "IL, IN, KY, MI, MN, WI, ND",
+      "evidence": "Update 10/29/25: Now available in ND due to Bremer Bank acquisition"
+    },
+    {
+      "field": "churn.wait_months",
+      "stale_value": "not specified in original body",
+      "current_value": "36",
+      "evidence": "Update 7/5/26 quotes new 36-month cooldown promotional terms"
+    }
+  ],
+  "notes": "'Offer at a glance' info box (max $500, expiration 9/30/2025) and the structured tier list in 'The Offer' section were NOT rewritten after the 7/5/26 update - the update paragraph at the top is the only place the current $400-$800/$4k-$20k tiers and 6/30/2026 expiration appear; the body bullet list below still shows the old single $500-for-$7k structure (not captured verbatim since it's superseded). Tiers/requirements above reflect the CURRENT structure as described in the 7/5/26 update text. ND added to availability but manifest/title only lists IL,IN,KY,MI,MN,WI - noting ND per body text.",
+  "_gold_provenance": "double base=A+adjudication"
+}

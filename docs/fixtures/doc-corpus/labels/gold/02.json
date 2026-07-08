@@ -1,0 +1,75 @@
+{
+  "id": 2,
+  "url": "https://www.doctorofcredit.com/targeted-u-s-bank-600-checking-bonus/",
+  "bank": "U.S. Bank",
+  "product": "Smartly Checking",
+  "availability_verbatim": "Nationwide (excludes NY & FL and any other state without a branch unless existing relationship)",
+  "bonus_total": 600,
+  "tiers": [
+    {
+      "threshold_min": 4000,
+      "threshold_max": 7999.99,
+      "threshold_kind": "dd_total",
+      "bonus": 300,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    },
+    {
+      "threshold_min": 8000,
+      "threshold_max": null,
+      "threshold_kind": "dd_total",
+      "bonus": 600,
+      "hold_days": null,
+      "deadline_days": 90,
+      "state_gate": null
+    }
+  ],
+  "expiration": "2026-08-31",
+  "requirements": [
+    {
+      "type": "direct_deposit_amt",
+      "amount": 4000,
+      "count": 2,
+      "deadline_days": 90,
+      "frequency": "total",
+      "verbatim": "Complete two or more direct deposits within 90 days totaling $4,000 to $7,999.99 to earn $300, or $8,000+ to earn $600"
+    },
+    {
+      "type": "online_banking",
+      "amount": null,
+      "count": null,
+      "deadline_days": 90,
+      "frequency": null,
+      "verbatim": "Enroll in U.S. Bank Mobile App or online banking within 90 days of opening"
+    },
+    {
+      "type": "deposit",
+      "amount": 25,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": null,
+      "verbatim": "Account must be funded with at least $25 within 60 days to prevent closure"
+    }
+  ],
+  "monthly_fee": 12,
+  "fee_waiver": "Waived with $1,500+ monthly direct deposits, $1,500 avg balance, small business checking ownership, eligible customer group, Smart Rewards Gold+, or Bank Smartly Visa Signature/State Farm card ownership",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": true,
+  "dd_amount": 4000,
+  "dd_count": 2,
+  "dd_timeframe_days": 90,
+  "bonus_post_min_days": null,
+  "bonus_post_max_days": 60,
+  "churn": {
+    "limit_language_verbatim": "Not eligible if you or any owner have an existing/had-in-last-12-months U.S. Bank consumer checking account or received other US Bank consumer checking bonus in past 12 months",
+    "wait_months": 12,
+    "anchor": null
+  },
+  "update_dates": [],
+  "superseded_values": [],
+  "notes": "This is a targeted (non-transferable) offer - eligibility shown only when logged in if targeted. Bonus credited within 60 days following completion of all requirements ('adjusted interest'). No update markers present in this post.",
+  "_gold_provenance": "single(A)"
+}

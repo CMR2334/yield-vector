@@ -17,9 +17,9 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-07, Round 67)
+## Current state (as of 2026-07-07, Round 68)
 
-- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08b`
+- `index.html` ≈ 13,000 lines, single-file PWA. `APP_VERSION` = `2026.07.08c`
   (shown in Settings → About & diagnostics; bump + tag `stable-YYYY-MM-DD` +
   CHANGELOG entry on each confirmed-good release). R56–R61 are all committed
   and deployed (R56 sync fix passed a 10-round Codex review before shipping;
@@ -42,6 +42,17 @@ grows past ~8 entries, keeping the newest 3–4 live.
   (`churn_snoozed_until`, timed or indefinite) across the Overview section, the
   card line, and the feed (suppressed while snoozed) — owner requests; both R66
   and R67 are working-tree changes pending the planner's review/commit.
+- **Parser-calibration run (R68, 2026-07-07):** calibrated R66's DoC
+  `parseDocPost` against a real, independently-labeled **31-post gold corpus**
+  (`docs/fixtures/doc-corpus/`) after the owner challenged whether the accuracy
+  stats were fabricated. Shipped tier-aware parsing (`docScanTiers` → `tiers[]` +
+  preview "select your tier" picker) and delta-aware stale-value demotion; field
+  accuracy **73.4→84.9%**, high-confidence-wrong **26→2**, calibration
+  un-inverted — all in `docs/fixtures/doc-corpus/verification-log.md` as **verbatim
+  machine output** (reproducible; `testDocParserRegressions()` = 12 in-app pins).
+  Steps 4a/4b are committed (`eedb027`, `0126e2a`); step 5 (this entry: corpus
+  artifacts + docs + `APP_VERSION` 2026.07.08c) is working-tree pending the
+  planner's review/commit.
 - **Field-box vertical rhythm (R61):** `.field-box` `gap` 6px (was 2px),
   vertical padding 10px (was 12px) — box height is unchanged for single-line
   fields, but the label now visibly separates from its value instead of
@@ -165,6 +176,70 @@ grows past ~8 entries, keeping the newest 3–4 live.
 ---
 
 ## Log (newest first)
+
+### 2026-07-07 — Session (claude-opus-4-8, /orchestrate — parser-calibration run)
+**Round 68 — DoC parser calibrated against a real 31-post corpus; tier-aware parsing + tier picker; v2026.07.08c**
+
+The overnight orchestrated run `2026-07-07-doc-parser-calibration` (planner fable,
+executor opus, worker sonnet). R66's `parseDocPost` had shipped validated against
+only 5 synthetic fixtures; the owner flagged two real failure classes — tiered
+offers (BofA "up to $2,500" where the true ladder is in the body) and stale
+values in living posts — and explicitly challenged whether our accuracy stats were
+fabricated. This run built the evidence to answer that.
+
+- **Corpus (do not re-harvest).** 31 real DoC posts (BofA tiered post + recent
+  bank-account-bonus posts, nationwide- or WI-eligible only) live as **facts** in
+  `docs/fixtures/doc-corpus/`: `manifest.json` (32 rows incl. the 1 body-confirmed
+  exclude), `excluded.json`, `labels/gold/NN.json` (31 gold labels) +
+  `_adjudication.md`, and `harness/` (the scoring scripts). **Post bodies are NOT
+  committed (copyright)** — re-hydrate with `harness/fetch-posts.js` (reads the
+  manifest) or Save-Page-As. A `.gitignore` makes an accidental `git add posts/` a
+  no-op.
+- **Gold labels = 3 independent labelers + adjudication.** 79.2% raw inter-rater
+  agreement on 6 double-labeled posts (worst post 16 @ 50%); conventions resolved
+  in `_adjudication.md` (tiered bonus = the max tier a careful churner reaches;
+  stacked/affiliate totals unified; availability drift honored, e.g. Wings/BMO now
+  nationwide despite stale title tags). Labels are fallible human reads — the
+  honest-limits note is in the verification-log + corpus README.
+- **Parser fixes (4a, commit `eedb027`).** `docScanTiers` (top-level `tiers[]` on
+  10 posts, BofA ladder complete, glance "up to" forced low + `tiered` flag);
+  `docDateSegments`+`docReconcileScalar` (newest-dated-segment-wins per FIELD,
+  undated fine print keeps confidence); `docIsCardFundingLabel` (kills the #1 bug —
+  "Credit card funding" glance row mis-read as funding, 11/11→0); keyed-phrase
+  `docChurnAnchor`; year-in-date guard (kills "2026→$825"). Loader helper names
+  are listed in `harness/parser-loader.js` `NEEDED[]` — **add new parser helpers
+  there or the brace-match extraction misses them.**
+- **Preview tier picker (4b, commit `0126e2a`).** ≥2 tiers → a radio "Select your
+  tier" group (none pre-selected, nothing auto-applies); `_docEffectiveFields`
+  resolves render+Apply; balance kind forces funding=threshold + keeps
+  maintain-balance row; `dd_total` kind wires the legacy DD model via
+  `_docWireDdModel`; user checkbox choices survive tier switches
+  (`_docUserChecks`/`resolveChecked`). Non-tiered pastes render byte-identical.
+- **Verbatim numbers (do-not-redo the residuals).** `verification-log.md` has the
+  machine output: accuracy **73.4→84.9%**, recall **57.8→70.7%**, high-conf-wrong
+  **26→2**, calibration un-inverted (high 96.7% > med 87.1%), fidelity 63/63,
+  regressions 12/12, parity 55/55. The final is **84.9% not 85.4%**: three later
+  same-segment/negation/segmentation fixes (from an adversarial Codex review)
+  corrected behavior that posts **[06]/[16] had been passing by ACCIDENT of a bug**
+  — recovering those 2 cells means reverting the correct fix, so the planner
+  accepted 84.9% (correctness over the ≥85 vanity threshold; every dangerous metric
+  held). **The two surviving high-conf-wrongs are intentional** and must not be
+  "fixed" naively: **[05]** glance "Monthly fees: None" (unconditional) vs a body $5
+  fee, and **[10]** a stale glance expiration vs a body app-window date — promoting
+  body over glance here over-fits and breaks fixtures 06/28 (the over-fit guard).
+- **Three Codex adjudications this run**, all reproduced + fixed: (1) reduction-verb
+  bonus ("lowered to $250") must beat the `Math.max` extractor — fixture 07 had
+  masked it via a different path; (2) DD negation-before-affirm ("Not required"); (3)
+  glance heading = a segment boundary resuming the undated base (BofA glance was
+  being swallowed into the oldest dated segment). Net −1 cell, on the record.
+- **Future sessions:** the gold corpus + `verification-log.md` + `harness/` are the
+  regression bed for any future `parseDocPost` change; `testDocParserRegressions()`
+  (12 pins, in-app) is the fast in-browser check. jsdom is a **verify-time** tool
+  (`npm i --no-save jsdom`), deliberately NOT a repo dependency.
+- **This step (5):** persisted the artifacts + docs + `APP_VERSION`→`2026.07.08c`;
+  backfilled the two stale CHANGELOG `_pending_` commit fields (churn→`6b101bd`,
+  bonusflow→`46c0c49..c2aa49d` pushed as `7c06e5f..c2aa49d`). Planner commits/pushes
+  after review — 4a/4b already committed; this step's files are working-tree.
 
 ### 2026-07-07 — Session (claude-opus-4-8, /orchestrate executor — churn tweaks)
 **Round 67 — Churn window shortened + churnability snooze**

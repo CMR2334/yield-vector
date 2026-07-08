@@ -1,0 +1,15 @@
+# Copyright boundary: the raw DoC post BODIES are never committed — only the
+# labels/facts/URLs in this directory are. Re-hydrate posts locally with
+# harness/fetch-posts.js (see README). This ignore makes an accidental `git add`
+# of the bodies (or of generated harness output) a no-op.
+posts/
+posts-local/
+
+# Generated harness output (regenerated on every run).
+harness/score-results.json
+harness/parity-results.json
+harness/taxonomy-results.json
+harness/rescore-results.json
+
+# jsdom, if ever installed here instead of --no-save.
+node_modules/

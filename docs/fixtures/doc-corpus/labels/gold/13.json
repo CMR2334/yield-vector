@@ -1,0 +1,66 @@
+{
+  "id": 13,
+  "url": "https://www.doctorofcredit.com/lighthouse-credit-union-100-referral-checking-bonus-direct-deposit-not-required/",
+  "bank": "Lighthouse Credit Union",
+  "product": "Personal Checking (Referral Bonus)",
+  "availability_verbatim": "Nationwide",
+  "bonus_total": 100,
+  "tiers": [],
+  "expiration": "2026-07-17",
+  "requirements": [
+    {
+      "type": "deposit",
+      "amount": 5,
+      "count": null,
+      "deadline_days": null,
+      "frequency": "total",
+      "verbatim": "Establish membership by opening a Lighthouse Savings account with a minimum $5 deposit"
+    },
+    {
+      "type": "debit_txns",
+      "amount": null,
+      "count": 5,
+      "deadline_days": 60,
+      "frequency": "total",
+      "verbatim": "Complete at least 5 debit card transactions (excluding ATM) within 60 days of account opening"
+    },
+    {
+      "type": "maintain_balance",
+      "amount": null,
+      "count": null,
+      "deadline_days": 60,
+      "frequency": null,
+      "verbatim": "Maintain the checking account in an open status for at least sixty (60) days"
+    },
+    {
+      "type": "custom",
+      "amount": null,
+      "count": null,
+      "deadline_days": null,
+      "frequency": null,
+      "verbatim": "Referrer must submit friend's email; friend must sign up using same email during promo period"
+    }
+  ],
+  "monthly_fee": null,
+  "fee_waiver": "Neither account has any monthly fees",
+  "early_termination_fee": null,
+  "etf_window_days": null,
+  "promo_code": null,
+  "dd_required": false,
+  "dd_amount": null,
+  "dd_count": null,
+  "dd_timeframe_days": null,
+  "bonus_post_max_days": null,
+  "bonus_post_min_days": null,
+  "churn": {
+    "limit_language_verbatim": "must not be a current Lighthouse Credit Union member and must not have been a member within the prior six (6) months",
+    "wait_months": 6,
+    "anchor": "account_closed"
+  },
+  "update_dates": [
+    "2026-06-17"
+  ],
+  "superseded_values": [],
+  "notes": "This is a referral bonus (both referrer and referred person each get $100 Virtual Visa Prepaid Card); standard non-promotional referral reward is $50. Referrer capped at $550/calendar year in total referral rewards. Author speculates EATF is unknown/likely none given no monthly fee. Rewards paid via email within ~4 weeks of all requirements being met.",
+  "_gold_provenance": "single(B)"
+}

@@ -1,0 +1,536 @@
+[
+  {
+    "id": "01",
+    "url": "https://www.doctorofcredit.com/bank-of-america-400-750-business-checking-bonus/",
+    "title": "Bank of America $400-$2,500 Business Checking Bonus",
+    "posted_date": "7/7/26",
+    "updated_dates_seen": [
+      "7/7/26"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": false,
+    "notes": "Nationwide; tiered business checking; $5k-$200k deposit -> $400-$2500"
+  },
+  {
+    "id": "02",
+    "url": "https://www.doctorofcredit.com/targeted-u-s-bank-600-checking-bonus/",
+    "title": "[Targeted] U.S. Bank $600 Checking Bonus",
+    "posted_date": null,
+    "updated_dates_seen": [],
+    "availability_raw": "Nationwide (excludes NY & FL and any other state without a branch unless you have an existing relationship )",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide excl NY/FL & states w/o branch; US Bank has WI branches"
+  },
+  {
+    "id": "03",
+    "url": "https://www.doctorofcredit.com/u-s-bank-400-900-business-checking-bonus/",
+    "title": "U.S. Bank $400-$1,500 Business Checking Bonus",
+    "posted_date": "7/6/26",
+    "updated_dates_seen": [
+      "7/6/26",
+      "09/27/2026",
+      "4/3/26",
+      "6/30/26",
+      "1/15/26",
+      "11/19/25"
+    ],
+    "availability_raw": "Nationwide (excludes NY & FL and any other state without a branch unless you have an existing relationship)",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "Nationwide excl NY/FL & states w/o branch; US Bank has WI branches"
+  },
+  {
+    "id": "04",
+    "url": "https://www.doctorofcredit.com/il-in-ky-mi-mn-wi-in-branch-only-old-national-bank-500-business-checking-bonus/",
+    "title": "[IL, IN, KY, MI, MN & WI, ND In Branch Only] Old National Bank $400-$800 Business Checking Bonus",
+    "posted_date": "7/5/26",
+    "updated_dates_seen": [
+      "7/5/26",
+      "6/30/2026",
+      "10/29/25",
+      "9/30/2025"
+    ],
+    "availability_raw": "IL, IN, KY, MI, MN & WI, In Branch Only",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": false,
+    "notes": "Availability IL,IN,KY,MI,MN,WI in-branch -> contains WI"
+  },
+  {
+    "id": "05",
+    "url": "https://www.doctorofcredit.com/u-s-eagle-federal-credit-union-90-referral-bonus/",
+    "title": "U.S. Eagle Federal Credit Union $90 Referral Bonus",
+    "posted_date": "7/4/26",
+    "updated_dates_seen": [
+      "7/4/26",
+      "12/31/26",
+      "6/30/26"
+    ],
+    "availability_raw": "Select areas in NM, but can join with a $10 donation",
+    "eligibility": "unclear",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Select areas in NM; joinable via $10 donation - national access unclear"
+  },
+  {
+    "id": "06",
+    "url": "https://www.doctorofcredit.com/wells-fargo-premier-2500-bank-or-investing-bonus-requires-250000-in-cash-assets/",
+    "title": "Wells Fargo Premier $2,500 Bank or Investing Bonus (Requires $250k In Cash/Assets)",
+    "posted_date": "7/2/26",
+    "updated_dates_seen": [
+      "7/2/26",
+      "4/15/26",
+      "7/14/2026",
+      "1/15/26",
+      "4/14/26"
+    ],
+    "availability_raw": "Nationwide, branch visit required",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide, branch visit required"
+  },
+  {
+    "id": "07",
+    "url": "https://www.doctorofcredit.com/young-americans-bank-150-checking-bonus-direct-deposit-not-required-under-22-years-old-only/",
+    "title": "Young Americans Bank $150 Checking Bonus, Direct Deposit Not Required (Under 22 Years Old Only)",
+    "posted_date": null,
+    "updated_dates_seen": [],
+    "availability_raw": "Opening page says it\u2019s open to \u2018Any legal resident of the United States under 22 yrs old.\u2019 Need to be at least 10 to open checking account.",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide (any US resident under 22); AGE-GATED under 22"
+  },
+  {
+    "id": "08",
+    "url": "https://www.doctorofcredit.com/navy-federal-credit-union-200-new-member-bonus/",
+    "title": "Navy Federal Credit Union $250 New Member Checking Bonus",
+    "posted_date": "7/2/26",
+    "updated_dates_seen": [
+      "7/2/26",
+      "5/28/26",
+      "6/30/26",
+      "01/01/2026",
+      "11/1/2025",
+      "11/1/2025"
+    ],
+    "availability_raw": "Nationwide but must be eligible for NFCU membership .",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide, requires NFCU membership eligibility"
+  },
+  {
+    "id": "09",
+    "url": "https://www.doctorofcredit.com/lake-michigan-credit-union-100-referral-checking-bonus/",
+    "title": "Lake Michigan Credit Union $250 Referral Checking Bonus",
+    "posted_date": "7/2/26",
+    "updated_dates_seen": [
+      "7/2/26"
+    ],
+    "availability_raw": "$5 donation to ALS works for anybody to join. Out of state requires appointment to open account.",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide via $5 ALS donation to join; out-of-state by appointment"
+  },
+  {
+    "id": "10",
+    "url": "https://www.doctorofcredit.com/existing-customers-ameriprise-400-checking-up-to-1000-savings-bonus/",
+    "title": "[Existing Customers] Ameriprise $400 Checking & Up To $1,000 Savings Bonus",
+    "posted_date": null,
+    "updated_dates_seen": [],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": false,
+    "notes": "Nationwide; existing Ameriprise customers"
+  },
+  {
+    "id": "11",
+    "url": "https://www.doctorofcredit.com/northeastern-pa-only-fidelity-bank-400-checking/",
+    "title": "[Northeastern PA only] Fidelity Bank $600/$500 Checking Bonus",
+    "posted_date": "6/20/26",
+    "updated_dates_seen": [
+      "6/20/26",
+      "10/29/25",
+      "1/27/25",
+      "8/25/25",
+      "1/15/22",
+      "9/19/20"
+    ],
+    "availability_raw": "Northeastern PA only",
+    "eligibility": "exclude",
+    "tiered": true,
+    "legacy18": false,
+    "notes": "Northeastern PA only - no WI"
+  },
+  {
+    "id": "12",
+    "url": "https://www.doctorofcredit.com/u-s-bank-450-100-checking-bonus/",
+    "title": "U.S. Bank $450 Checking Bonus",
+    "posted_date": "6/25/26",
+    "updated_dates_seen": [
+      "6/25/26",
+      "6/19/26",
+      "4/8/26",
+      "3/4/26",
+      "11/26/25"
+    ],
+    "availability_raw": "Nationwide (excludes NY & FL and any other state without a branch unless you have an existing relationship )",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide excl NY/FL & states w/o branch; US Bank has WI branches"
+  },
+  {
+    "id": "13",
+    "url": "https://www.doctorofcredit.com/lighthouse-credit-union-100-referral-checking-bonus-direct-deposit-not-required/",
+    "title": "Lighthouse Credit Union $100 Referral Checking Bonus - Direct Deposit Not Required",
+    "posted_date": "07/17/2026",
+    "updated_dates_seen": [
+      "07/17/2026",
+      "06/15/2026",
+      "07/17/2026",
+      "06/15/2026",
+      "07/17/2026"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide"
+  },
+  {
+    "id": "14",
+    "url": "https://www.doctorofcredit.com/connexus-credit-union-300-checking-bonus/",
+    "title": "Connexus Credit Union $250 Checking Bonus, Direct Deposit Not Required",
+    "posted_date": "7/1/26",
+    "updated_dates_seen": [
+      "7/1/26",
+      "07/19/2026",
+      "6/16/26",
+      "7/12/26",
+      "11/09/2025",
+      "09/08/2025"
+    ],
+    "availability_raw": "Anybody can join by joining the Connexus Association and paying a $5 one time donation. If you live in select counties in MN, IL, OH, WI then you can join for f",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide; anybody can join Connexus Association"
+  },
+  {
+    "id": "15",
+    "url": "https://www.doctorofcredit.com/bask-bank-20000-american-airlines-saving-bonus-50k-hold-for-90-days/",
+    "title": "Bask Bank 20,000 American Airlines Bonus",
+    "posted_date": "6/1/26",
+    "updated_dates_seen": [
+      "6/1/26",
+      "8/30/26"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": false,
+    "notes": "Nationwide"
+  },
+  {
+    "id": "16",
+    "url": "https://www.doctorofcredit.com/oh-mi-pa-ky-wv-huntington-bank-200-checking-promotion-no-direct-deposit-requirement/",
+    "title": "Huntington Bank $400-$600 Checking Promotion [AL, AR, FL, GA, LA, MS, MO, OK, TN, OH, MI, IN, PA, KY, WV, IL, CO, MN, SC, WI, NC, TX]",
+    "posted_date": "5/10/26",
+    "updated_dates_seen": [
+      "5/10/26"
+    ],
+    "availability_raw": "Illinois, Indiana, Kentucky, Michigan, Ohio, Pennsylvania, West Virginia (Illinois, Indiana, Kentucky, Michigan, Ohio, Pennsylvania or West Virginia for the $50",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "Availability lists WI (Wisconsin) among eligible states"
+  },
+  {
+    "id": "17",
+    "url": "https://www.doctorofcredit.com/mn-wi-royal-credit-union-200-checking-bonus/",
+    "title": "[Expired] [MN, WI] Royal Credit Union $400 Checking Bonus",
+    "posted_date": "5/17/26",
+    "updated_dates_seen": [
+      "5/17/26",
+      "11/15/25",
+      "10/20/24",
+      "9/7/24",
+      "10/19/24",
+      "8/18/24"
+    ],
+    "availability_raw": "MN, WI only",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "MN, WI only -> contains WI"
+  },
+  {
+    "id": "18",
+    "url": "https://www.doctorofcredit.com/il-in-mn-wi-only-associated-bank-500-checking-bonus/",
+    "title": "[IA, IL, IN, KS, MI, MN, MO, OH and WI only] Associated Bank $600 Checking Bonus",
+    "posted_date": "7/1/26",
+    "updated_dates_seen": [
+      "7/1/26",
+      "5/29/26",
+      "4/20/26",
+      "4/30/26",
+      "12/31/24",
+      "6/18/24"
+    ],
+    "availability_raw": "IA, IL, IN, KS, MI, MN, MO, OH and WI",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "IA,IL,IN,KS,MI,MN,MO,OH,WI -> contains WI"
+  },
+  {
+    "id": "19",
+    "url": "https://www.doctorofcredit.com/mn-wi-mi-fl-ga-wings-credit-union-300-checking-bonus/",
+    "title": "[Expired] [MN, WI, MI, WI, FL, GA] Wings Credit Union $500 Checking Bonus + $50 Referral",
+    "posted_date": "5/30/26",
+    "updated_dates_seen": [
+      "5/30/26",
+      "11/18/25",
+      "11/8/25",
+      "12/31/25",
+      "7/1/25",
+      "8/31/25"
+    ],
+    "availability_raw": "Nationwide with $5 donation",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Availability now Nationwide w/ $5 donation (title tag stale)"
+  },
+  {
+    "id": "20",
+    "url": "https://www.doctorofcredit.com/il-wi-mn-in-az-fl-ks-mo-bmo-harris-350-checking-300-savings-bonus/",
+    "title": "[AZ, CA, CO, FL, IA, IL, IN, MN, NM, NV, OR, UT, WA, WI] BMO Bank $400 Checking Bonus",
+    "posted_date": "2/2/26",
+    "updated_dates_seen": [
+      "2/2/26",
+      "9/10/25",
+      "5/7/25",
+      "2/4/25",
+      "11/3/24",
+      "9/10/24"
+    ],
+    "availability_raw": "Nationwide now",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Availability now Nationwide (title tag stale)"
+  },
+  {
+    "id": "21",
+    "url": "https://www.doctorofcredit.com/citi-300-checking-bonus/",
+    "title": "Citi $325/$475/$500/$1,500 Checking Bonus",
+    "posted_date": "5/29/26",
+    "updated_dates_seen": [
+      "5/29/26",
+      "4/14/26",
+      "10/26/26",
+      "1/13/26",
+      "04/13/26",
+      "1/6/26"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "Nationwide"
+  },
+  {
+    "id": "22",
+    "url": "https://www.doctorofcredit.com/chime-earn-10000-swagbucks-for-opening-a-new-account-receiving-a-direct-deposit/",
+    "title": "Chime: $350 For Opening A New Account & Receiving A Direct Deposit",
+    "posted_date": "3/27/26",
+    "updated_dates_seen": [
+      "3/27/26",
+      "2/27/26",
+      "2/16/26",
+      "1/18/25",
+      "4/2/25",
+      "3/13/25"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide"
+  },
+  {
+    "id": "23",
+    "url": "https://www.doctorofcredit.com/az-ca-fl-in-mi-nj-ny-oh-wi-flagstar-bank-250-350-checking-bonus/",
+    "title": "[Expired] [AZ, CA, FL, IN, MI, NJ, NY, OH, WI] Flagstar Bank $300-$500 Checking Bonus [Monthly Fee Increasing]",
+    "posted_date": "4/11/26",
+    "updated_dates_seen": [
+      "4/11/26",
+      "5/1/26",
+      "2/27/26",
+      "4/30/26",
+      "2/7/26",
+      "1/31/26"
+    ],
+    "availability_raw": "Arizona, California, Florida, Indiana, Michigan, New Jersey, New York, Ohio, and Wisconsin",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "AZ,CA,FL,IN,MI,NJ,NY,OH,WI... contains WI -> contains WI"
+  },
+  {
+    "id": "24",
+    "url": "https://www.doctorofcredit.com/mercury-fintech-500-business-checking-bonus/",
+    "title": "[Expired] Mercury (Fintech) $500 Business Checking Bonus",
+    "posted_date": null,
+    "updated_dates_seen": [],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide (fintech business checking)"
+  },
+  {
+    "id": "25",
+    "url": "https://www.doctorofcredit.com/american-express-business-checking-50000-membership-rewards-points-bonus/",
+    "title": "[YMMV] American Express Business Checking 50,000/70,000 Membership Rewards Points Bonus",
+    "posted_date": "4/9/26",
+    "updated_dates_seen": [
+      "4/9/26",
+      "7/31/2026",
+      "5/27/24",
+      "5/27/24",
+      "12/12/2023"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide (YMMV); points bonus"
+  },
+  {
+    "id": "26",
+    "url": "https://www.doctorofcredit.com/chase-business-total-checking-750-bonus-no-direct-deposit-required/",
+    "title": "Chase Business Total Checking Up To $1,500 (No Direct Deposit Required)",
+    "posted_date": "10/15/2026",
+    "updated_dates_seen": [
+      "10/15/2026",
+      "5/16/26",
+      "7/31/26",
+      "5/31/26",
+      "5/1/26"
+    ],
+    "availability_raw": "Nationwide \u2013 online or in branch",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "Nationwide - online or in branch"
+  },
+  {
+    "id": "27",
+    "url": "https://www.doctorofcredit.com/sofi-checking-5000-direct-deposit-required/",
+    "title": "SoFi Checking & Savings $400 + $415 Signup Bonus (Nationwide; Requires $5,000 Direct Deposit)",
+    "posted_date": "4/13/26",
+    "updated_dates_seen": [
+      "4/13/26",
+      "3/26/26",
+      "3/3/26",
+      "1/5/26",
+      "12/8/25",
+      "11/28/25"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide; requires $5000 direct deposit"
+  },
+  {
+    "id": "28",
+    "url": "https://www.doctorofcredit.com/wells-fargo-325-checking-bonus-available-online/",
+    "title": "Wells Fargo $400 Checking Bonus \u2013 Available Online",
+    "posted_date": "5/20/26",
+    "updated_dates_seen": [
+      "5/20/26",
+      "4/8/26",
+      "2/26/26"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide - available online"
+  },
+  {
+    "id": "29",
+    "url": "https://www.doctorofcredit.com/relay-financial-banking-300-signup-bonus-for-depositing-10000/",
+    "title": "Relay Financial Banking $500 Signup Bonus For Depositing $10,000",
+    "posted_date": "3/19/26",
+    "updated_dates_seen": [
+      "3/19/26"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide (fintech)"
+  },
+  {
+    "id": "30",
+    "url": "https://www.doctorofcredit.com/wells-fargo-400-825-business-checking-bonus/",
+    "title": "Wells Fargo $400/$825 Business Checking Bonus",
+    "posted_date": "5/7/26",
+    "updated_dates_seen": [
+      "5/7/26",
+      "12/5/25"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": true,
+    "legacy18": true,
+    "notes": "Nationwide"
+  },
+  {
+    "id": "31",
+    "url": "https://www.doctorofcredit.com/il-only-wintrust-bank-300-checking-bonus/",
+    "title": "[IL, FL, WI, IN, MI only] Wintrust Bank $500 Checking + $200 Savings",
+    "posted_date": "11/6/25",
+    "updated_dates_seen": [
+      "11/6/25",
+      "9/29/25",
+      "5/19/25",
+      "2/5/25",
+      "7/31/25",
+      "2/10/24"
+    ],
+    "availability_raw": "IL & FL, IN & WI only [ Branch locator ]. Must also be a U.S. Citizen No longer necessary",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "IL,FL,IN,WI,MI only -> contains WI"
+  },
+  {
+    "id": "32",
+    "url": "https://www.doctorofcredit.com/bask-bank-300-checking-bonus-live-from-11-1-25/",
+    "title": "[Expired] Bask Bank $300 Checking Bonus",
+    "posted_date": "11/3/25",
+    "updated_dates_seen": [
+      "11/3/25"
+    ],
+    "availability_raw": "Nationwide",
+    "eligibility": "include",
+    "tiered": false,
+    "legacy18": true,
+    "notes": "Nationwide"
+  }
+]
