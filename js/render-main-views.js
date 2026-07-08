@@ -537,6 +537,23 @@ function renderOfferCard(o) {
 /* ============================================================
    TIMELINE VIEW
    ============================================================ */
+// Contiguous index ranges of a projection where `pred(day)` holds, as {from, to}
+// (to = one-past the last matching index, or the final index for a run still open
+// at the horizon end). Unifies the timeline + hero-chart shortfall-band scans
+// (identical logic; the two call sites render the ranges differently).
+function projectionBands(proj, pred) {
+  const bands = [];
+  let bandStart = null;
+  for (let i = 0; i < proj.length; i++) {
+    if (pred(proj[i]) && bandStart === null) bandStart = i;
+    if ((!pred(proj[i]) || i === proj.length - 1) && bandStart !== null) {
+      bands.push({ from: bandStart, to: pred(proj[i]) ? i + 1 : i });
+      bandStart = null;
+    }
+  }
+  return bands;
+}
+
 function renderTimeline() {
   const settings = App.state.settings;
   const start = parseDate(settings.projectionStartDate) || TODAY;
@@ -585,16 +602,7 @@ function renderTimeline() {
 
   // Compute shortfall bands
   const proj = generateProjection(App.state);
-  const shortfallBands = [];
-  let bandStart = null;
-  for (let i = 0; i < proj.length; i++) {
-    const d = proj[i];
-    if (d.shortfall && bandStart === null) bandStart = i;
-    if ((!d.shortfall || i === proj.length - 1) && bandStart !== null) {
-      shortfallBands.push({ from: bandStart, to: d.shortfall ? i + 1 : i });
-      bandStart = null;
-    }
-  }
+  const shortfallBands = projectionBands(proj, d => d.shortfall);
 
   // Generate axis ticks (one per month within horizon)
   const ticks = [];
@@ -1457,18 +1465,11 @@ function renderHeroChart(svg) {
   areaPath += `L${xFor(proj.length - 1).toFixed(1)} ${(padT + innerH).toFixed(1)} L${padL} ${(padT + innerH).toFixed(1)} Z`;
 
   // Shortfall band rects
-  let shortfallBands = '';
-  let bandStart = null;
-  for (let i = 0; i < proj.length; i++) {
-    if (proj[i].shortfall && bandStart === null) bandStart = i;
-    if ((!proj[i].shortfall || i === proj.length - 1) && bandStart !== null) {
-      const endI = proj[i].shortfall ? i + 1 : i;
-      const x1 = xFor(bandStart);
-      const x2 = xFor(endI);
-      shortfallBands += `<rect x="${x1}" y="${padT}" width="${Math.max(2, x2 - x1)}" height="${innerH}" fill="rgba(239, 68, 68, 0.07)" />`;
-      bandStart = null;
-    }
-  }
+  const shortfallBands = projectionBands(proj, d => d.shortfall).map(b => {
+    const x1 = xFor(b.from);
+    const x2 = xFor(b.to);
+    return `<rect x="${x1}" y="${padT}" width="${Math.max(2, x2 - x1)}" height="${innerH}" fill="rgba(239, 68, 68, 0.07)" />`;
+  }).join('');
 
   // Markers: funding dates, withdrawal dates, deposit deadlines, events.
   // For direct-deposit offers, emit one fund marker per planned DD
