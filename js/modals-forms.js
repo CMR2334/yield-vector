@@ -6,7 +6,7 @@ import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFE
 import { debitDeadlineISO, reconcileClosedDate } from './offer-model.js';
 import { renderLifecycleInfo, renderPipelineStrip } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
-import { REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, offerDisplayLabel, makeRequirementRow, requirementDeadlineISO, syncRequirementsWithLegacy } from './requirements-templates.js';
+import { REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, offerDisplayLabel, makeRequirementRow, requirementDeadlineISO, schemaV2Defaults, syncRequirementsWithLegacy } from './requirements-templates.js';
 import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, PRE_ACCOUNT_SUB_STATUSES, SUB_STATUSES, SUB_STATUS_LABELS, defaultAccountForSub, normalizeOfferStatus } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
