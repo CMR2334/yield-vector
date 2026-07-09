@@ -17,7 +17,43 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 75)
+## Current state (as of 2026-07-09, Round 76)
+
+- **R76 (v2026.07.09f — PLAN-TAB UI + OPTIMIZE PANEL + APPLY; run 2026-07-08-planner-optimizer step 4, `4b4ca96..3361222`):**
+  The optimizer engine now has a UI. **(i) Nav merge** (`c8bd429`): Plan + Timeline
+  fold into ONE segmented **Plan** tab (Planner · Timeline · Optimize) → **4-tab nav**
+  (Home · Plan · Offers · Settings); Home/Overview stays chart-first (owner decision).
+  `renderPlanner` is now a segment wrapper over `renderPlannerBody`/`renderTimeline`/
+  `renderOptimizeSegment`; `App._planSegment` holds the active segment; `goto-timeline`
+  routes to the Plan tab's Timeline segment. **(ii) Optimize panel** (`97f9e68`): runs the
+  pure `optimizePlanner` on an injected snapshot (ddTransfer via the live resolver) and
+  renders the TRANSIENT proposal (`App.optimizerPlan`, never persisted) — sequence view,
+  capital-curve summary, per-offer op + unverified-churn provenance badge
+  (`last_edited`→template `savedAt`→unknown), binding-constraint hints, an alternatives
+  picker, and a "not in this plan" review. **(iii) applyOptimizerPlan** (`61d1dec`, P2-6):
+  ONE batched `App.update` — update (mutate in place, DD dates moved BY ID, `last_edited`,
+  `syncRequirementsWithLegacy`) / create (churn candidate → a REAL run-again offer via
+  `templateToOffer(offerToTemplate(source))` + overlaid schedule, fresh `uid`) + a one-shot
+  deep-clone undo (create↔delete). **Parity fix (P1-1):** a currently-included candidate the
+  optimizer DROPS is de-selected on apply, else the live curve diverged from the proposal
+  (verified: dropped-but-included Citi left live at −$30k vs the plan's +$20k). **(iv) Churn
+  re-check** (`92118b0`, P2-2): a "Re-check value" control opens the source offer's edit
+  modal (existing DoC Worker import path); a changed optimization input on save forces a
+  FULL re-run, unchanged just confirms. **(v) Hero "Today" label** (`a1babb6`): left-aligned
+  (`text-anchor=start`) at padL so it no longer clips the SVG left edge. **(vii) Codex
+  review** (`3361222`): 2 P2s fixed (broadened + backfill-robust re-check signature; explicit
+  empty-candidate sentinel so drafts don't pollute a run). **P0 side-fix (`1aed621`):**
+  `readOfferForm` called `schemaV2Defaults()` without importing it — **every offer add/edit
+  save was throwing** (pre-existing since the module split); one-line import fix, discovered
+  because the re-check routes through the modal save. APP_VERSION → **2026.07.09f** (import
+  map ×19 + runtime-status + sw.js; 0 strays). Battery green throughout: fidelity **67/67**,
+  parser pins **20/20**, p2b PASS, dd-matrix PASS, feasibility **5/5**, optimizer **22/22**
+  (11,806 evals / ~1,486ms). Preview E2E @ 09f: clean boot, 4-tab nav, all 3 segments,
+  run→proposal→apply→undo, churn materialization (hold anchor preserved), SW converged to
+  `yv-precache-2026.07.09f`, 380px no overflow. **Remaining: step 5** (release docs / CHANGELOG /
+  ARCHITECTURE, owner device-check, `stable-` tag). Open notes: `localRequirementDeadlineISO`
+  vs `requirementDeadlineISO` consolidation still deferred [low]; churn re-check is prompt-gated
+  through the modal (no inline auto-fetch — reuses the proven path by design).
 
 - **R75 (v2026.07.09e — OPTIMIZER ENGINE LANDED; run 2026-07-08-planner-optimizer step 3, commit `44b844a`):**
   Pure planner sequencer `js/optimizer-engine.js` (1,261 lines) + in-app `testOptimizerPins()` +
