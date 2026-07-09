@@ -6,6 +6,14 @@ chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
 ## Recently resolved
+- **Churn re-check one-click verify UX** — shipped v2026.07.09g: the Optimize
+  panel's control is now a one-tap **"Verify value"** that fetches the source
+  offer's stored DoC URL through the Worker WITHOUT opening the modal (the tap is
+  the prompt gate). A changed optimization input persists through the update path
+  and forces a full re-run ("values changed — plan re-optimized"); an unchanged
+  one flips the badge to "Verified today". No stored URL, a tiered ladder, or a
+  structural DD/requirements change falls back to the modal re-check flow. Reuses
+  the shared `docWorkerFetchParse` pipeline (extracted from the modal fetch).
 - **Hero "Today" axis label alignment** — shipped v2026.07.09f (`a1babb6`):
   left-aligned at `padL` (`text-anchor=start`) in the lowered axis row so it no
   longer clips the SVG left edge.
@@ -22,12 +30,6 @@ Priorities are owner-directed — nothing here self-dispatches.
   import Worker on save (parity with the Gist "Save & test"). Offered 2026-07-08.
 
 ## UI polish
-- **Churn re-check one-click verify UX** — owner-review candidate (flagged in the
-  optimizer step-4 report). The Optimize panel's "Re-check value" control opens the
-  source offer's edit modal (the proven DoC Worker import path); a changed
-  optimization input on save forces a full re-run. This is **modal-gated by
-  design** — heavier than a one-click inline auto-fetch, but reuses the trusted
-  path. Revisit only if the owner wants an inline verify affordance.
 - **Plan-tab stat color-system unification** — Plan's non-shortfall amber mirrors
   Overview via a documented hardcode; unify both tabs on one token if
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.

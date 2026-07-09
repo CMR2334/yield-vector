@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { TODAY, addDays, formatCurrency, formatDateDisplay, formatMoneyInput, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
 import { ddTransferConfig } from './dd-core.js';
 import { DatePicker } from './dd-widgets.js';
-import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImportParse, docImportToggle, toggleTemplatePicker, useTemplate } from './doc-import-templates.js';
+import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImportParse, docImportToggle, docWorkerFetchParse, _docHasTiers, toggleTemplatePicker, useTemplate } from './doc-import-templates.js';
 import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
 import { optimizePlanner } from './optimizer-engine.js';
 import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarget, readCommitmentForm, readEventForm, readOfferForm, removeDdRow, removeRequirementRow, removeSourceBank, showCommitmentModal, showEventModal, showOfferModal, showSyncHistoryModal } from './modals-forms.js';
@@ -184,7 +184,7 @@ function onClick(e) {
     case 'export-json': exportJson(); break;
     case 'reset-sample': if (confirm('Replace your data with sample data?')) { App.state = seedSampleData(App.defaultState()); App.save(); render(); toast('Sample data loaded'); } break;
     case 'clear-all': if (confirm('Erase ALL data? This cannot be undone.')) { App.state = App.defaultState(); clearPreV2Backup(); App.save(); render(); toast('All data cleared'); } break;
-    case 'restore-pre-v2': if (confirm('Restore the backup taken before the schema-v2 upgrade? This replaces your current data with that snapshot and reloads. Your current data is not separately kept, so export first if unsure.')) { restorePreV2Backup(); } break;
+    case 'restore-pre-v2': if (confirm('Restore the pre-v2 backup (taken before the schema-v2 upgrade)? This replaces your current data with that snapshot and reloads. Your current data is not separately kept, so export first if unsure.')) { restorePreV2Backup(); } break;
     case 'copy-diag': copyText(diagReportText()).then(() => toast('Diagnostics copied')).catch(() => toast('Could not copy — select the text manually', 'danger')); break;
     case 'clear-diag': clearDiagLog(); render(); toast('Diagnostics cleared'); break;
 
@@ -195,7 +195,7 @@ function onClick(e) {
     // Optimize segment — the constraint-based sequencer (engine proposal).
     case 'run-planner-optimizer': runPlannerOptimizerNow(); break;
     case 'clear-planner-optimizer':
-      App.optimizerPlan = null; App._optimizerAltIndex = 0; App._optimizerUndo = null; render();
+      App.optimizerPlan = null; App._optimizerAltIndex = 0; App._optimizerUndo = null; App._churnVerifiedToday = null; render();
       break;
     case 'select-optimizer-alt':
       App._optimizerAltIndex = Math.max(0, Number(target.dataset.altIndex) || 0); render();
@@ -203,6 +203,7 @@ function onClick(e) {
     case 'apply-optimizer-plan': applyOptimizerPlan(); break;
     case 'undo-optimizer-apply': undoOptimizerApply(); break;
     case 'recheck-churn': recheckChurnCandidate(target.dataset.id); break;
+    case 'verify-churn-value': verifyChurnValue(target.dataset.id, target); break;
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
 
@@ -518,6 +519,165 @@ function recheckChurnCandidate(sourceId) {
   toast(src.docUrl
     ? 'Re-check: use "Import from URL" to pull the latest terms, then Save'
     : 'Re-check: verify the terms and Save');
+}
+
+// Build a patch of the optimization inputs a DoC parse reliably produces AND
+// that can be applied headlessly, keyed by offer property name (the parser's
+// field keys mirror the offer schema for these). Only present, non-empty values
+// are included, so a field the post no longer states never blanks a stored
+// value. Numeric fields are coerced to Number so a re-fetch of an unchanged
+// value can't read as a change on a string-vs-number mismatch. Covers the
+// scalar capital model, the churn-eligibility fields (churn_wait_months /
+// churn_anchor — they drive the earliest re-run date), and a parsed debit
+// requirement. Tier ladders, offer-type/DD wiring, and new requirement ROWS are
+// deliberately NOT mapped here — they can't be applied headlessly (P2-3); a
+// change in those routes to the modal instead (see churnVerifyStructuralChange
+// and verifyChurnValue's tiered guard).
+function churnVerifyPatch(result, src) {
+  const patch = {};
+  const f = (result && result.fields) || {};
+  const val = (key) => (f[key] && f[key].value != null && f[key].value !== '') ? f[key].value : undefined;
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+  const NUMERIC = ['signupBonusAmount', 'requiredFundingAmount', 'daysFundsMustRemain', 'daysAfterSignupAllowedBeforeDeposit'];
+  const STRING = ['offerExpirationDate', 'lockStartsFrom'];
+  for (const k of NUMERIC) { const v = val(k); if (v !== undefined) { const n = num(v); if (n !== undefined) patch[k] = n; } }
+  for (const k of STRING) { const v = val(k); if (v !== undefined) patch[k] = String(v); }
+  const cw = val('churn_wait_months'); if (cw !== undefined) { const n = num(cw); if (n !== undefined) patch.churn_wait_months = n; }
+  const ca = val('churn_anchor'); if (ca !== undefined) patch.churn_anchor = String(ca);
+  const dc = val('debitCount');
+  if (dc !== undefined) {
+    const n = num(dc);
+    if (n !== undefined) {
+      const within = num(val('debitWithinDays'));
+      const cur = (src && src.debitRequirement) ? src.debitRequirement : {};
+      patch.debitRequirement = { required: true, count: n, withinDays: within !== undefined ? within : (cur.withinDays == null ? null : cur.withinDays), byDate: '', byDateLegacy: '' };
+    }
+  }
+  return patch;
+}
+
+// True DD posture of an offer — whether its capital model actually includes DDs.
+function _offerModelsDD(o) {
+  return !!(o && (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd'));
+}
+
+// Does a fresh parse indicate a STRUCTURAL change the headless verify can't
+// safely apply — an offer-type / DD-wiring flip or new spend/transaction
+// requirement rows? Those need the modal (which wires the DD model and req
+// rows), so a change there must route there rather than be silently certified
+// "unchanged" (P2). An absent `ddRequired` in the parse means "not stated" — no
+// signal, no defer. Returns a reason string or '' when nothing structural moved.
+function churnVerifyStructuralChange(result, src) {
+  const f = (result && result.fields) || {};
+  const has = (k) => f[k] && f[k].value != null && f[k].value !== '';
+  if (has('spendAmount') || has('transactionsCount')) return 'requirements';
+  if (f.ddRequired && f.ddRequired.value != null && f.ddRequired.value !== '') {
+    const parsedDD = f.ddRequired.value === true || f.ddRequired.value === 'true';
+    if (parsedDD !== _offerModelsDD(src)) return 'direct-deposit';
+  }
+  return '';
+}
+
+// One-click churn value verify (P2-2, inline — the owner-approved BACKLOG item).
+// Fetches the source offer's stored DoC URL through the Worker and re-parses it
+// WITHOUT opening the edit modal; the tap itself is the user gate. Then:
+//   • an optimization input changed → persist the refreshed scalars through the
+//     existing App.update path (last_edited stamp + syncRequirementsWithLegacy,
+//     mirroring modal-save semantics) and force a full optimizer re-run with a
+//     visible "values changed — plan re-optimized" note (P2-2 binding);
+//   • nothing material changed → flip the badge to "verified today" (no re-run);
+//   • no stored URL / no Worker / a tiered offer (can't headlessly pick a tier,
+//     P2-3) → fall back to the existing modal re-check flow.
+// Reuses the proven docWorkerFetchParse pipeline — parsing is never re-done here.
+// In-flight state shows a spinner on the badge; a Worker failure toasts and
+// leaves the badge unchanged.
+async function verifyChurnValue(sourceId, btn) {
+  const src = (App.state.offers || []).find(o => o && o.id === sourceId);
+  if (!src) return;
+  if (App._churnVerifyInFlight) return;   // ignore double-taps while one is running
+  // No usable source URL or no Worker configured → modal fallback.
+  const hasUrl = src.docUrl && /^https?:\/\//i.test(src.docUrl);
+  if (!hasUrl || !Sync.getDocWorkerUrl()) {
+    toast(hasUrl ? 'No Worker configured — opening the editor to verify' : 'No source URL — opening the editor to verify');
+    recheckChurnCandidate(sourceId);
+    return;
+  }
+
+  App._churnVerifyInFlight = sourceId;
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.classList.add('is-loading'); btn.textContent = 'Verifying…'; }
+  const restoreBtn = () => { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.classList.remove('is-loading'); btn.textContent = origLabel || 'Verify value'; } };
+
+  let result;
+  try {
+    result = await docWorkerFetchParse(src.docUrl);
+  } catch (e) {
+    if (typeof logError === 'function') logError(ErrCode.SYNC_PULL, e, 'verifyChurnValue');
+    App._churnVerifyInFlight = null;
+    restoreBtn();
+    toast('Verify failed — check the source URL or use the editor', 'danger');
+    return;
+  }
+  App._churnVerifyInFlight = null;
+
+  // A tiered ladder (now or already stored) can't be re-picked headlessly
+  // (P2-3: never auto-pick a tier) → hand off to the modal, which has the tier
+  // picker. The modal opens over the panel but doesn't re-render it, so restore
+  // the clicked button first (else it stays stuck disabled as "Verifying…").
+  const tieredContext = _docHasTiers(result) || (Array.isArray(src.tiers) && src.tiers.length >= 2);
+  if (tieredContext) {
+    restoreBtn();
+    toast('Tiered offer — opening the editor to choose a tier');
+    recheckChurnCandidate(sourceId);
+    return;
+  }
+
+  // A structural change (DD wiring / new requirement rows) can't be applied
+  // headlessly either — route to the modal so it's wired correctly (P2).
+  const structural = churnVerifyStructuralChange(result, src);
+  if (structural) {
+    restoreBtn();
+    toast(structural === 'direct-deposit'
+      ? 'Direct-deposit terms changed — opening the editor to update'
+      : 'New requirements found — opening the editor to update');
+    recheckChurnCandidate(sourceId);
+    return;
+  }
+
+  const patch = churnVerifyPatch(result, src);
+  if (!Object.keys(patch).length) {
+    // Fetched, but no readable optimization terms — don't claim "verified".
+    restoreBtn();
+    toast("Couldn't read the offer terms — value left unverified", 'danger');
+    return;
+  }
+
+  const after = Object.assign({}, src, patch);
+  const changed = optimizationInputSig(after) !== optimizationInputSig(src);
+  if (changed) {
+    App.update(s => {
+      const idx = s.offers.findIndex(o => o && o.id === sourceId);
+      if (idx >= 0) {
+        Object.assign(s.offers[idx], patch);
+        s.offers[idx].last_edited = new Date().toISOString();
+        if (typeof syncRequirementsWithLegacy === 'function') syncRequirementsWithLegacy(s.offers[idx]);
+      }
+    });
+    if (App.optimizerPlan) {
+      runPlannerOptimizerNow();            // its own toast reports the re-optimized plan
+      toast('Values changed — plan re-optimized');
+    } else {
+      render();
+      toast('Values changed — offer updated');
+    }
+  } else {
+    // Unchanged → flip THIS row's badge to "verified today" (transient, cleared
+    // on the next optimize run). No re-run needed — the plan is still valid.
+    if (!App._churnVerifiedToday) App._churnVerifiedToday = {};
+    App._churnVerifiedToday[sourceId] = isoDate(TODAY);
+    render();
+    toast('Verified — value unchanged as of today');
+  }
 }
 
 function deleteOffer(id) {
@@ -851,6 +1011,7 @@ function runPlannerOptimizerNow() {
   App.optimizerPlan = plan;
   App._optimizerAltIndex = 0;
   App._optimizerUndo = null;
+  App._churnVerifiedToday = null;   // fresh plan → stale "verified today" badges reset
   render();
   if (plan.tooMany) {
     toast(`Too many candidates (${plan.candidateCount}). Mark some as skipped or convert to commitments.`, 'danger');

@@ -31,6 +31,8 @@ const App = {
   _optimizerAltIndex: 0,   // which of plan.alternatives is focused for detail/apply
   _optimizerUndo: null,    // one-shot undo snapshot after an apply (set in step 4-iii)
   _optimizerRecheck: null, // in-flight churn re-check gate: { sourceId, before, hadPlan }
+  _churnVerifyInFlight: null, // sourceId of an in-flight one-click churn verify (spinner guard)
+  _churnVerifiedToday: null,  // { [sourceId]: todayISO } — one-click verifies that found no change (badge flip)
 
   init() {
     installErrorHandlers();

@@ -671,24 +671,15 @@ function _docSlugTitle(url) {
   } catch { return ''; }
 }
 
-async function docImportFetch() {
-  const urlInput = document.getElementById('doc-fetch-url');
-  const btn = document.getElementById('doc-fetch-btn');
-  const errBox = document.getElementById('doc-fetch-err');
-  const status = document.getElementById('doc-import-status');
-  const preview = document.getElementById('doc-import-preview');
-  const setErr = (msg) => { if (errBox) errBox.textContent = msg || ''; };
-  setErr('');
+// DOM-FREE Worker fetch + parse pipeline. Calls the configured Cloudflare
+// Worker for `url`, runs the returned article through the SAME parseDocPost +
+// name-recovery + grounded-LLM-merge path the modal fetch uses, and RETURNS the
+// parse result (or throws with a user-facing message). Factored out of
+// docImportFetch so the modal "Fetch & Parse" button AND the headless one-click
+// churn verify (verifyChurnValue) share one proven pipeline — no re-parsing.
+async function docWorkerFetchParse(url) {
   const workerUrl = Sync.getDocWorkerUrl();
-  if (!workerUrl) { setErr('No Worker URL configured — paste the post text instead.'); return; }
-  const url = urlInput ? urlInput.value.trim() : '';
-  if (!url) { setErr('Enter a Doctor of Credit post URL first.'); return; }
-
-  // Loading state on the button (label swap + busy flag). Restored in finally.
-  const origLabel = btn ? btn.textContent : '';
-  if (btn) { btn.setAttribute('aria-busy', 'true'); btn.disabled = true; btn.textContent = 'Fetching…'; }
-  if (status) { status.textContent = 'Fetching from Worker…'; status.className = 'doc-import-status muted'; }
-
+  if (!workerUrl) throw new Error('no-worker');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000); // 15s client budget
   try {
@@ -718,7 +709,7 @@ async function docImportFetch() {
     let result;
     try { result = parseDocPost(data.html); }
     catch (e) {
-      if (typeof logError === 'function') logError(ErrCode.PARSE, e, 'docImportFetch: parse');
+      if (typeof logError === 'function') logError(ErrCode.PARSE, e, 'docWorkerFetchParse: parse');
       throw new Error('could not parse the fetched post');
     }
     // BANK / OFFER NAME (R70): the post TITLE lives OUTSIDE entry-content, so the
@@ -745,6 +736,31 @@ async function docImportFetch() {
       }
     }
     _docMergeLlmFields(result, data.llm, data.html);
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function docImportFetch() {
+  const urlInput = document.getElementById('doc-fetch-url');
+  const btn = document.getElementById('doc-fetch-btn');
+  const errBox = document.getElementById('doc-fetch-err');
+  const status = document.getElementById('doc-import-status');
+  const preview = document.getElementById('doc-import-preview');
+  const setErr = (msg) => { if (errBox) errBox.textContent = msg || ''; };
+  setErr('');
+  if (!Sync.getDocWorkerUrl()) { setErr('No Worker URL configured — paste the post text instead.'); return; }
+  const url = urlInput ? urlInput.value.trim() : '';
+  if (!url) { setErr('Enter a Doctor of Credit post URL first.'); return; }
+
+  // Loading state on the button (label swap + busy flag). Restored in finally.
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.setAttribute('aria-busy', 'true'); btn.disabled = true; btn.textContent = 'Fetching…'; }
+  if (status) { status.textContent = 'Fetching from Worker…'; status.className = 'doc-import-status muted'; }
+
+  try {
+    const result = await docWorkerFetchParse(url);
     _docLastParse = result;
     _docTierSel = null;   // fresh fetch → no tier selection carried over
     _docUserChecks = {};
@@ -764,7 +780,6 @@ async function docImportFetch() {
     if (status) { status.textContent = ''; status.className = 'doc-import-status'; }
     if (preview) preview.innerHTML = '';
   } finally {
-    clearTimeout(timer);
     if (btn) { btn.removeAttribute('aria-busy'); btn.disabled = false; btn.textContent = origLabel || 'Fetch & Parse'; }
   }
 }
@@ -1171,4 +1186,4 @@ function deleteTemplate(tplId) {
   toast('Template deleted');
 }
 
-export { _docForm, _docEl, _docCapFirst, _docSetInput, _docCurrentInput, _docAddUserReq, _docAppendNote, _docWireDdModel, DOC_FIELD_MAP, DOC_FIELD_BY_KEY, _docConfDot, _docHasTiers, _docTierKindNoun, _docTierThresholdLabel, _docTierThresholdTargetDesc, _docTierReqDescriptor, _docEffectiveFields, _docFmtPct, _docRenderTierGroup, renderDocPreview, docTierSelect, docImportUpdateApplyCount, _docLastParse, _docTierSel, _docUserChecks, _docCaptureUserChecks, docImportParse, _docNormForQuote, _docMergeLlmFields, _docSlugTitle, docImportFetch, docImportApply, docImportClear, docImportToggle, DOC_TEST_EXPECT, testDocParser, testDocParserRegressions, templateRequirementChipText, templateRowChips, renderTemplateRow, renderTemplateList, renderTemplatePicker, toggleTemplatePicker, filterTemplateList, useTemplate, deleteTemplate };
+export { _docForm, _docEl, _docCapFirst, _docSetInput, _docCurrentInput, _docAddUserReq, _docAppendNote, _docWireDdModel, DOC_FIELD_MAP, DOC_FIELD_BY_KEY, _docConfDot, _docHasTiers, _docTierKindNoun, _docTierThresholdLabel, _docTierThresholdTargetDesc, _docTierReqDescriptor, _docEffectiveFields, _docFmtPct, _docRenderTierGroup, renderDocPreview, docTierSelect, docImportUpdateApplyCount, _docLastParse, _docTierSel, _docUserChecks, _docCaptureUserChecks, docImportParse, _docNormForQuote, _docMergeLlmFields, _docSlugTitle, docWorkerFetchParse, docImportFetch, docImportApply, docImportClear, docImportToggle, DOC_TEST_EXPECT, testDocParser, testDocParserRegressions, templateRequirementChipText, templateRowChips, renderTemplateRow, renderTemplateList, renderTemplatePicker, toggleTemplatePicker, filterTemplateList, useTemplate, deleteTemplate };

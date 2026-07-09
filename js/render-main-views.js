@@ -301,11 +301,17 @@ function renderOptSequenceRow(focused, topPlan, id) {
   const name = optimizerOfferName(topPlan, id);
   const dds = (s.directDeposits || []).filter(d => d && d.plannedDate);
   const derived = s.derived || {};
-  // Churn rows carry an unverified stored value — offer a prompt-gated Worker
-  // re-check (P2-2) against the source offer; a changed input forces a re-run.
+  // Churn rows carry an unverified stored value — offer a one-tap Worker verify
+  // (P2-2) against the source offer's stored DoC URL; a changed input forces a
+  // full re-run, an unchanged one flips this row to "verified today".
   const cand = isCreate ? (topPlan.candidates || []).find(c => c.id === id) : null;
   const srcId = cand ? cand.sourceOfferId : '';
   const hasUnverified = badges.some(b => b && b.kind === 'unverified-churn-value');
+  // A one-click verify that found no change marks the source verified-today
+  // (transient, cleared on the next optimize run): drop the unverified warn
+  // badge, show a green "Verified today" pill, and hide the control.
+  const verifiedToday = !!(srcId && App._churnVerifiedToday && App._churnVerifiedToday[srcId] === isoDate(TODAY));
+  const shownBadges = verifiedToday ? badges.filter(b => !(b && b.kind === 'unverified-churn-value')) : badges;
   return `
     <div class="opt-seq-row">
       <div class="opt-seq-top">
@@ -318,9 +324,11 @@ function renderOptSequenceRow(focused, topPlan, id) {
         ${dds.length ? `<span>${dds.length} DD${dds.length === 1 ? '' : 's'} from <strong>${formatDateMedium(parseDate(dds[0].plannedDate))}</strong></span>` : ''}
         ${derived.withdrawalEligible ? `<span>Free <strong>${formatDateMedium(parseDate(derived.withdrawalEligible))}</strong></span>` : ''}
       </div>
-      ${badges.length || (hasUnverified && srcId) ? `<div class="opt-seq-badges">
-        ${badges.map(renderOptBadge).join('')}
-        ${hasUnverified && srcId ? `<button class="opt-recheck" data-action="recheck-churn" data-id="${escapeAttr(srcId)}">Re-check value</button>` : ''}
+      ${shownBadges.length || (hasUnverified && srcId) || verifiedToday ? `<div class="opt-seq-badges">
+        ${shownBadges.map(renderOptBadge).join('')}
+        ${verifiedToday
+          ? `<span class="opt-badge ok" title="Re-checked against the source today — the stored value is current">Verified today</span>`
+          : (hasUnverified && srcId ? `<button class="opt-recheck" data-action="verify-churn-value" data-id="${escapeAttr(srcId)}">Verify value</button>` : '')}
       </div>` : ''}
     </div>`;
 }
@@ -1358,7 +1366,7 @@ function renderSettings() {
         </label>
         <button class="btn btn-secondary" data-action="reset-sample">Reset to sample data</button>
         <button class="btn btn-secondary btn-danger" data-action="clear-all">Clear all data</button>
-        ${hasPreV2Backup() ? `<button class="btn btn-outline-danger" data-action="restore-pre-v2">Restore pre-v2 backup</button>` : ''}
+        ${hasPreV2Backup() ? `<button class="btn btn-outline-danger" data-action="restore-pre-v2">Restore backup</button>` : ''}
       </div>
     </section>
 

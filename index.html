@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09f",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09f",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09f",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09f",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09f",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09f",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09f",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.09f",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09f",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09f",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09f",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09f",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.09f",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09f",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09f",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09f",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09f",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09f",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09f"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09g",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09g",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09g",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09g",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09g",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09g",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09g",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.09g",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09g",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09g",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09g",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09g",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.09g",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09g",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09g",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09g",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09g",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09g",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09g"
   }
 }
 </script>
@@ -2566,8 +2566,10 @@ table.data-table {
 .opt-seq-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .opt-badge { font-size: 11px; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--card-soft); border: 1px solid var(--border); color: var(--text-secondary); }
 .opt-badge.warn { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); color: #92400e; }
+.opt-badge.ok { background: var(--success-soft); border-color: rgba(16, 185, 129, 0.3); color: #047857; }
 .opt-recheck { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: var(--radius-pill); background: transparent; border: 1px solid var(--accent-mid); color: var(--accent); cursor: pointer; font-family: inherit; }
 .opt-recheck:hover { background: var(--accent-soft); }
+.opt-recheck:disabled, .opt-recheck.is-loading { opacity: 0.6; cursor: default; }
 .opt-hints { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-soft); }
 .opt-hints-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-tertiary); margin-bottom: 6px; }
 .opt-hint { font-size: 12px; color: var(--text-secondary); padding: 2px 0; }
@@ -2962,7 +2964,7 @@ document.addEventListener('click', (e) => {
 
 /* ============================================================
    SERVICE WORKER (Path B — offline capability; design §1 + contract §5d)
-   Registers ./sw.js, which precaches index.html + all 17 versioned module
+   Registers ./sw.js, which precaches index.html + all 19 versioned module
    URLs and serves them network-first with a cache fallback, so an offline
    reload boots the split app from Cache Storage.
 
