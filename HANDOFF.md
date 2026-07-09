@@ -32,6 +32,8 @@ grows past ~8 entries, keeping the newest 3–4 live.
   untouched. Owner confirmed v2026.07.09a good on his phone (zero errors) → tag
   `stable-2026-07-08` (at `7a25b1a`). Pre-split rollback = `checkpoint-2026-07-08-pre-modules`.
   Owner-directed follow-ons: Tier-3 backlog, `.card-soft` decision, layout mocks, the OPTIMIZER run.
+  **Durable cross-session backlog now lives in [docs/BACKLOG.md](docs/BACKLOG.md)** (added late 07-08;
+  dark mode from closed PR #2, .card-soft decision, Tier-3, optimizer future enhancements, etc.).
 
 - **R73 (v2026.07.09a RELEASED — split-run wrap, steps 4–5):** step-4 consolidations done under the
   deletion ratchet (Tier-1: 6 classes, net −20 lines, `.card-soft` retained on a live comment ref;
