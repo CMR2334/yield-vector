@@ -34,6 +34,19 @@ Priorities are owner-directed — nothing here self-dispatches.
   Overview via a documented hardcode; unify both tabs on one token if
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.
 
+## Cleanup (fold into the next app-touching batch)
+- **Inert "Optimizer max candidates" Settings input** — its last consumer (the
+  Planner combo picker) retired in v2026.07.09h; the live Optimize engine uses its
+  own default cap (20). Owner call: wire `settings.maxOptimizerCandidates` into
+  `buildOptimizerInput()` options (tightens live cap 20→15 at default) or DELETE
+  the input. Planner-side recommendation: delete. Context: R79 / Codex P2.
+- **Unreachable legacy `case 'timeline'` route** — `renderActiveView`
+  (js/render-shell-overview.js:180); `goto-timeline` now routes via
+  `App.setView('planner')` + segment. Pre-existing; re-verify then remove.
+- **`localRequirementDeadlineISO` → `requirementDeadlineISO` consolidation**
+  [low] — engine re-implements the formula (optimizer-engine.js:92 vs
+  requirements-templates.js:90); formula-faithful today, consolidate on next touch.
+
 ## Optimizer future enhancements (design doc: docs/assessments/2026-07-09-optimizer-design.md)
 - **Fee-netting objective** — v1 objective is GROSS bonus by design (§4).
 - **safeToCloseDate / ETF timing in completion tie-break** — excluded v1 (§4).
