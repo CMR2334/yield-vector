@@ -17,7 +17,45 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 78)
+## Current state (as of 2026-07-09, Round 79)
+
+- **R79 (v2026.07.09h — RETIRE the Plan tab's Planner segment; commits `08ab968` removal + release commit):**
+  Owner decision (2026-07-09, post-optimizer): the manual offer-toggle + brute-force **combo-feasibility
+  Planner** is subsumed by the Optimize engine, so the Plan tab is now **Timeline / Optimize** (no Planner),
+  defaulting to **Timeline** (monitoring-first; Home stays chart-first). **Audit first (blocking):** every
+  Planner widget/stat/handler was classified — ALL turned out (a) duplicated or (b) subsumed; **nothing
+  (c)-unique, so no migration was needed.** The include toggle already lives in the **shared `renderOfferCard`**,
+  which the **Offers-tab card view** (default, `renderOfferCardWithActions` + `.planner-grid`) renders with the
+  same checkbox → toggling offers in/out survives untouched. The three metric stats map to existing surfaces:
+  "Selected"/"Expected bonus" → Overview **"Selected bonuses"** card; "Lowest projected" → Overview **"Lowest
+  projected"** card; "Candidates" → Optimize **"Candidates"** metric. **Removed (each proven dead by re-grep,
+  one revertable commit `08ab968`):** `renderPlannerBody`, `renderOptimizerResults`, `currentlyAppliedComboMask`,
+  `renderComboCard` (+ exports); `run-optimizer`/`clear-optimizer`/`apply-combo` handlers, `runOptimizerNow`,
+  `applyOptimizerCombo` (+ exports); orphaned `runOptimizer`/`summarizeProjection` imports + a stale
+  `applyOptimizerCombo` comment ref in `projection-optimizer.js`; `App.optimizer` combo state; `_planSegment`
+  default `'planner'→'timeline'` with **stale persisted `'planner'` coerced to `'timeline'`** in `renderPlanner`;
+  CSS `.combo-card/.combo-header/.combo-offers/.recommended-tag/.combo-grid/.planner-add-btn`. **KEPT (still
+  used — do not confuse):** the `runOptimizer` *engine* fn (feasibility pins 5/5 import it directly); `.planner-grid`
+  (Offers tab); `.optimizer-bar`/`.optimizer-summary`/`.metric` AND `.combo-rank`/`.combo-bonus`/`.combo-meta`
+  (the Optimize plan card reuses these — I over-deleted then **restored** the three `.combo-*` rules after the
+  E2E; verified `.combo-bonus` computes 22px/700/#10b981). **APP_VERSION → 2026.07.09h** (19 import-map `?v=`
+  + `js/runtime-status.js` + `sw.js` precache `yv-precache-2026.07.09h`; **0 strays**, all `2026.07.09*` consistent).
+  **Battery green (unchanged pins):** node --check ALL PASS, fidelity **67/67**, parser **20/20**, p2b PASS,
+  dd-matrix ALL PASS, feasibility **5/5**, optimizer **22/22** (11,806 evals). **Preview E2E** (port 8765, 7-offer
+  sample): 4-tab nav; Plan defaults to Timeline; segment control is exactly Timeline/Optimize (no Planner btn);
+  stale `'planner'`→Timeline coercion verified; Optimize run → valid **$6,000** plan / 8 options / plan card +
+  restored `.combo-*` styling intact; Offers-tab card view shows 7 cards WITH the include toggle; **380px no
+  overflow** on Overview/Timeline/Optimize/Offers; version reads **2026.07.09h** live; **zero console errors**.
+  **Codex review-after** (`--scope branch --base origin/main`): **1 finding, P2** (not critical/high) — the
+  Settings **"Optimizer max candidates"** control (default 15) is now inert because `buildOptimizerInput` sends
+  only `options:{includeChurn:true}` and the live Optimize engine falls back to its default cap 20; the retired
+  `runOptimizer` was its last UI consumer. **Left as an Open issue** (pre-existing forwarding gap my change
+  merely exposes; wiring it in vs. removing the control is an owner design call — see below). No critical/high
+  to fix. Owner-owned dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`)
+  untouched — explicit-path `git add` only. **Open issue (owner):** either forward `settings.maxOptimizerCandidates`
+  into `buildOptimizerInput().options` (makes the control affect Optimize) or remove the now-inert Settings input;
+  also the legacy `case 'timeline'` view route in `renderActiveView` appears unreachable (goto-timeline routes via
+  the Plan tab segment) — candidate cleanup. **Remaining (owner gate): device-check v2026.07.09h.**
 
 - **R78 (v2026.07.09g — standalone owner batch: one-click churn Verify + restore-button aesthetic; commits `727f87a`, `c7a5a65`):**
   Owner-approved follow-on batch on top of the completed optimizer run (v2026.07.09f). **(1) Restore-backup
