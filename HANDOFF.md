@@ -17,7 +17,42 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 77)
+## Current state (as of 2026-07-09, Round 78)
+
+- **R78 (v2026.07.09g — standalone owner batch: one-click churn Verify + restore-button aesthetic; commits `727f87a`, `c7a5a65`):**
+  Owner-approved follow-on batch on top of the completed optimizer run (v2026.07.09f). **(1) Restore-backup
+  button aesthetic** (owner: the label "fills" the button): shortened the Settings restore label
+  "Restore pre-v2 backup" → **"Restore backup"** (Data section, `js/render-main-views.js`) so it breathes in
+  its `.btn-grid` cell (~20px side whitespace, no 380px overflow); the `restore-pre-v2` confirm dialog now
+  carries the explicit "pre-v2" wording. Action untouched. **(2) One-click churn Verify** (owner-approved
+  BACKLOG item / amendment P2-2): the Optimize panel's churn control is now a one-tap **"Verify value"**
+  (`verify-churn-value` → `verifyChurnValue` in `js/events-actions-data.js`) that fetches the source offer's
+  stored DoC URL through the Worker WITHOUT opening the modal (the tap is the prompt gate). Extracted a shared
+  DOM-free **`docWorkerFetchParse(url)`** out of `docImportFetch` (`js/doc-import-templates.js`) so the modal
+  fetch AND the headless verify reuse ONE proven fetch+parse pipeline — parsing is never re-implemented.
+  Behavior: a changed optimization input persists through `App.update` (last_edited + `syncRequirementsWithLegacy`)
+  and forces a full re-run ("values changed — plan re-optimized"); an unchanged one flips the badge to
+  **"Verified today"** (transient `App._churnVerifiedToday`, cleared on the next run / clear-plan). No stored
+  URL, no Worker, a tiered ladder, or a structural DD/requirements change → falls back to the existing modal
+  re-check flow (`recheckChurnCandidate`). In-flight spinner on the badge (`_churnVerifyInFlight`); Worker
+  failure toasts and leaves the badge unchanged (`logError` E_SYNC_PULL). `churnVerifyPatch` maps the
+  safely-headless inputs (scalars + churn_wait/anchor + debit); `churnVerifyStructuralChange` routes
+  offer-type/DD + new-requirement changes to the modal. **(3) Rider:** the index.html bootstrap comment
+  "17 versioned module URLs" → **19**. APP_VERSION → **2026.07.09g** (19 import-map `?v=` + `js/runtime-status.js`
+  + `sw.js` precache `yv-precache-2026.07.09g`; 0 strays). **Battery green:** fidelity **67/67**, parser pins
+  **20/20**, p2b PASS, dd-matrix ALL PASS, feasibility **5/5**, optimizer **22/22** (11,806 evals / ~1.49s).
+  **Preview E2E** on the owner's real-but-stale local copy (7 offers, sync guard active, NOTHING persisted —
+  state restored byte-identical, 4995 bytes / 2 keys): "Restore backup" @380px no overflow; one-click verify
+  driven through EVERY path via a synthetic churn-eligible offer + a stubbed Worker returning real committed
+  fixtures 01/03 — in-flight spinner, CHANGED→persist+re-run (incl. churn_wait 12→24 flipping eligibility so
+  the re-run correctly drops it), UNCHANGED→"Verified today" badge + no re-run, Worker-failure→toast/badge
+  unchanged, no-URL/tiered/structural→modal fallback with the button restored; the modal Fetch&Parse still
+  works post-refactor (16 fields). **Codex review-after:** 2 findings, both fixed — P2 (the verify
+  compare/persist now covers churn-eligibility + debit; structural DD/requirement changes defer to the modal)
+  + P3 (restore the verify button before the modal-defer so it can't stick as "Verifying…"). `docs/BACKLOG.md`:
+  one-click-verify item moved to Recently-resolved. Owner-owned dirty paths (`.claude/settings.json`,
+  `AGENTS.md`, `CLAUDE.md`, `.codex/hooks.json`) untouched — explicit-path `git add` only. **Remaining (owner
+  gate): device-check v2026.07.09g.**
 
 - **R77 (DOCS + VERIFY + release prep — DOCS-ONLY, no version bump; run 2026-07-08-planner-optimizer step 5):**
   Release documentation round for the optimizer (v2026.07.09f stays — docs aren't precached, protocol
