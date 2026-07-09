@@ -301,6 +301,11 @@ function renderOptSequenceRow(focused, topPlan, id) {
   const name = optimizerOfferName(topPlan, id);
   const dds = (s.directDeposits || []).filter(d => d && d.plannedDate);
   const derived = s.derived || {};
+  // Churn rows carry an unverified stored value — offer a prompt-gated Worker
+  // re-check (P2-2) against the source offer; a changed input forces a re-run.
+  const cand = isCreate ? (topPlan.candidates || []).find(c => c.id === id) : null;
+  const srcId = cand ? cand.sourceOfferId : '';
+  const hasUnverified = badges.some(b => b && b.kind === 'unverified-churn-value');
   return `
     <div class="opt-seq-row">
       <div class="opt-seq-top">
@@ -313,7 +318,10 @@ function renderOptSequenceRow(focused, topPlan, id) {
         ${dds.length ? `<span>${dds.length} DD${dds.length === 1 ? '' : 's'} from <strong>${formatDateMedium(parseDate(dds[0].plannedDate))}</strong></span>` : ''}
         ${derived.withdrawalEligible ? `<span>Free <strong>${formatDateMedium(parseDate(derived.withdrawalEligible))}</strong></span>` : ''}
       </div>
-      ${badges.length ? `<div class="opt-seq-badges">${badges.map(renderOptBadge).join('')}</div>` : ''}
+      ${badges.length || (hasUnverified && srcId) ? `<div class="opt-seq-badges">
+        ${badges.map(renderOptBadge).join('')}
+        ${hasUnverified && srcId ? `<button class="opt-recheck" data-action="recheck-churn" data-id="${escapeAttr(srcId)}">Re-check value</button>` : ''}
+      </div>` : ''}
     </div>`;
 }
 

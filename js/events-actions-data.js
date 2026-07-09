@@ -133,8 +133,10 @@ function onClick(e) {
   const id = target.dataset.id;
 
   switch (action) {
-    case 'add-offer': showOfferModal(); break;
-    case 'edit-offer': showOfferModal(id); break;
+    // Any add/edit that isn't the in-flight churn re-check clears the stale
+    // gate so a later unrelated save can't spuriously re-run the optimizer.
+    case 'add-offer': App._optimizerRecheck = null; showOfferModal(); break;
+    case 'edit-offer': if (App._optimizerRecheck && App._optimizerRecheck.sourceId !== id) App._optimizerRecheck = null; showOfferModal(id); break;
     case 'duplicate-offer': duplicateOffer(id); break;
     case 'convert-offer': convertOffer(id); break;
     case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
@@ -164,7 +166,7 @@ function onClick(e) {
     case 'churn-snooze': churnSnooze(id, target.dataset.snooze); break;
     case 'churn-unsnooze': churnUnsnooze(id); break;
     case 'churn-reveal-toggle': toggleChurnSnoozedReveal(target); break;
-    case 'close-modal': closeModal(); break;
+    case 'close-modal': App._optimizerRecheck = null; closeModal(); break;
 
     case 'add-commitment': showCommitmentModal(); break;
     case 'edit-commitment': showCommitmentModal(id); break;
@@ -200,6 +202,7 @@ function onClick(e) {
       break;
     case 'apply-optimizer-plan': applyOptimizerPlan(); break;
     case 'undo-optimizer-apply': undoOptimizerApply(); break;
+    case 'recheck-churn': recheckChurnCandidate(target.dataset.id); break;
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
 
@@ -437,6 +440,54 @@ function saveOfferFromForm(id, isEdit) {
   closeModal();
   toast(isEdit ? 'Offer updated' : 'Offer added');
   if (savedTemplate) toast('Saved to templates');
+  // P2-2 re-check gate: a churn re-check that CHANGES any optimization input
+  // (bonus, funding, expiry, hold anchor/duration, DD requirement, tiers) must
+  // trigger a FULL re-run of the optimizer — never a silent badge/annotation
+  // update. Unchanged terms just confirm the value. Consumed one-shot.
+  const recheck = App._optimizerRecheck;
+  if (recheck && recheck.sourceId === id) {
+    App._optimizerRecheck = null;
+    if (optimizationInputSig(offer) !== recheck.before) {
+      if (recheck.hadPlan) runPlannerOptimizerNow();  // its toast reports the new plan
+      else toast('Terms updated');
+    } else {
+      toast('Re-checked — terms unchanged');
+    }
+  }
+}
+
+// Signature of the offer fields the optimizer's capital model + qualifier read.
+// Any change here between a churn re-check's open and save means the stored
+// value moved → the plan must re-run (P2-2).
+function optimizationInputSig(o) {
+  if (!o) return '';
+  const tiers = Array.isArray(o.tiers)
+    ? o.tiers.map(t => `${t && t.threshold != null ? t.threshold : ''}:${t && t.bonus != null ? t.bonus : ''}`).join('|')
+    : '';
+  return JSON.stringify({
+    bonus: o.signupBonusAmount == null ? null : o.signupBonusAmount,
+    funding: o.requiredFundingAmount == null ? null : o.requiredFundingAmount,
+    expiry: o.offerExpirationDate || '',
+    anchor: o.lockStartsFrom || '',
+    hold: o.daysFundsMustRemain == null ? null : o.daysFundsMustRemain,
+    depositBy: o.daysAfterSignupAllowedBeforeDeposit == null ? null : o.daysAfterSignupAllowedBeforeDeposit,
+    dd: o.ddRequirement ? JSON.stringify(o.ddRequirement) : '',
+    tiers
+  });
+}
+
+// Prompt-gated churn re-check (P2-2). Opens the source offer's edit modal so
+// the user can pull the latest terms via the existing DoC "Import from URL"
+// Worker path (or verify manually), then Save. The save-gate above re-runs the
+// optimizer iff an optimization input actually changed.
+function recheckChurnCandidate(sourceId) {
+  const src = (App.state.offers || []).find(o => o && o.id === sourceId);
+  if (!src) return;
+  App._optimizerRecheck = { sourceId, before: optimizationInputSig(src), hadPlan: !!App.optimizerPlan };
+  showOfferModal(sourceId);
+  toast(src.docUrl
+    ? 'Re-check: use "Import from URL" to pull the latest terms, then Save'
+    : 'Re-check: verify the terms and Save');
 }
 
 function deleteOffer(id) {

@@ -30,6 +30,7 @@ const App = {
   optimizerPlan: null,
   _optimizerAltIndex: 0,   // which of plan.alternatives is focused for detail/apply
   _optimizerUndo: null,    // one-shot undo snapshot after an apply (set in step 4-iii)
+  _optimizerRecheck: null, // in-flight churn re-check gate: { sourceId, before, hadPlan }
 
   init() {
     installErrorHandlers();
