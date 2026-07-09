@@ -456,23 +456,53 @@ function saveOfferFromForm(id, isEdit) {
   }
 }
 
-// Signature of the offer fields the optimizer's capital model + qualifier read.
-// Any change here between a churn re-check's open and save means the stored
-// value moved → the plan must re-run (P2-2).
+// Signature of EVERY offer field the optimizer's capital model, qualifier, or
+// churn-candidate synthesis reads. Any change between a churn re-check's open
+// and save means an input the plan depends on moved → the plan must re-run
+// (P2-2). Kept deliberately broad (capital + qualification + churn-eligibility)
+// so a change to any of them can't be misreported as "unchanged".
 function optimizationInputSig(o) {
   if (!o) return '';
   const tiers = Array.isArray(o.tiers)
     ? o.tiers.map(t => `${t && t.threshold != null ? t.threshold : ''}:${t && t.bonus != null ? t.bonus : ''}`).join('|')
     : '';
+  const reqs = Array.isArray(o.requirements)
+    ? o.requirements.filter(r => r && r.source === 'user')
+        .map(r => `${r.type || ''}:${r.amount ?? ''}:${r.count ?? ''}:${r.deadline_days ?? ''}:${r.frequency || ''}:${r.hold_days ?? ''}`)
+        .join('|')
+    : '';
+  // Coerce fields to the SAME effective defaults the modal-save path produces,
+  // so re-checking a pre-v2 offer WITHOUT editing it never reads as a spurious
+  // change: offerType → 'new-funds-held'; an absent/false debitRequirement →
+  // 'none'; and ddRequirement only counts for DD-family offers (the modal
+  // backfills a default DD config even on held offers, but the optimizer only
+  // reads it for direct-deposit / held-and-dd).
+  const offerType = o.offerType || 'new-funds-held';
+  const debit = (o.debitRequirement && o.debitRequirement.required)
+    ? `req:${o.debitRequirement.count ?? ''}:${o.debitRequirement.withinDays ?? ''}:${o.debitRequirement.byDate || ''}:${o.debitRequirement.byDateLegacy || ''}`
+    : 'none';
+  const dd = (offerType === 'direct-deposit' || offerType === 'held-and-dd') && o.ddRequirement
+    ? JSON.stringify(o.ddRequirement)
+    : 'n/a';
   return JSON.stringify({
+    // Capital model
+    offerType,
     bonus: o.signupBonusAmount == null ? null : o.signupBonusAmount,
     funding: o.requiredFundingAmount == null ? null : o.requiredFundingAmount,
     expiry: o.offerExpirationDate || '',
     anchor: o.lockStartsFrom || '',
     hold: o.daysFundsMustRemain == null ? null : o.daysFundsMustRemain,
     depositBy: o.daysAfterSignupAllowedBeforeDeposit == null ? null : o.daysAfterSignupAllowedBeforeDeposit,
-    dd: o.ddRequirement ? JSON.stringify(o.ddRequirement) : '',
-    tiers
+    // Qualification
+    dd,
+    debit,
+    reqs,
+    tiers,
+    // Churn eligibility (drives the earliest schedulable date for a re-run)
+    churnWait: o.churn_wait_months == null ? null : o.churn_wait_months,
+    churnAnchor: o.churn_anchor || '',
+    bonusReceived: o.bonus_received_date || '',
+    closed: o.closed_date || ''
   });
 }
 
@@ -783,6 +813,13 @@ function buildOptimizerInput() {
   const candidateIds = (s.offers || [])
     .filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o))
     .map(o => o.id);
+  // The engine treats an EMPTY candidateIds as "no explicit filter" and falls
+  // back to ALL hypothetical-status offers — including half-finished drafts,
+  // which would pollute the run (spurious infeasible plan or a too-many block).
+  // When we have no complete prospects, pass a non-matching sentinel so the
+  // update-candidate set stays explicitly empty; churn synthesis is independent
+  // of candidateIds and still runs.
+  if (candidateIds.length === 0) candidateIds.push('__yv_no_update_candidates__');
   return {
     today: isoDate(TODAY),
     settings: {
