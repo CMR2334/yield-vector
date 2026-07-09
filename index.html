@@ -26,23 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09d",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09d",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09d",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09d",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09d",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09d",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.09d",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09d",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09d",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09d",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.09d",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09d",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09d",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09d",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09d",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09d",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09d"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09e",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09e",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09e",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09e",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09e",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09e",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09e",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.09e",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09e",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09e",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09e",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09e",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.09e",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09e",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09e",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09e",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09e",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09e",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09e"
   }
 }
 </script>
@@ -442,8 +444,6 @@ a { color: inherit; text-decoration: none; }
   padding: var(--space-6);
   box-shadow: var(--shadow-card);
 }
-
-.card-soft { background: var(--card-soft); border: 1px solid var(--border-soft); box-shadow: none; }
 
 .card-header {
   display: flex;
@@ -1977,8 +1977,8 @@ a { color: inherit; text-decoration: none; }
    color picker keep their existing look (per AGENTS.md: don't touch
    what isn't broken, and those controls don't map to a "label above
    value" shape). Uses the app's own --card-soft/--border-soft "recessed
-   panel" pairing already established by .card-soft/.ddm-panel/table
-   headers — NOT the reference screenshot's literal colors. */
+   panel" pairing already established by .ddm-panel/table styling — NOT
+   the reference screenshot's literal colors. */
 .field-box {
   display: flex;
   flex-direction: column;
@@ -2830,8 +2830,9 @@ import { Sync } from './js/sync-pwa.js';
 import { render } from './js/render-shell-overview.js';
 import { showOfferModal } from './js/modals-forms.js';
 import { testDocParser, testDocParserRegressions } from './js/doc-import-templates.js';
-/* Side-effect imports — directly root the remaining 11 modules so the full
-   17-module graph is fetched from the HTML entry (not only transitively),
+import { testOptimizerPins } from './js/optimizer-engine.js';
+/* Side-effect imports — directly root the remaining modules so the full
+   19-module graph is fetched from the HTML entry (not only transitively),
    keeping the service-worker precache and the offline module set in lockstep
    with the import map. Module top levels are pure declarations (design §4),
    so evaluation order is behaviour-neutral. */
@@ -2839,6 +2840,7 @@ import './js/runtime-status.js';
 import './js/requirements-templates.js';
 import './js/migrations-catalogs.js';
 import './js/date-format-core.js';
+import './js/dd-core.js';
 import './js/dd-widgets.js';
 import './js/offer-model.js';
 import { testFeasibilityPins } from './js/projection-optimizer.js';
@@ -2856,12 +2858,14 @@ import './js/events-actions-data.js';
    ============================================================ */
 window.App = App;
 window.Sync = Sync;
-window.YieldVector = { App, Sync, parseDocPost, testDocParser, testDocParserRegressions, testFeasibilityPins, render };
+window.YieldVector = { App, Sync, parseDocPost, testDocParser, testDocParserRegressions, testFeasibilityPins, testOptimizerPins, render };
 // Documented bare-console workflow (comments :11825/:11890, doc-samples/README.md:176): keep these callable un-namespaced from DevTools.
 window.testDocParser = testDocParser;
 window.testDocParserRegressions = testDocParserRegressions;
 // Combo-feasibility hotfix pins (C2/C3/C-template) — console + Node harness callable.
 window.testFeasibilityPins = testFeasibilityPins;
+// Planner optimizer pins — console + Node harness callable.
+window.testOptimizerPins = testOptimizerPins;
 
 /* ============================================================
    INIT

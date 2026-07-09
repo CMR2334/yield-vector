@@ -6,7 +6,7 @@
    + run 2026-07-08-module-split-efficiency §5(d).
 
    Behaviour:
-   • Precache = app shell (index.html) + all 17 versioned ES-module URLs, in a
+   • Precache = app shell (index.html) + all 19 versioned ES-module URLs, in a
      cache NAMED by APP_VERSION. `activate` deletes every other-versioned cache.
    • Same-origin GET → network-first: always try the network first (preserves
      the app's always-fresh behaviour — the whole reason the single-file design
@@ -24,15 +24,15 @@
 */
 'use strict';
 
-const APP_VERSION = '2026.07.09d';
+const APP_VERSION = '2026.07.09e';
 const CACHE_PREFIX = 'yv-precache-';
 const CACHE_NAME = CACHE_PREFIX + APP_VERSION;
 
-/* The 17 split modules — kept in lockstep with the <head> import map. */
+/* The 19 split modules — kept in lockstep with the <head> import map. */
 const MODULES = [
-  'app-state', 'date-format-core', 'dd-widgets', 'doc-import-templates',
+  'app-state', 'date-format-core', 'dd-core', 'dd-widgets', 'doc-import-templates',
   'doc-parser', 'events-actions-data', 'migrations-catalogs', 'modals-forms',
-  'offer-model', 'projection-optimizer', 'reminders', 'render-main-views',
+  'offer-model', 'optimizer-engine', 'projection-optimizer', 'reminders', 'render-main-views',
   'render-shell-overview', 'requirements-templates', 'runtime-status',
   'sync-pwa', 'ui-utils'
 ];

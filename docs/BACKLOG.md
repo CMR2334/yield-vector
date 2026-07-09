@@ -5,12 +5,10 @@ its full context. AI sessions: add items here instead of leaving them only in
 chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
-## Owner decisions pending
-- **`.card-soft` dead CSS rule** — awaiting a one-word owner call. Deleting it has
-  ZERO visual impact (no element anywhere uses the class; the similarly named
-  `--card-soft` COLOR VARIABLE and all its live uses stay). Also sync the citing
-  comment near index.html:1997 when removing. Context: module-split run step 4
-  Tier-1 ratchet halt (2026-07-08).
+## Recently resolved
+- **`.card-soft` dead CSS rule** — removed in optimizer step 3 rider after owner
+  approval. Only the unused class rule was deleted; the `--card-soft` color
+  variable and all live uses remain.
 
 ## Features
 - **Opt-in dark mode** — fresh implementation against the module structure. Idea
