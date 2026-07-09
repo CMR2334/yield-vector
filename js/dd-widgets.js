@@ -1,30 +1,14 @@
 import { App } from './app-state.js';
-import { TODAY, addBusinessDays, addDays, daysBetween, formatDateDisplay, isBusinessDay, isUsBankHoliday, isoDate, nextBusinessDay, parseDate, parseDateInput, previousBusinessDay } from './date-format-core.js';
+import { TODAY, addDays, formatDateDisplay, isBusinessDay, isUsBankHoliday, isoDate, nextBusinessDay, parseDate, parseDateInput, previousBusinessDay } from './date-format-core.js';
+import { ddRoundTrip, directDepositEffectiveDate, ddTransferConfig, setDdTransferProvider } from './dd-core.js';
 import { render } from './render-shell-overview.js';
-function ddTransferConfig() {
-  const s = (App.state && App.state.settings) || {};
-  const t = s.ddTransfer || {};
-  return {
-    inDays: Number.isFinite(t.inDays) ? t.inDays : 1,
-    seasonDays: Number.isFinite(t.seasonDays) ? t.seasonDays : 1,
-    backDays: Number.isFinite(t.backDays) ? t.backDays : 1
-  };
-}
 
-// For one DD (initiated on its planned date), compute the full round
-// trip. Returns { initiate, post, returnInitiate, returnDate, heldDays }
-// where heldDays = calendar days the money is OUT of the origin account
-// (from initiation through the day it lands back). null if no date.
-function ddRoundTrip(dd) {
-  const initiate = dd && dd.plannedDate ? parseDate(dd.plannedDate) : null;
-  if (!initiate) return null;
-  const { inDays, seasonDays, backDays } = ddTransferConfig();
-  const post = addBusinessDays(initiate, inDays);
-  const returnInitiate = addBusinessDays(post, seasonDays);
-  const returnDate = addBusinessDays(returnInitiate, backDays);
-  const heldDays = daysBetween(initiate, returnDate);
-  return { initiate, post, returnInitiate, returnDate, heldDays };
-}
+// The DD round-trip / effective-date / ddTransfer-config math lives in the pure
+// dd-core.js so the optimizer engine can import it without dragging in App or
+// render. Register the LIVE ddTransfer resolver here (the impure side) so a bare
+// in-app ddRoundTrip(dd) still reads the owner's setting exactly as before —
+// byte-identical to the old direct App.state.settings.ddTransfer read.
+setDdTransferProvider(() => (App.state && App.state.settings && App.state.settings.ddTransfer) || null);
 
 // Suggested LATEST-safe funding date for an offer: the deposit deadline
 // (signup + daysAfterSignupAllowedBeforeDeposit) minus a 1-day buffer,
@@ -42,16 +26,6 @@ function suggestedFundingDate(signupISO, daysAfterDeposit) {
   // to the next business day on/after signup instead.
   if (buffered <= signup) return nextBusinessDay(signup);
   return previousBusinessDay(buffered);
-}
-
-// Given a directDeposits[] entry { plannedDate, amount }, return the
-// effective (actual processing) date as a YYYY-MM-DD string — same as
-// planned if it's a business day, otherwise the next business day.
-function directDepositEffectiveDate(dd) {
-  if (!dd || !dd.plannedDate) return '';
-  const planned = parseDate(dd.plannedDate);
-  if (!planned) return '';
-  return isoDate(nextBusinessDay(planned));
 }
 
 /* ============================================================

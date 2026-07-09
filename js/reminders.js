@@ -1,6 +1,6 @@
 import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, formatCompactCurrency, formatCurrency, formatDateDisplay, isoDate, nextEventInstance, parseDate, relativeDays } from './date-format-core.js';
-import { directDepositEffectiveDate } from './dd-widgets.js';
+import { directDepositEffectiveDate, ddWindowEndDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
 import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel, requirementSummary } from './requirements-templates.js';
@@ -24,32 +24,8 @@ const ACTION_COMPLETABLE_KINDS = new Set([
   'safe-to-close', 'offer-expires'
 ]);
 
-// The "all DDs by" window-end date for a DD-family offer, where derivable.
-// Frequency mode ("N DDs, one every <period>") → signup + periods×period.
-// Count mode → the latest planned DD effective (posting) date. Returns an
-// ISO string or '' when it can't be derived. Distinct from any single
-// dd-initiate date (it's the deadline the whole set must be complete by).
-function ddWindowEndDate(offer) {
-  if (offer.offerType !== 'direct-deposit' && offer.offerType !== 'held-and-dd') return '';
-  const req = offer.ddRequirement;
-  if (req && req.mode === 'frequency') {
-    const start = parseDate(offer.plannedSignupDate);
-    const periods = Math.max(1, Number(req.freqPeriods) || 1);
-    if (!start) return '';
-    const d = new Date(start);
-    if (req.freqEvery === 'week') d.setDate(d.getDate() + periods * 7);
-    else if (req.freqEvery === '2weeks') d.setDate(d.getDate() + periods * 14); // UI's biweekly option
-    else if (req.freqEvery === 'day') d.setDate(d.getDate() + periods);
-    else d.setMonth(d.getMonth() + periods); // 'month' default
-    return isoDate(d);
-  }
-  // Count mode: the last DD must have POSTED — use the max effective date.
-  const effs = (offer.directDeposits || [])
-    .map(dd => directDepositEffectiveDate(dd))
-    .filter(Boolean)
-    .sort();
-  return effs.length ? effs[effs.length - 1] : '';
-}
+// ddWindowEndDate moved to the pure dd-core.js (single source of truth shared
+// with the optimizer engine); imported above and used unchanged below.
 
 // THE ONE SHARED ITEM BUILDER. Pure (no state mutation) so the render-time
 // list/count callers can invoke it freely; the feed layers tombstones and

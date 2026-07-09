@@ -1,6 +1,6 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
-import { ddRoundTrip, directDepositEffectiveDate } from './dd-widgets.js';
-import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './migrations-catalogs.js';
+import { ddRoundTrip, directDepositEffectiveDate } from './dd-core.js';
+import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
 import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
 import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
@@ -86,6 +86,11 @@ function generateProjection(state, options = {}) {
     ? new Set(options.includedOfferIds)
     : null;
   const earlyExit = options.earlyExit || false;
+  // C1/C4: the optimizer engine passes an explicit ddTransfer so DD round-trip
+  // timing is evaluated faithfully against a variant config. EVERY other caller
+  // omits it → cfg is undefined → ddRoundTrip/withdrawalEligibleDate fall back to
+  // the live config exactly as before (zero behavior change outside the engine).
+  const cfg = options.ddTransfer;
 
   // Pre-build day skeleton
   const days = new Array(horizon);
@@ -156,7 +161,7 @@ function generateProjection(state, options = {}) {
     // + seasoning. DDs initiated before weekends/holidays tie up longer.
     if (o.offerType === 'direct-deposit' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
       for (const dd of o.directDeposits) {
-        const rt = ddRoundTrip(dd);
+        const rt = ddRoundTrip(dd, cfg);
         const amt = Number(dd.amount) || 0;
         if (!rt || amt <= 0) continue;
         if (rt.initiate >= rt.returnDate) continue;
@@ -170,7 +175,7 @@ function generateProjection(state, options = {}) {
     //   2. each qualifying DD's amount from when it lands.
     // Previously only (2) was modeled, so the held funds never hit the chart.
     if (o.offerType === 'held-and-dd' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
-      const we = parseDate(withdrawalEligibleDate(o));
+      const we = parseDate(withdrawalEligibleDate(o, cfg));
       if (!we) continue;
       const fundStart = parseDate(lockStartDate(o));
       const fundAmt = Number(o.requiredFundingAmount) || 0;
@@ -185,7 +190,7 @@ function generateProjection(state, options = {}) {
     }
     // New funds held: single block over the lock window.
     const start = parseDate(lockStartDate(o));
-    const end = parseDate(withdrawalEligibleDate(o));
+    const end = parseDate(withdrawalEligibleDate(o, cfg));
     if (!start || !end || start >= end) continue;
     applyCommitment(Number(o.requiredFundingAmount), start, end, kind);
   }

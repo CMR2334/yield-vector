@@ -1,8 +1,7 @@
 import { TODAY, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, nextBusinessDay, parseDate } from './date-format-core.js';
-import { ddRoundTrip, directDepositEffectiveDate } from './dd-widgets.js';
-import { CONFIRMED_OFFER_STATUSES } from './migrations-catalogs.js';
+import { ddRoundTrip, directDepositEffectiveDate } from './dd-core.js';
 import { requirementDeadlineISO } from './requirements-templates.js';
-import { PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
+import { CONFIRMED_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 /* ============================================================
    OFFER DERIVED FIELDS
    ============================================================ */
@@ -47,14 +46,15 @@ function debitDeadlineISO(offer) {
   return isoDate(addDays(signup, days));
 }
 
-function withdrawalEligibleDate(offer) {
+function withdrawalEligibleDate(offer, cfg) {
   // STANDARD direct deposit: no bank-imposed hold. Each DD just needs to
   // hit the account; the money is "tied up" only for its transfer round
   // trip. The overall "funds are fully back" date = the LATEST round-trip
-  // return across all DDs.
+  // return across all DDs. `cfg` is the ddTransfer model (optional — omitted
+  // → live config via ddRoundTrip's default; the engine passes it explicitly).
   if (offer.offerType === 'direct-deposit') {
     const rets = (offer.directDeposits || [])
-      .map(dd => ddRoundTrip(dd))
+      .map(dd => ddRoundTrip(dd, cfg))
       .filter(Boolean)
       .map(rt => rt.returnDate.getTime());
     if (rets.length === 0) return '';
@@ -211,16 +211,16 @@ function shouldSuggestWaiting(offer) {
 //   • estimated:true  when no row carries a done_date — we fall back to today so
 //     a window still shows, flagged "estimated" in the UI.
 // Returns null only when there are no requirement rows at all.
-function bonusWindowAnchor(offer) {
+function bonusWindowAnchor(offer, today = TODAY) {
   const reqs = Array.isArray(offer && offer.requirements) ? offer.requirements : [];
-  if (reqs.length === 0) return { iso: isoDate(TODAY), estimated: true };
+  if (reqs.length === 0) return { iso: isoDate(today), estimated: true };
   let latest = null;
   for (const r of reqs) {
     const d = r && r.done_date ? parseDate(r.done_date) : null;
     if (d && (!latest || d.getTime() > latest.getTime())) latest = d;
   }
   if (latest) return { iso: isoDate(latest), estimated: false };
-  return { iso: isoDate(TODAY), estimated: true };
+  return { iso: isoDate(today), estimated: true };
 }
 
 // Expected-bonus posting window for an offer that has met its requirements.
@@ -229,11 +229,11 @@ function bonusWindowAnchor(offer) {
 // the default-days fallback; `estimated` flags the today-anchor fallback.
 //   window = [anchor + min, anchor + max], where anchor = latest done_date
 //   (fallback today), min/max = bonus_post_min/max_days (fallback DEFAULT_*).
-function expectedBonusWindow(offer) {
+function expectedBonusWindow(offer, today = TODAY) {
   if (!offer) return null;
   const stage = lifecycleStage(offer);
   if (stage !== 'waiting' && stage !== 'earned') return null;
-  const anchor = bonusWindowAnchor(offer);
+  const anchor = bonusWindowAnchor(offer, today);
   if (!anchor) return null;
   const anchorDate = parseDate(anchor.iso);
   if (!anchorDate) return null;
@@ -269,19 +269,21 @@ function expectedBonusWindow(offer) {
 //       (its date has served its purpose), and counting it would push safe-to-
 //       close months past a real bonus_received_date for a long-deadline row.
 // Returns ISO or null (never throws). Feed + card read this.
-function safeToCloseDate(offer) {
+function safeToCloseDate(offer, cfg, today = TODAY) {
   if (!offer) return null;
   const candidates = [];
 
-  // (a) withdrawal-eligible (funds released).
-  const we = withdrawalEligibleDate(offer);
+  // (a) withdrawal-eligible (funds released). cfg/today thread through so the
+  // engine's horizon math is config- and clock-independent (defaults keep every
+  // existing caller byte-stable).
+  const we = withdrawalEligibleDate(offer, cfg);
   if (we) candidates.push(we);
 
   // (b) bonus timing.
   if (offer.bonus_received_date) {
     candidates.push(offer.bonus_received_date);
   } else {
-    const win = expectedBonusWindow(offer);
+    const win = expectedBonusWindow(offer, today);
     if (win && win.endISO) candidates.push(win.endISO);
   }
 
@@ -371,14 +373,14 @@ function churnEligibleDate(offer) {
 // Pure; tolerant of a missing/garbage value (returns false). The Overview
 // section, the card churn line, and the `churn-eligible` feed kind all read
 // this so snooze state can never diverge between surfaces.
-function churnSnoozeActive(offer) {
+function churnSnoozeActive(offer, today = TODAY) {
   if (!offer) return false;
   const s = offer.churn_snoozed_until;
   if (s === 'forever') return true;
   if (typeof s !== 'string' || !s) return false;
   const d = parseDate(s);
   if (!d) return false;
-  return d.getTime() > TODAY.getTime();
+  return d.getTime() > today.getTime();
 }
 
 function simpleReturn(offer) {
@@ -391,20 +393,20 @@ function simpleReturn(offer) {
 // longer when initiated before a weekend/holiday). HELD+DD: each DD's
 // amount is held from when it lands until the shared withdrawal-eligible
 // date. Returns { dollarDays, weightedDays, totalAmount } or null.
-function ddCapitalTime(offer) {
+function ddCapitalTime(offer, cfg) {
   const dds = (offer.directDeposits || []).filter(dd => dd && dd.plannedDate && Number(dd.amount) > 0);
   if (dds.length === 0) return null;
   let dollarDays = 0, totalAmount = 0;
   if (offer.offerType === 'direct-deposit') {
     for (const dd of dds) {
-      const rt = ddRoundTrip(dd);
+      const rt = ddRoundTrip(dd, cfg);
       if (!rt || rt.heldDays <= 0) continue;
       const amt = Number(dd.amount);
       dollarDays += amt * rt.heldDays;
       totalAmount += amt;
     }
   } else { // held-and-dd
-    const we = parseDate(withdrawalEligibleDate(offer));
+    const we = parseDate(withdrawalEligibleDate(offer, cfg));
     if (!we) return null;
     // Held lump sum: requiredFundingAmount from the funding date → withdrawal.
     const fundStart = parseDate(lockStartDate(offer));
@@ -428,7 +430,7 @@ function ddCapitalTime(offer) {
   return { dollarDays, totalAmount, weightedDays: dollarDays / totalAmount };
 }
 
-function annualizedReturn(offer) {
+function annualizedReturn(offer, cfg) {
   const bonus = Number(offer.signupBonusAmount);
   if (!bonus || bonus < 0) {
     // Allow $0 bonus to yield 0% rather than null below; but a missing
@@ -442,7 +444,7 @@ function annualizedReturn(offer) {
   // is exactly the amount-and-time-weighted average of the per-DD
   // annualized ROIs, and reduces to the standard formula for one DD.
   if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
-    const ct = ddCapitalTime(offer);
+    const ct = ddCapitalTime(offer, cfg);
     if (!ct || !offer.signupBonusAmount) return null;
     return Number(offer.signupBonusAmount) * 365 / ct.dollarDays;
   }
@@ -453,7 +455,7 @@ function annualizedReturn(offer) {
   if (r == null) return null;
   let days = null;
   const ls = parseDate(lockStartDate(offer));
-  const we = parseDate(withdrawalEligibleDate(offer));
+  const we = parseDate(withdrawalEligibleDate(offer, cfg));
   if (ls && we) days = daysBetween(ls, we);
   if (!days || days <= 0) days = Number(offer.daysFundsMustRemain) || 0;
   if (!days || days <= 0) return null;

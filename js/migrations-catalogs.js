@@ -1,7 +1,7 @@
 import { App } from './app-state.js';
 import { render } from './render-shell-overview.js';
 import { schemaV2Defaults, syncRequirementsWithLegacy } from './requirements-templates.js';
-import { ErrCode, STORAGE_KEY, logError } from './runtime-status.js';
+import { CONFIRMED_OFFER_STATUSES, ErrCode, HYPOTHETICAL_OFFER_STATUSES, STORAGE_KEY, logError } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
 import { toast } from './ui-utils.js';
 function migrateOffersToSchemaV2(state) {
@@ -197,8 +197,10 @@ function firstUnusedOfferColor(excludeOfferId) {
   return '';
 }
 
-const CONFIRMED_OFFER_STATUSES = new Set(['applied', 'funded']);
-const HYPOTHETICAL_OFFER_STATUSES = new Set(['prospect', 'selected']);
+// CONFIRMED_OFFER_STATUSES / HYPOTHETICAL_OFFER_STATUSES moved to the pure
+// runtime-status.js (so the optimizer engine can reach them without this
+// App/render-importing module); imported above and re-exported below so every
+// existing consumer of migrations-catalogs.js is unchanged.
 
 const COMMITMENT_TYPES = [
   { value: 'minimum balance', label: 'Minimum Balance' },

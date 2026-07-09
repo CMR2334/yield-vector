@@ -142,6 +142,13 @@ const WORKING_SUB_STATUSES = new Set(['approved', 'on-track', 'met-waiting']);
 // remain hypothetical, includable via the scenario checkbox). Only an
 // account that was OPENED and then Closed force-excludes.
 const PRE_ACCOUNT_SUB_STATUSES = new Set(['prospect', 'applied']);
+// Legacy-status partitions used by the projection/optimizer. Homed here (a pure
+// module) so offer-model.js + projection-optimizer.js can import them without
+// pulling in migrations-catalogs.js (which imports App/render) — that edge is
+// what would otherwise drag the UI shell into the pure optimizer engine's graph.
+// migrations-catalogs.js re-exports these so its own consumers stay unchanged.
+const CONFIRMED_OFFER_STATUSES = new Set(['applied', 'funded']);
+const HYPOTHETICAL_OFFER_STATUSES = new Set(['prospect', 'selected']);
 function defaultAccountForSub(subStatus) {
   return SUBSTATUS_FLIPS_OPEN.has(subStatus) ? 'open' : 'closed';
 }
@@ -254,4 +261,4 @@ function reconcileDebitWithinDays(o) {
   return o;
 }
 
-export { STORAGE_KEY, APP_VERSION, ErrCode, readDiagLog, clearDiagLog, logError, installErrorHandlers, storageHealth, copyText, STATUS_LABELS, ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, SUB_STATUSES, SUB_STATUS_LABELS, SUB_STATUS_CHIP_CLASS, WORKING_SUB_STATUSES, PRE_ACCOUNT_SUB_STATUSES, defaultAccountForSub, deriveLegacyStatus, normalizeOfferStatus, migrateDdIds, migrateDebitRequirement, reconcileDebitWithinDays };
+export { STORAGE_KEY, APP_VERSION, ErrCode, readDiagLog, clearDiagLog, logError, installErrorHandlers, storageHealth, copyText, STATUS_LABELS, ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, SUB_STATUSES, SUB_STATUS_LABELS, SUB_STATUS_CHIP_CLASS, WORKING_SUB_STATUSES, PRE_ACCOUNT_SUB_STATUSES, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, defaultAccountForSub, deriveLegacyStatus, normalizeOfferStatus, migrateDdIds, migrateDebitRequirement, reconcileDebitWithinDays };
