@@ -6,6 +6,9 @@ chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
 ## Recently resolved
+- **Hero "Today" axis label alignment** — shipped v2026.07.09f (`a1babb6`):
+  left-aligned at `padL` (`text-anchor=start`) in the lowered axis row so it no
+  longer clips the SVG left edge.
 - **`.card-soft` dead CSS rule** — removed in optimizer step 3 rider after owner
   approval. Only the unused class rule was deleted; the `--card-soft` color
   variable and all live uses remain.
@@ -19,10 +22,12 @@ Priorities are owner-directed — nothing here self-dispatches.
   import Worker on save (parity with the Gist "Save & test"). Offered 2026-07-08.
 
 ## UI polish
-- **Hero "Today" axis label alignment** — owner (2026-07-08 late): left-align the
-  label abutting the chart's left boundary at the lowered axis row (the centered
-  placement clips the first letter at the SVG edge). Queued for the first
-  post-engine UI batch (v2026.07.09f candidate).
+- **Churn re-check one-click verify UX** — owner-review candidate (flagged in the
+  optimizer step-4 report). The Optimize panel's "Re-check value" control opens the
+  source offer's edit modal (the proven DoC Worker import path); a changed
+  optimization input on save forces a full re-run. This is **modal-gated by
+  design** — heavier than a one-click inline auto-fetch, but reuses the trusted
+  path. Revisit only if the owner wants an inline verify affordance.
 - **Plan-tab stat color-system unification** — Plan's non-shortfall amber mirrors
   Overview via a documented hardcode; unify both tabs on one token if
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.
@@ -36,6 +41,10 @@ Priorities are owner-directed — nothing here self-dispatches.
   longer than ~2 years is ever modeled (hotfix 3ed67e8 note).
 
 ## Code-health (deliberately deferred — high evidence bar, low payoff)
+- **`localRequirementDeadlineISO` → `requirementDeadlineISO` consolidation [low]** —
+  two near-identical deadline helpers coexist; consolidate to the canonical
+  `requirementDeadlineISO` (requirements-templates.js) once a change touches that
+  path. Untouched by the optimizer run (flagged in steps 3–4 reports).
 - **Tier-3 consolidation backlog** — normalizeText modes, CSS mobile/modal
   containment merge, formatCurrencyDecimal removal (owner call),
   summarizeProjection settings param, cycle-breaking setters, always-true

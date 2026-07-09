@@ -17,7 +17,39 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 76)
+## Current state (as of 2026-07-09, Round 77)
+
+- **R77 (DOCS + VERIFY + release prep — DOCS-ONLY, no version bump; run 2026-07-08-planner-optimizer step 5):**
+  Release documentation round for the optimizer (v2026.07.09f stays — docs aren't precached, protocol
+  bumps on app changes only; **no app file touched**). **Docs:** `docs/ARCHITECTURE.md` updated to **19
+  `js/` modules** (added `dd-core.js` pure DD/day-model core + `optimizer-engine.js` pure sequencer to the
+  module map, import-graph, bootstrap, versioning, and release-checklist counts) + **two new sections** —
+  §5 Navigation & the Plan tab (4-tab nav Home·Plan·Offers·Settings; `renderPlanner` segment wrapper over
+  Planner/Timeline/Optimize keyed by `App._planSegment`; transient `App.optimizerPlan`) and §6 Optimizer
+  engine (snapshot-in/plan-out, candidate synthesis + churn/tier badging, `EVAL_CAP` 50k → beam-64 →
+  coarse ladder + pair-swap, real-`generateProjection` scoring, qualification validator → `bindingConstraints`,
+  plan-derived horizon 30d/730d, apply materialization + one-shot undo). `CHANGELOG.md` gained release
+  entries for **v2026.07.09c** (`f54c9d0` chart batch) / **09d** (`3ed67e8` C2/C3+template hotfix) / **09e**
+  (`2231b37`+`44b844a` engine + dd-core + .card-soft rule removal) / **09f** (`c8bd429..ed7d0f5` Plan-tab
+  merge + Optimize UI + apply/undo + P0 offer-save fix). `docs/BACKLOG.md`: Today-label item marked shipped
+  (`a1babb6`); added **churn re-check one-click verify UX** (owner-review candidate — the re-check is
+  modal-gated by design) and **`localRequirementDeadlineISO` → `requirementDeadlineISO` consolidation [low]**.
+  **Full battery re-confirmed at HEAD** (app code == `ed7d0f5`; HEAD `bbffd56` only adds the planner's
+  checkpoint `.md`): `node --check` 19 modules + inline entry + `sw.js` all pass; **fidelity 67/67**; parser
+  regression pins **20/20**; **p2b** synthetic PASS; **DD matrix** ALL PASS (17); **feasibility pins 5/5**;
+  **optimizer pins 22/22** (11,806 evals / ~1.48s — under the <2s / 50k-eval budget). **E2E smoke +
+  READ-ONLY real-data dry-run** on the preview origin (`localhost:4173`, owner's real-but-stale offline copy:
+  7 offers, $200k liquid, $20k buffer; sync unconfigured + local-origin guard in force — `yv-allow-local-sync`
+  never set, ZERO cross-origin calls): clean boot, SW converged to **`yv-precache-2026.07.09f`**, all 3 Plan
+  segments switch, 380px no overflow. **Dry-run proposal (owner reads this):** verdict **FEASIBLE**, **6
+  candidates / 1 churn-eligible** (+1 excluded: a churn offer missing its anchor date → "needs date"); best
+  plan **$5,000 gross** across **4 offers** — Citi · Priority Checking (sign up Jul 10), BMO · Premier Checking
+  (Jul 9), PNC · Virtual Wallet Plus (Jul 10), HSBC · Premier (Oct 1); low cash **$72,450 on Oct 1** (buffer
+  $20k → ~$52k headroom, **0 binding constraints**), 12.5% blended APY, 204d horizon, done Dec 30, 8
+  alternatives; beam search, 3,830 sequences, ~377ms click-to-rendered. **Closed WITHOUT applying —
+  nothing persisted** (state hash unchanged before/during/after, no undo entry, `optimizerPlan` cleared to null).
+  **Run status: step 5 DONE.** Remaining (planner/owner, NOT this round): owner device-check on the phone,
+  then the `stable-2026-07-09` tag.
 
 - **R76 (v2026.07.09f — PLAN-TAB UI + OPTIMIZE PANEL + APPLY; run 2026-07-08-planner-optimizer step 4, `4b4ca96..3361222`):**
   The optimizer engine now has a UI. **(i) Nav merge** (`c8bd429`): Plan + Timeline
