@@ -87,8 +87,7 @@ function renderHeader() {
   };
   const views = [
     ['overview', 'Overview'],
-    ['planner', 'Planner'],
-    ['timeline', 'Timeline'],
+    ['planner', 'Plan'],
     ['offers', 'Offers'],
     ['settings', 'Settings']
   ];
@@ -155,10 +154,8 @@ function renderMobileNav() {
   const items = [
     // Home: house with door
     ['overview', 'Home', 'M3 10L12 2l9 8v11H3V10zM9 21V14h6v7'],
-    // Plan: compass
+    // Plan: compass (merged Planner + Timeline + Optimize segments)
     ['planner', 'Plan', 'M12 2a10 10 0 100 20A10 10 0 0012 2zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z'],
-    // Timeline: calendar grid
-    ['timeline', 'Timeline', 'M8 2v4M16 2v4M5 4h14v16H5V4zM5 10h14'],
     // Offers: bank building (columns + base)
     ['offers', 'Offers', 'M3 21h18M3 10h18M5 10V21M9 10V21M15 10V21M19 10V21M12 3L3 10h18L12 3z'],
     // Settings: adjustment sliders

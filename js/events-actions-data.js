@@ -112,12 +112,18 @@ function bindGlobalEvents() {
 function bindViewEvents() { /* re-binding handled by event delegation */ }
 
 function onClick(e) {
-  const target = e.target.closest('[data-action], [data-view]');
+  const target = e.target.closest('[data-action], [data-view], [data-plan-segment]');
   if (!target) return;
   const view = target.dataset.view;
   if (view) {
     e.preventDefault();
     App.setView(view);
+    return;
+  }
+  const planSegment = target.dataset.planSegment;
+  if (planSegment) {
+    e.preventDefault();
+    setPlanSegment(planSegment);
     return;
   }
   const action = target.dataset.action;
@@ -196,7 +202,9 @@ function onClick(e) {
       App.setView('offers');
       break;
     case 'goto-timeline':
-      App.setView('timeline');
+      // Timeline now lives as a segment inside the merged Plan tab.
+      App._planSegment = 'timeline';
+      App.setView('planner');
       break;
     case 'goto-lowest': {
       // Stay on overview, scroll the chart into view, then surface the
@@ -689,6 +697,16 @@ function saveEventFromForm(id, isEdit) {
 function deleteEvent(id) {
   App.update(s => { s.events = s.events.filter(e => e.id !== id); });
   toast('Event deleted');
+}
+
+// Switch the active segment of the merged Plan tab. No-op if unchanged.
+// Scrolls to top so a longer segment doesn't land mid-content, mirroring
+// App.setView's feel for a same-tab context switch.
+function setPlanSegment(seg) {
+  if (App._planSegment === seg) return;
+  App._planSegment = seg;
+  render();
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 function runOptimizerNow() {

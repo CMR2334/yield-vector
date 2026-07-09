@@ -22,6 +22,8 @@ const App = {
     offersAdvanced: false
   },
   optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
+  // Which segment of the merged Plan tab is active: 'planner' | 'timeline' | 'optimize'.
+  _planSegment: 'planner',
 
   init() {
     installErrorHandlers();

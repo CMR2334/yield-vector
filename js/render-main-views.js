@@ -10,9 +10,40 @@ import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB
 import { Sync } from './sync-pwa.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
 /* ============================================================
-   PLANNER VIEW
-   ============================================================ */
+   PLAN TAB — merged Planner + Timeline + Optimize segments
+   ============================================================
+   The owner's 4-tab nav (Home · Plan · Offers · Settings) folds the old
+   standalone Timeline tab into the Plan tab as a segmented control. The
+   Plan tab renders a 3-way segment switcher, then the active segment:
+   the offer-toggle Planner (renderPlannerBody), the capital Timeline
+   (renderTimeline), or the optimizer proposal (renderOptimizeSegment).
+   App._planSegment holds the active segment ('planner' by default). */
 function renderPlanner() {
+  const seg = App._planSegment || 'planner';
+  let body;
+  if (seg === 'timeline') body = renderTimeline();
+  else if (seg === 'optimize') body = renderOptimizeSegment();
+  else body = renderPlannerBody();
+  return `
+    ${renderPlanSegmentControl(seg)}
+    <div class="plan-segment-body">${body}</div>
+  `;
+}
+
+function renderPlanSegmentControl(active) {
+  const segs = [
+    ['planner', 'Planner'],
+    ['timeline', 'Timeline'],
+    ['optimize', 'Optimize']
+  ];
+  return `
+    <div class="plan-segmented" role="tablist" aria-label="Plan views">
+      ${segs.map(([k, l]) => `<button class="plan-seg-btn ${active === k ? 'active' : ''}" role="tab" aria-selected="${active === k ? 'true' : 'false'}" data-plan-segment="${k}">${l}</button>`).join('')}
+    </div>
+  `;
+}
+
+function renderPlannerBody() {
   const offers = App.state.offers
     .filter(o => o.status !== 'completed' && o.status !== 'skipped')
     .slice()
@@ -84,6 +115,24 @@ function renderPlanner() {
       ? renderEmptyState('No offers yet', 'Add a bonus to start planning. We will compute the funding/withdrawal dates and tied-up cash for you.', 'add-offer', 'Add your first offer')
       : `<div class="planner-grid">${offers.map(renderOfferCard).join('')}</div>`
     }
+  `;
+}
+
+/* Optimize segment — the constraint-based sequencer proposal. Placeholder
+   until the optimizer-engine proposal UI lands; kept as its own function so
+   the Plan-tab merge is a self-contained, revertable change. */
+function renderOptimizeSegment() {
+  return `
+    <div class="section-header">
+      <div>
+        <h2>Optimize</h2>
+        <p>Let the planner slide sign-up dates and pick offers to maximize your bonus without breaching the buffer.</p>
+      </div>
+    </div>
+    <div class="banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <div>The optimizer proposal will appear here.</div>
+    </div>
   `;
 }
 

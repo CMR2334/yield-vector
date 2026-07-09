@@ -2627,6 +2627,42 @@ table.data-table {
   margin-bottom: var(--space-5);
 }
 
+/* Plan-tab segmented control (Planner · Timeline · Optimize) — the
+   top-level view switch for the merged Plan tab. iOS-style pill switcher:
+   the active segment lifts onto a --card chip; idle segments stay flat. */
+.plan-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  margin-bottom: var(--space-5);
+  width: 100%;
+  box-sizing: border-box;
+}
+.plan-seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.plan-seg-btn:hover { color: var(--text); }
+.plan-seg-btn.active {
+  background: var(--card);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
