@@ -17,7 +17,21 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-08, Round 73)
+## Current state (as of 2026-07-08, Round 74)
+
+- **R74 (v2026.07.09b — owner batch + sync guard; run 2026-07-08-module-split-efficiency COMPLETE, commit `1fc39b3`):**
+  "Lowest projected" now full comma format (was compact "$35K") on Home AND Plan; Plan's stat takes
+  Home's exact three-state color logic (root cause: only the HEALTHY state had drifted — Plan green
+  vs Home amber `#c88b2c`; shortfall/belowBuffer already matched; residual: Plan's amber is a
+  documented hardcode — unify both tabs on one color system if `.stat-value.lighten` ever recolors).
+  **LOCAL-ORIGIN SYNC GUARD:** on localhost/127.0.0.1, ALL Gist sync (push+pull; 7 sync-pwa.js
+  chokepoints + the Save&test join-flow pull in events-actions-data.js) is skipped unless
+  `localStorage yv-allow-local-sync === '1'` — local test/preview instances can never touch cloud
+  data (DoC-worker fetches unaffected). All gates green (fidelity 67/67, pins 20/20, feed
+  sha-identical, 380px, SW converged 09b); Codex CLEAN; owner's real local state byte-verified
+  untouched. Owner confirmed v2026.07.09a good on his phone (zero errors) → tag
+  `stable-2026-07-08` (at `7a25b1a`). Pre-split rollback = `checkpoint-2026-07-08-pre-modules`.
+  Owner-directed follow-ons: Tier-3 backlog, `.card-soft` decision, layout mocks, the OPTIMIZER run.
 
 - **R73 (v2026.07.09a RELEASED — split-run wrap, steps 4–5):** step-4 consolidations done under the
   deletion ratchet (Tier-1: 6 classes, net −20 lines, `.card-soft` retained on a live comment ref;
