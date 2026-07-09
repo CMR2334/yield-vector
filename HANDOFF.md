@@ -17,7 +17,36 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-08, Round 74)
+## Current state (as of 2026-07-09, Round 75)
+
+- **R75 (v2026.07.09e — OPTIMIZER ENGINE LANDED; run 2026-07-08-planner-optimizer step 3, commit `44b844a`):**
+  Pure planner sequencer `js/optimizer-engine.js` (1,261 lines) + in-app `testOptimizerPins()` +
+  Node harness (`docs/fixtures/optimizer/harness/optimizer-pins.js`) + import-map/SW-precache wiring
+  for `js/dd-core.js` (extracted in `2231b37`) and `js/optimizer-engine.js`, APP_VERSION → 2026.07.09e
+  (three literals: import map ×19, `js/runtime-status.js`, `sw.js` — 0 strays), and the `.card-soft`
+  **dead-CSS-rule deletion** rider (rule at old index.html:446 removed; citing comment ~1979 synced;
+  BACKLOG moved to Recently-resolved). The `--card-soft` COLOR VARIABLE + all ~12 live `var()` uses
+  STAY (verified 0 `.card-soft` elements in the live DOM). **Split: Codex (GPT-5.5) implemented
+  overnight under owner authorization; Claude adversarially verified + committed (review-after
+  INVERTED).** Codex's sandbox could not write `.git` (index.lock EPERM) → all work was uncommitted;
+  hence ONE combined commit (rider not path-splittable from index.html wiring). Engine PURITY
+  confirmed: imports only the pure closure (date-format-core, dd-core, projection-optimizer,
+  offer-model, runtime-status); transitive graph never reaches App/render/Sync/dd-widgets/reminders;
+  `ddTransfer` + `today` threaded at every call site; `generateProjection` honors
+  `options.{ddTransfer,horizonDays,includedOfferIds}` (post-hotfix `3ed67e8` semantics).
+  Battery (independent re-run, not the overnight log): fidelity **67/67**, doc-parser regressions
+  **20/20**, P2B-SEG PASS, DD MATRIX ALL PASS, testFeasibilityPins **5/5**, testOptimizerPins
+  **22/22** (interactive 14-candidate optimize **1487ms / 11,806 evals** — the number the <2s /
+  50k-eval budget governs; the 2963ms suite PERF is total test time, not the interactive budget).
+  Browser: boots clean on 127.0.0.1:4173 (local-origin sync guard active — cloud safe), in-app
+  testOptimizerPins 22/22 + testFeasibilityPins 5/5, 380px no overflow, SW precache
+  `yv-precache-2026.07.09e` carries both new modules. Feed byte-identity holds by construction
+  (reminders.js / events-actions-data.js untouched). Embargo since `2231b37` RELEASED by this push
+  (dd-core now in map+precache → offline boot safe). **Remaining: step 4 (Plan-tab UI merge +
+  Optimize panel + applyOptimizerPlan) + step 5 (release docs, stable- tag on owner device-check).**
+  Open notes for step 4: churn synthesis is hand-rolled in the engine (stable `churn_<id>` ids for
+  determinism) rather than the `templateToOffer(offerToTemplate())` pipeline — capital-model-faithful
+  for evaluation, but applyOptimizerPlan must reconcile create-fidelity to the real Run-again offer.
 
 - **R74 (v2026.07.09b — owner batch + sync guard; run 2026-07-08-module-split-efficiency COMPLETE, commit `1fc39b3`):**
   "Lowest projected" now full comma format (was compact "$35K") on Home AND Plan; Plan's stat takes
