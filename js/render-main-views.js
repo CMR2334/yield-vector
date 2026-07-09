@@ -118,22 +118,243 @@ function renderPlannerBody() {
   `;
 }
 
-/* Optimize segment — the constraint-based sequencer proposal. Placeholder
-   until the optimizer-engine proposal UI lands; kept as its own function so
-   the Plan-tab merge is a self-contained, revertable change. */
+/* Optimize segment — the constraint-based sequencer proposal (engine output).
+   The plan is TRANSIENT (App.optimizerPlan, never persisted); nothing touches
+   state.offers until applyOptimizerPlan (step 4-iii). Renders the winning plan
+   + alternatives: sequence view, capital-curve summary, per-offer badges
+   (incl. the unverified-churn provenance badge), and binding-constraint hints. */
+
+// Human copy for each binding-constraint kind the engine emits
+// (validateOfferQualification / horizon / buffer-floor in optimizer-engine.js).
+const BINDING_CONSTRAINT_COPY = {
+  'schedule-before-today': 'sign-up date would be in the past',
+  'expiry': 'offer expires before it can start',
+  'deposit-deadline': 'funding would miss the deposit deadline',
+  'debit-deadline': 'debit requirement deadline has passed',
+  'requirement-deadline': 'a requirement deadline has passed',
+  'dd-window': "direct-deposit cadence/window can't be met",
+  'completeness': 'offer is missing required details',
+  'buffer-floor': 'dips into your cash buffer',
+  'horizon-exceeded': 'extends past the planning horizon'
+};
+const OPT_REVIEW_REASON_COPY = {
+  'commitment-linked': 'Already tracked as a commitment',
+  'churn-snoozed': 'Churn snoozed',
+  'missing-churn-anchor': 'Needs a date to re-run',
+  'no-valid-date-window': 'No valid sign-up window'
+};
+const OPT_PLAN_REASON_COPY = {
+  'cash-infeasible': 'Dips below your cash buffer.',
+  'qualification-failed': "A timing requirement can't be met.",
+  'horizon-exceeded': 'Extends past the planning horizon.',
+  'too-many-candidates': 'Too many candidates to search.'
+};
+
 function renderOptimizeSegment() {
-  return `
+  const offers = App.state.offers || [];
+  const candidateCount = offers.filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o)).length;
+  const churnCount = offers.filter(o => o.churnable === true).length;
+  const plan = App.optimizerPlan;
+
+  const header = `
     <div class="section-header">
       <div>
         <h2>Optimize</h2>
-        <p>Let the planner slide sign-up dates and pick offers to maximize your bonus without breaching the buffer.</p>
+        <p>Slide sign-up dates and pick offers to maximize your <strong>gross</strong> bonus without breaching the buffer.</p>
       </div>
-    </div>
-    <div class="banner">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      <div>The optimizer proposal will appear here.</div>
-    </div>
+    </div>`;
+
+  const runBar = `
+    <div class="optimizer-bar">
+      <div class="optimizer-summary">
+        <div class="metric"><span class="label">Candidates</span><span class="value">${candidateCount}</span></div>
+        <div class="metric"><span class="label">Churn-eligible</span><span class="value">${churnCount}</span></div>
+        ${plan && plan.valid && plan.objective ? `<div class="metric"><span class="label">Plan bonus (gross)</span><span class="value" style="color:var(--success);">${formatCurrency(plan.objective.grossBonus)}</span></div>` : ''}
+      </div>
+      <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-primary" data-action="run-planner-optimizer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          ${plan ? 'Re-run optimizer' : 'Run optimizer'}
+        </button>
+        ${plan ? `<button class="btn btn-ghost btn-sm" data-action="clear-planner-optimizer">Clear</button>` : ''}
+      </div>
+    </div>`;
+
+  let body;
+  if (!plan) {
+    body = (candidateCount + churnCount) === 0
+      ? renderEmptyState('Nothing to optimize yet', 'Add prospect offers (or mark an offer churnable) and the optimizer will sequence them to maximize your bonus.', 'add-offer', 'Add an offer')
+      : `<div class="banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <div>Run the optimizer to see the proposed sequence, the capital-curve low point, and any offers that can't be scheduled. Bonuses are shown <strong>gross</strong> (monthly fees / ETFs are not netted).</div>
+        </div>`;
+  } else {
+    body = renderOptimizerProposal(plan);
+  }
+  return header + runBar + body;
+}
+
+function renderOptimizerProposal(topPlan) {
+  if (topPlan.tooMany) {
+    return `
+      <div class="banner warn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
+        <div><strong>Too many candidates to search:</strong> ${topPlan.candidateCount} (limit ${topPlan.max}). Mark some offers as "skipped", convert them to commitments, or snooze churn candidates first.</div>
+      </div>`;
+  }
+
+  const reviewNotes = renderOptCandidateReview(topPlan.candidateReview || [], topPlan);
+
+  if ((topPlan.candidateCount || 0) === 0) {
+    const cc = topPlan.capitalCurveSummary || {};
+    return `
+      <div class="banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <div>No candidate offers to sequence. Your current schedule's low cash is <strong>${formatCurrency(cc.lowestAvailable)}</strong>.</div>
+      </div>
+      ${reviewNotes}`;
+  }
+
+  const plans = (topPlan.alternatives && topPlan.alternatives.length) ? topPlan.alternatives : [topPlan];
+  const idx = Math.min(Math.max(0, App._optimizerAltIndex || 0), plans.length - 1);
+  const focused = plans[idx];
+
+  return `
+    ${renderOptPlanCard(focused, topPlan, idx, plans.length)}
+    ${renderOptAltList(plans, idx)}
+    ${reviewNotes}
   `;
+}
+
+// Resolve a schedule/constraint offerId to a display name. Churn 'create'
+// records synthesize a churn_<sourceId> offer NOT in state.offers, so resolve
+// through the candidate record's sourceOfferId back to the real source offer.
+function optimizerOfferName(topPlan, offerId) {
+  const cand = (topPlan.candidates || []).find(c => c.id === offerId);
+  const srcId = cand ? cand.sourceOfferId : offerId;
+  const src = (App.state.offers || []).find(o => o.id === srcId);
+  const op = cand ? cand.op : ((topPlan.schedule && topPlan.schedule[offerId] && topPlan.schedule[offerId].op) || 'update');
+  if (!src) return op === 'create' ? 'Re-run offer' : (offerId || 'offer');
+  const base = offerDisplayLabel(src, { separator: ' · ' }) || src.bankName || 'offer';
+  return op === 'create' ? `Re-run: ${base}` : base;
+}
+
+function renderOptPlanCard(focused, topPlan, idx, total) {
+  const cc = focused.capitalCurveSummary || {};
+  const obj = focused.objective || {};
+  const included = focused.includedIds || [];
+  const validBadge = focused.valid
+    ? `<span class="opt-valid ok">Feasible</span>`
+    : `<span class="opt-valid bad">Not feasible</span>`;
+  return `
+    <section class="card opt-plan-card ${focused.valid ? '' : 'invalid'}">
+      <div class="opt-plan-head">
+        <div>
+          <div class="combo-rank">Proposed plan${total > 1 ? ` · option ${idx + 1} of ${total}` : ''}</div>
+          <div class="combo-bonus">${formatCurrency(obj.grossBonus || 0)} <span class="opt-bonus-cap">gross</span></div>
+        </div>
+        ${validBadge}
+      </div>
+      <div class="combo-meta">
+        <span><strong>${formatCurrency(cc.lowestAvailable)}</strong> low cash${cc.lowestDateISO ? ' · ' + formatDateMedium(parseDate(cc.lowestDateISO)) : ''}</span>
+        ${obj.blendedAnnReturn != null ? `<span><strong>${formatPercent(obj.blendedAnnReturn)}</strong> blended APY</span>` : ''}
+        ${cc.belowBufferDays > 0 ? `<span style="color:#b45309;">${cc.belowBufferDays}d below buffer</span>` : ''}
+        ${cc.shortfallDays > 0 ? `<span style="color:var(--danger);">${cc.shortfallDays}d shortfall</span>` : ''}
+        <span>${cc.horizonDays}d horizon</span>
+        ${obj.latestCompletionISO ? `<span>done ${formatDateMedium(parseDate(obj.latestCompletionISO))}</span>` : ''}
+      </div>
+      ${!focused.valid && (focused.reasons || []).length ? `<div class="opt-invalid-note">${focused.reasons.map(r => OPT_PLAN_REASON_COPY[r] || r).join(' ')}</div>` : ''}
+      <div class="opt-sequence">
+        ${included.length
+          ? included.map(id => renderOptSequenceRow(focused, topPlan, id)).join('')
+          : `<div class="opt-empty-seq">This plan adds no offers — your current schedule already sits at the buffer limit, or no candidate fits the constraints.</div>`}
+      </div>
+      ${renderOptBindingHints(focused, topPlan)}
+    </section>`;
+}
+
+function renderOptSequenceRow(focused, topPlan, id) {
+  const s = (focused.schedule && focused.schedule[id]) || {};
+  const badges = (focused.badges && focused.badges[id]) || [];
+  const isCreate = s.op === 'create';
+  const name = optimizerOfferName(topPlan, id);
+  const dds = (s.directDeposits || []).filter(d => d && d.plannedDate);
+  const derived = s.derived || {};
+  return `
+    <div class="opt-seq-row">
+      <div class="opt-seq-top">
+        <span class="opt-seq-name">${escapeHtml(name)}</span>
+        <span class="opt-op-badge ${isCreate ? 'create' : ''}">${isCreate ? 'New · churn' : 'Reschedule'}</span>
+      </div>
+      <div class="opt-seq-dates">
+        ${s.plannedSignupDate ? `<span>Sign up <strong>${formatDateMedium(parseDate(s.plannedSignupDate))}</strong></span>` : ''}
+        ${s.optionalPlannedFundingDate ? `<span>Fund <strong>${formatDateMedium(parseDate(s.optionalPlannedFundingDate))}</strong></span>` : ''}
+        ${dds.length ? `<span>${dds.length} DD${dds.length === 1 ? '' : 's'} from <strong>${formatDateMedium(parseDate(dds[0].plannedDate))}</strong></span>` : ''}
+        ${derived.withdrawalEligible ? `<span>Free <strong>${formatDateMedium(parseDate(derived.withdrawalEligible))}</strong></span>` : ''}
+      </div>
+      ${badges.length ? `<div class="opt-seq-badges">${badges.map(renderOptBadge).join('')}</div>` : ''}
+    </div>`;
+}
+
+function renderOptBadge(b) {
+  if (!b || !b.copy) return '';
+  const cls = b.kind === 'unverified-churn-value' ? 'opt-badge warn' : 'opt-badge';
+  const title = b.kind === 'unverified-churn-value' ? ' title="Value taken from your stored record, not re-verified against the source"' : '';
+  return `<span class="${cls}"${title}>${escapeHtml(b.copy)}</span>`;
+}
+
+function renderOptBindingHints(focused, topPlan) {
+  const bcs = focused.bindingConstraints || [];
+  if (!bcs.length) return '';
+  const seen = new Set();
+  const rows = [];
+  for (const bc of bcs) {
+    const key = (bc.offerId || '') + '|' + bc.kind;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const label = BINDING_CONSTRAINT_COPY[bc.kind] || bc.kind;
+    const who = bc.offerId ? escapeHtml(optimizerOfferName(topPlan, bc.offerId)) : '';
+    const when = bc.dateISO ? formatDateMedium(parseDate(bc.dateISO)) : '';
+    rows.push(`<div class="opt-hint">${who ? `<strong>${who}</strong> — ` : ''}${label}${when ? ` (${when})` : ''}</div>`);
+  }
+  return `<div class="opt-hints"><div class="opt-hints-title">What pinned this plan</div>${rows.join('')}</div>`;
+}
+
+function renderOptAltList(plans, idx) {
+  if (plans.length <= 1) return '';
+  return `
+    <div class="opt-alts">
+      <div class="opt-alts-title">Other options</div>
+      <div class="opt-alts-list">
+        ${plans.map((p, i) => {
+          const n = (p.includedIds || []).length;
+          const cc = p.capitalCurveSummary || {};
+          return `
+          <button class="opt-alt ${i === idx ? 'active' : ''}" data-action="select-optimizer-alt" data-alt-index="${i}">
+            <span class="opt-alt-bonus">${formatCurrency((p.objective || {}).grossBonus || 0)}</span>
+            <span class="opt-alt-meta">${n} offer${n === 1 ? '' : 's'} · ${formatCompactCurrency(cc.lowestAvailable || 0)} low${p.valid ? '' : ' · infeasible'}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function renderOptCandidateReview(review, topPlan) {
+  const items = (review || []).filter(r => r && (r.status === 'excluded' || r.status === 'needs-date'));
+  if (!items.length) return '';
+  return `
+    <section class="card opt-review">
+      <div class="card-header"><h2 style="font-size:15px;">Not in this plan</h2></div>
+      <div class="opt-review-list">
+        ${items.map(r => {
+          const src = (App.state.offers || []).find(o => o.id === r.offerId);
+          const name = src ? (offerDisplayLabel(src, { separator: ' · ' }) || src.bankName || r.offerId) : r.offerId;
+          const reason = OPT_REVIEW_REASON_COPY[r.reason] || r.reason;
+          const cls = r.status === 'needs-date' ? 'needs-date' : 'excluded';
+          return `<div class="opt-review-row ${cls}"><span class="opt-review-name">${escapeHtml(name)}</span><span class="opt-review-reason">${escapeHtml(reason)}</span></div>`;
+        }).join('')}
+      </div>
+    </section>`;
 }
 
 function renderOptimizerResults(result) {

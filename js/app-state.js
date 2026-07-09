@@ -24,6 +24,12 @@ const App = {
   optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
   // Which segment of the merged Plan tab is active: 'planner' | 'timeline' | 'optimize'.
   _planSegment: 'planner',
+  // Transient optimizer-engine proposal (NEVER persisted — like a DoC parse
+  // result; nothing hits state.offers until applyOptimizerPlan). Holds the
+  // winning plan object (with .alternatives), or a {tooMany} signal.
+  optimizerPlan: null,
+  _optimizerAltIndex: 0,   // which of plan.alternatives is focused for detail/apply
+  _optimizerUndo: null,    // one-shot undo snapshot after an apply (set in step 4-iii)
 
   init() {
     installErrorHandlers();

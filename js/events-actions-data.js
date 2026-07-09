@@ -1,8 +1,10 @@
 import { App } from './app-state.js';
-import { TODAY, addDays, formatDateDisplay, formatMoneyInput, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
+import { TODAY, addDays, formatCurrency, formatDateDisplay, formatMoneyInput, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
+import { ddTransferConfig } from './dd-core.js';
 import { DatePicker } from './dd-widgets.js';
 import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImportParse, docImportToggle, toggleTemplatePicker, useTemplate } from './doc-import-templates.js';
-import { clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
+import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
+import { optimizePlanner } from './optimizer-engine.js';
 import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarget, readCommitmentForm, readEventForm, readOfferForm, removeDdRow, removeRequirementRow, removeSourceBank, showCommitmentModal, showEventModal, showOfferModal, showSyncHistoryModal } from './modals-forms.js';
 import { isOfferComplete, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
 import { convertOfferToCommitment, generateProjection, runOptimizer, summarizeProjection } from './projection-optimizer.js';
@@ -187,6 +189,15 @@ function onClick(e) {
     case 'run-optimizer': runOptimizerNow(); break;
     case 'clear-optimizer': App.optimizer.results = null; render(); break;
     case 'apply-combo': applyOptimizerCombo(target.dataset.mask); break;
+
+    // Optimize segment — the constraint-based sequencer (engine proposal).
+    case 'run-planner-optimizer': runPlannerOptimizerNow(); break;
+    case 'clear-planner-optimizer':
+      App.optimizerPlan = null; App._optimizerAltIndex = 0; App._optimizerUndo = null; render();
+      break;
+    case 'select-optimizer-alt':
+      App._optimizerAltIndex = Math.max(0, Number(target.dataset.altIndex) || 0); render();
+      break;
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
 
@@ -707,6 +718,60 @@ function setPlanSegment(seg) {
   App._planSegment = seg;
   render();
   window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+// Build the fully self-contained snapshot the pure engine consumes (§7.1).
+// Every App.state read the evaluation graph needs is injected here — the
+// engine never touches App/DOM/Sync. ddTransfer comes from the LIVE config
+// resolver so the engine's projection matches the in-app one byte-for-byte.
+function buildOptimizerInput() {
+  const s = App.state;
+  const settings = s.settings || {};
+  const candidateIds = (s.offers || [])
+    .filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o))
+    .map(o => o.id);
+  return {
+    today: isoDate(TODAY),
+    settings: {
+      ddTransfer: ddTransferConfig(),
+      minimumCashBuffer: Number(settings.minimumCashBuffer) || 0,
+      currentLiquidCapital: Number(settings.currentLiquidCapital) || 0,
+      projectionStartDate: settings.projectionStartDate || isoDate(TODAY)
+    },
+    offers: s.offers || [],
+    commitments: s.commitments || [],
+    events: s.events || [],
+    candidateIds,
+    options: { includeChurn: true }
+  };
+}
+
+// Run the constraint-based sequencer and stash the TRANSIENT proposal on
+// App (never persisted). A fresh run resets the focused-alternative index
+// and clears any stale undo snapshot from a prior apply.
+function runPlannerOptimizerNow() {
+  let plan;
+  try {
+    plan = optimizePlanner(buildOptimizerInput());
+  } catch (e) {
+    logError(ErrCode.RENDER, e, 'runPlannerOptimizer');
+    toast('Optimizer failed — see diagnostics', 'danger');
+    return;
+  }
+  App.optimizerPlan = plan;
+  App._optimizerAltIndex = 0;
+  App._optimizerUndo = null;
+  render();
+  if (plan.tooMany) {
+    toast(`Too many candidates (${plan.candidateCount}). Mark some as skipped or convert to commitments.`, 'danger');
+  } else if ((plan.candidateCount || 0) === 0) {
+    toast('No candidate offers to optimize yet');
+  } else if (!plan.valid) {
+    toast('No fully feasible plan — see what pinned each date below', 'danger');
+  } else {
+    const n = (plan.includedIds || []).length;
+    toast(`Proposed a plan with ${n} offer${n === 1 ? '' : 's'} · ${formatCurrency(plan.objective.grossBonus)} gross`);
+  }
 }
 
 function runOptimizerNow() {
