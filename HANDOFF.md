@@ -17,7 +17,26 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-08, Round 72)
+## Current state (as of 2026-07-08, Round 73)
+
+- **R73 (v2026.07.09a RELEASED — split-run wrap, steps 4–5):** step-4 consolidations done under the
+  deletion ratchet (Tier-1: 6 classes, net −20 lines, `.card-soft` retained on a live comment ref;
+  Tier-2: 3 classes + 4 evidence-backed SKIPS incl. a PROVEN formatCurrency rounding divergence a
+  naive dedup would have regressed; parser byte-untouched → corpus 84.9% stands; Tier-3 DEFERRED).
+  Step 5: three-literal APP_VERSION bump → 2026.07.09a (import map ×17, `js/runtime-status.js`,
+  `sw.js` — sweep 0 strays), SW 08e→09a transition validated LIVE (old precache evicted, zero
+  errors), full battery green, feature smoke pass, `docs/ARCHITECTURE.md` added (fold into
+  AGENTS.md once the owner's pending AGENTS.md edits land). Before/after: index.html 14,993→2,929
+  lines; 17 js/ modules (12,308 lines); +27,385 bytes total (ESM wiring + SW + bootstrap).
+  **SYNC INCIDENT (owner restored the 2:09AM Gist version after a stale push): test instances
+  EXONERATED** — the step-5 audit proved the only test origin (127.0.0.1:4173) carries NO sync
+  config (no token/gistId), so no test could push; its local state is a real-but-stale offline
+  copy (net-zero mutation by the smoke; the "Delete template?" dialog the owner saw was the
+  smoke's own created-then-deleted template). Primary hypothesis now: a stale owner DEVICE pushed
+  on wake — if it recurs, Settings → Copy diagnostics immediately (E_SYNC entries name the
+  culprit). Hardening + owner UX items (lowest-projected "K"→",000", Planner-tab stat color match,
+  localhost auto-sync guard, bump 09b) dispatched as run step 6 (R74). stable- tag awaits owner
+  confirmed-good. Tier-3 backlog + the optimizer run = owner-directed follow-ons.
 
 - **R72 (module split SHIPPED LIVE — run 2026-07-08-module-split-efficiency, step 3):**
   `index.html` (~15k lines) → **17 native ES modules** under `js/` + a ~30-line entry bootstrap +
