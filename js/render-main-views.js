@@ -1961,17 +1961,21 @@ function renderHeroChart(svg) {
       const estW = s => String(s).length * 6.8; // ≈ glyph advance at font-size 12
       const showToday = todayIdx >= 0 && todayIdx < proj.length;
       const xToday = showToday ? xFor(todayIdx) : 0;
-      const clashesToday = t => showToday && Math.abs(xFor(t.i) - xToday) < (estW('Today') / 2 + estW(t.label) / 2 + 3);
+      // "Today" is left-aligned (text-anchor start) from xToday, so it occupies
+      // [xToday, xToday + width]. Drop any month label whose LEFT edge would
+      // overlap that span.
+      const clashesToday = t => showToday && (xFor(t.i) - estW(t.label) / 2) < (xToday + estW('Today') + 3);
       return xTicks.filter(t => !clashesToday(t)).map(t => {
         const x = xFor(t.i);
         return `<text x="${x.toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">${t.label}</text>`;
       }).join('');
     })()}
     <!-- "Today" — bottom axis-row label (Wealthfront-style): same row / baseline
-         / type style as the month labels, centered on today's x. When today is
-         at the chart start it clips slightly at the left edge; that's accepted. -->
+         / type style as the month labels. LEFT-ALIGNED (text-anchor start) at
+         today's x so it abuts the chart's left boundary and never clips at the
+         SVG left edge (today sits at padL in the normal hero case). -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">Today</text>
+      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="start" font-weight="500">Today</text>
     ` : ''}
     <!-- Horizon end label: suppress if same month as last tick, or too close -->
     ${(() => {
