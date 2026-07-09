@@ -21,9 +21,10 @@ const App = {
     offersSort: 'default',
     offersAdvanced: false
   },
-  optimizer: { results: null, candidates: [], evaluated: 0, infeasibleCount: 0, lastRunAt: null },
-  // Which segment of the merged Plan tab is active: 'planner' | 'timeline' | 'optimize'.
-  _planSegment: 'planner',
+  // Which segment of the Plan tab is active: 'timeline' | 'optimize'.
+  // Timeline is the default landing (monitoring-first; Home stays chart-first).
+  // The manual-combo 'planner' segment retired in v2026.07.09h.
+  _planSegment: 'timeline',
   // Transient optimizer-engine proposal (NEVER persisted — like a DoC parse
   // result; nothing hits state.offers until applyOptimizerPlan). Holds the
   // winning plan object (with .alternatives), or a {tooMany} signal.

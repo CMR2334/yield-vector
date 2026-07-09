@@ -377,8 +377,8 @@ function runOptimizer(state) {
   // generateProjection is therefore the active non-candidate set UNION the
   // candidate subset under test, computed once here and unioned per mask below.
   // `includedIds` (the reported combo) stays the SUBSET only — the base offers
-  // are already committed, not a user choice, and applyOptimizerCombo re-derives
-  // selection from the mask, not from this list.
+  // are already committed, not a user choice, so the reported selection is the
+  // candidate subset under test, re-derivable from the mask, not this list.
   const candidateIds = new Set(candidates.map(o => o.id));
   const baseActiveIds = state.offers
     .filter(o => !candidateIds.has(o.id) && offerIsActiveForProjection(o))

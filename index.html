@@ -2496,7 +2496,7 @@ table.data-table {
 .row-danger { background: rgba(239, 68, 68, 0.07); }
 
 /* ============================================================
-   PLANNER OPTIMIZER
+   OPTIMIZE BAR (Plan tab · Optimize segment)
    ============================================================ */
 .optimizer-bar {
   background: var(--card);
@@ -2520,29 +2520,11 @@ table.data-table {
 .optimizer-summary .metric .label { font-size: 11px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
 .optimizer-summary .metric .value { font-size: 18px; font-weight: 600; }
 
-.combo-card {
-  background: var(--card);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  box-shadow: var(--shadow-card);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: border-color 0.12s, transform 0.05s, box-shadow 0.12s;
-}
-.combo-card:hover { border-color: var(--accent-mid); }
-.combo-card:active { transform: scale(0.997); }
-.combo-card.selected { border-color: var(--accent); box-shadow: var(--shadow-card-hover), 0 0 0 4px rgba(91, 92, 246, 0.12); }
-.recommended-tag { color: var(--accent); font-weight: 700; }
-
-.combo-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); gap: var(--space-3); }
+/* Shared with the Optimize plan card's head/meta (renderOptimizeSegment). */
 .combo-rank { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.02em; }
 .combo-bonus { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--success); }
 .combo-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--space-3); display: flex; flex-wrap: wrap; gap: 12px; }
 .combo-meta span { display: inline-flex; align-items: center; gap: 4px; }
-.combo-offers { display: flex; flex-direction: column; gap: 4px; }
-.combo-offer { font-size: 13px; padding: 6px 10px; background: var(--bg); border-radius: 6px; display: flex; justify-content: space-between; gap: 8px; }
-.combo-offer .name { color: var(--text); font-weight: 500; }
-.combo-offer .amount { color: var(--text-tertiary); font-feature-settings: 'tnum' 1; }
 
 /* ============================================================
    OPTIMIZE SEGMENT — engine proposal (Plan tab › Optimize)
@@ -2778,7 +2760,6 @@ table.data-table {
   .input, .select, .textarea, .input-group { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
   .field[style*="grid-column"] { grid-column: auto !important; }
   .section-header h2 { font-size: 20px; }
-  .planner-add-btn { display: none; }
 }
 
 @media (max-width: 480px) {
@@ -2879,11 +2860,6 @@ table.data-table {
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: var(--space-4);
   }
-  .combo-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: var(--space-4);
-  }
 }
 
 @media (min-width: 481px) and (max-width: 879px) {
@@ -2892,11 +2868,10 @@ table.data-table {
     grid-template-columns: 1fr 1fr;
     gap: var(--space-4);
   }
-  .combo-grid { display: flex; flex-direction: column; gap: var(--space-3); }
 }
 
 @media (max-width: 480px) {
-  .planner-grid, .combo-grid { display: flex; flex-direction: column; gap: var(--space-4); }
+  .planner-grid { display: flex; flex-direction: column; gap: var(--space-4); }
 }
 
 </style>

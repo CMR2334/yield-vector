@@ -7,7 +7,7 @@ import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2,
 import { optimizePlanner } from './optimizer-engine.js';
 import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarget, readCommitmentForm, readEventForm, readOfferForm, removeDdRow, removeRequirementRow, removeSourceBank, showCommitmentModal, showEventModal, showOfferModal, showSyncHistoryModal } from './modals-forms.js';
 import { isOfferComplete, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
-import { convertOfferToCommitment, generateProjection, runOptimizer, summarizeProjection } from './projection-optimizer.js';
+import { convertOfferToCommitment, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { updateUpcomingPage } from './reminders.js';
 import { diagReportText } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
@@ -187,10 +187,6 @@ function onClick(e) {
     case 'restore-pre-v2': if (confirm('Restore the pre-v2 backup (taken before the schema-v2 upgrade)? This replaces your current data with that snapshot and reloads. Your current data is not separately kept, so export first if unsure.')) { restorePreV2Backup(); } break;
     case 'copy-diag': copyText(diagReportText()).then(() => toast('Diagnostics copied')).catch(() => toast('Could not copy — select the text manually', 'danger')); break;
     case 'clear-diag': clearDiagLog(); render(); toast('Diagnostics cleared'); break;
-
-    case 'run-optimizer': runOptimizerNow(); break;
-    case 'clear-optimizer': App.optimizer.results = null; render(); break;
-    case 'apply-combo': applyOptimizerCombo(target.dataset.mask); break;
 
     // Optimize segment — the constraint-based sequencer (engine proposal).
     case 'run-planner-optimizer': runPlannerOptimizerNow(); break;
@@ -1119,9 +1115,9 @@ function applyOptimizerPlan() {
       // currently in the scenario. The engine's evaluated set is baseline
       // (active non-candidates) + selected candidates, so a dropped-but-
       // included hypothetical must leave includeInScenario — otherwise the
-      // applied capital curve won't match the proposal (P1-1 parity). Mirrors
-      // applyOptimizerCombo's include toggle: no last_edited stamp, since only
-      // the scenario flag changes. Create candidates aren't in state.offers.
+      // applied capital curve won't match the proposal (P1-1 parity). This
+      // only flips the scenario flag, so no last_edited stamp is set. Create
+      // candidates aren't in state.offers.
       for (const cand of (top.candidates || [])) {
         if (cand.op !== 'update' || includedSet.has(cand.id)) continue;
         const o = s.offers.find(x => x.id === cand.originalOfferId);
@@ -1163,30 +1159,6 @@ function undoOptimizerApply() {
   App._optimizerUndo = null;
   render();
   toast('Apply undone');
-}
-
-function runOptimizerNow() {
-  const result = runOptimizer(App.state);
-  App.optimizer.results = result;
-  render();
-  if (result.tooMany) toast(`Too many candidates (${result.candidateCount}). Mark some as skipped.`, 'danger');
-  else if (result.results.length === 0) toast('No feasible combinations found', 'danger');
-  else toast(`Found ${result.results.length} feasible combination${result.results.length === 1 ? '' : 's'}`);
-}
-
-function applyOptimizerCombo(maskStr) {
-  const result = App.optimizer.results;
-  if (!result) return;
-  const mask = Number(maskStr);
-  const candidates = result.candidates;
-  App.update(s => {
-    for (let i = 0; i < candidates.length; i++) {
-      const o = s.offers.find(x => x.id === candidates[i].id);
-      if (!o) continue;
-      o.includeInScenario = Boolean(mask & (1 << i));
-    }
-  });
-  toast('Combination applied');
 }
 
 /* ============================================================
@@ -1597,4 +1569,4 @@ function seedSampleData(state) {
   return state;
 }
 
-export { bindGlobalEvents, bindViewEvents, onClick, onChange, onInput, reformatMoneyFieldLive, toggleAdvancedForm, saveOfferFromForm, deleteOffer, templateIdentity, addOrReplaceTemplate, saveOfferAsTemplate, saveOfferAsTemplateFromCard, toggleRequirementDone, toggleActionDone, lifecycleMarkWaiting, lifecycleDismissSuggest, toggleChurnSnoozeMenu, toggleChurnSnoozedReveal, churnSnooze, churnUnsnooze, churnRunAgain, duplicateOffer, convertOffer, saveCommitmentFromForm, deleteCommitment, saveEventFromForm, deleteEvent, runOptimizerNow, applyOptimizerCombo, guardedManualPush, ensureSyncConfigSaved, updateSyncButtonsLive, saveSyncConfigFromForm, saveDocWorkerUrlFromForm, createGistFromForm, exportJson, importJsonFile, seedSampleData };
+export { bindGlobalEvents, bindViewEvents, onClick, onChange, onInput, reformatMoneyFieldLive, toggleAdvancedForm, saveOfferFromForm, deleteOffer, templateIdentity, addOrReplaceTemplate, saveOfferAsTemplate, saveOfferAsTemplateFromCard, toggleRequirementDone, toggleActionDone, lifecycleMarkWaiting, lifecycleDismissSuggest, toggleChurnSnoozeMenu, toggleChurnSnoozedReveal, churnSnooze, churnUnsnooze, churnRunAgain, duplicateOffer, convertOffer, saveCommitmentFromForm, deleteCommitment, saveEventFromForm, deleteEvent, guardedManualPush, ensureSyncConfigSaved, updateSyncButtonsLive, saveSyncConfigFromForm, saveDocWorkerUrlFromForm, createGistFromForm, exportJson, importJsonFile, seedSampleData };

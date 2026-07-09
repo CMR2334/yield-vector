@@ -4,26 +4,25 @@ import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
-import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
+import { effectiveHorizonDays, generateProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
 /* ============================================================
-   PLAN TAB — merged Planner + Timeline + Optimize segments
+   PLAN TAB — Timeline + Optimize segments
    ============================================================
-   The owner's 4-tab nav (Home · Plan · Offers · Settings) folds the old
-   standalone Timeline tab into the Plan tab as a segmented control. The
-   Plan tab renders a 3-way segment switcher, then the active segment:
-   the offer-toggle Planner (renderPlannerBody), the capital Timeline
-   (renderTimeline), or the optimizer proposal (renderOptimizeSegment).
-   App._planSegment holds the active segment ('planner' by default). */
+   The owner's 4-tab nav (Home · Plan · Offers · Settings) renders a
+   2-way segment switcher, then the active segment: the capital Timeline
+   (renderTimeline) or the optimizer proposal (renderOptimizeSegment).
+   The old manual-combo Planner segment retired in v2026.07.09h — the
+   Optimize engine subsumes it and the Offers tab card view carries the
+   include toggle. App._planSegment holds the active segment; Timeline is
+   the default landing (monitoring-first, since Home stays chart-first).
+   Any stale persisted 'planner' value coerces to 'timeline' here. */
 function renderPlanner() {
-  const seg = App._planSegment || 'planner';
-  let body;
-  if (seg === 'timeline') body = renderTimeline();
-  else if (seg === 'optimize') body = renderOptimizeSegment();
-  else body = renderPlannerBody();
+  const seg = App._planSegment === 'optimize' ? 'optimize' : 'timeline';
+  const body = seg === 'optimize' ? renderOptimizeSegment() : renderTimeline();
   return `
     ${renderPlanSegmentControl(seg)}
     <div class="plan-segment-body">${body}</div>
@@ -32,7 +31,6 @@ function renderPlanner() {
 
 function renderPlanSegmentControl(active) {
   const segs = [
-    ['planner', 'Planner'],
     ['timeline', 'Timeline'],
     ['optimize', 'Optimize']
   ];
@@ -40,81 +38,6 @@ function renderPlanSegmentControl(active) {
     <div class="plan-segmented" role="tablist" aria-label="Plan views">
       ${segs.map(([k, l]) => `<button class="plan-seg-btn ${active === k ? 'active' : ''}" role="tab" aria-selected="${active === k ? 'true' : 'false'}" data-plan-segment="${k}">${l}</button>`).join('')}
     </div>
-  `;
-}
-
-function renderPlannerBody() {
-  const offers = App.state.offers
-    .filter(o => o.status !== 'completed' && o.status !== 'skipped')
-    .slice()
-    .sort((a, b) => {
-      const ar = annualizedReturn(a) ?? 0;
-      const br = annualizedReturn(b) ?? 0;
-      return br - ar;
-    });
-
-  const proj = generateProjection(App.state);
-  const summary = summarizeProjection(proj, App.state.settings);
-  const includedCount = offers.filter(o => offerIsActiveForProjection(o)).length;
-  const includedBonus = offers.filter(o => offerIsActiveForProjection(o)).reduce((s, o) => s + (o.signupBonusAmount || 0), 0);
-
-  // Lowest-projected tone — mirrors the Overview "Lowest projected" stat card
-  // (render-shell-overview statCard variant .stat-value danger/warn/lighten):
-  // shortfall → red (var(--danger) === the .stat-value.danger #e87171), otherwise
-  // mid amber #c88b2c (warn & lighten are the same amber by design). Same
-  // shortfallDays/belowBufferDays conditions the Overview uses, so both tabs'
-  // lowest-projected figure now reads identically.
-  const lowestToneColor = summary.shortfallDays > 0 ? 'var(--danger)' : '#c88b2c';
-
-  const candidates = offers.filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o));
-
-  const optResult = App.optimizer.results;
-
-  return `
-    <div class="section-header">
-      <div>
-        <h2>Planner</h2>
-        <p>Toggle offers in or out and see your cash projection update live.</p>
-      </div>
-      <div style="display:flex;gap:var(--space-2);">
-        <button class="btn btn-secondary planner-add-btn" data-action="add-offer">+ Add offer</button>
-      </div>
-    </div>
-
-    <div class="optimizer-bar">
-      <div class="optimizer-summary">
-        <div class="metric">
-          <span class="label">Selected</span>
-          <span class="value">${includedCount} <span style="font-size:13px;color:var(--text-tertiary);font-weight:500;">of ${offers.length}</span></span>
-        </div>
-        <div class="metric">
-          <span class="label">Expected bonus</span>
-          <span class="value" style="color:var(--success);">${formatCurrency(includedBonus)}</span>
-        </div>
-        <div class="metric">
-          <span class="label">Lowest projected</span>
-          <span class="value" style="color:${lowestToneColor};">${summary.lowest ? formatCurrency(summary.lowest.availableCapital) : '—'}</span>
-        </div>
-        <div class="metric">
-          <span class="label">Candidates for optimizer</span>
-          <span class="value">${candidates.length}</span>
-        </div>
-      </div>
-      <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;">
-        <button class="btn btn-primary" data-action="run-optimizer">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-          Find feasible combinations
-        </button>
-        ${optResult ? `<button class="btn btn-ghost btn-sm" data-action="clear-optimizer">Clear results</button>` : ''}
-      </div>
-    </div>
-
-    ${optResult ? renderOptimizerResults(optResult) : ''}
-
-    ${offers.length === 0
-      ? renderEmptyState('No offers yet', 'Add a bonus to start planning. We will compute the funding/withdrawal dates and tied-up cash for you.', 'add-offer', 'Add your first offer')
-      : `<div class="planner-grid">${offers.map(renderOfferCard).join('')}</div>`
-    }
   `;
 }
 
@@ -392,81 +315,6 @@ function renderOptCandidateReview(review, topPlan) {
         }).join('')}
       </div>
     </section>`;
-}
-
-function renderOptimizerResults(result) {
-  if (result.tooMany) {
-    return `
-      <div class="banner warn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
-        <div>
-          <strong>Too many candidates for brute force:</strong> ${result.candidateCount} offers (limit ${result.max}). Mark some offers as "skipped" or convert them to commitments first, or raise the limit in Settings.
-        </div>
-      </div>
-    `;
-  }
-  if (result.results.length === 0) {
-    return `
-      <div class="banner danger">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>
-        <div>
-          <strong>No feasible combinations.</strong> Of ${result.evaluated} subsets evaluated, all ${result.infeasibleCount} would breach your buffer or go negative. Try raising your liquid capital, lowering your buffer floor, or removing high-capital offers.
-        </div>
-      </div>
-    `;
-  }
-  // Compute which combo (if any) matches the user's current includeInScenario state.
-  const currentMask = currentlyAppliedComboMask(result.candidates);
-  return `
-    <section class="card" style="margin-bottom:var(--space-5);">
-      <div class="card-header">
-        <h2>Top feasible combinations</h2>
-        <span style="font-size:12px;color:var(--text-tertiary);">Evaluated ${result.evaluated.toLocaleString()} subsets · ${result.infeasibleCount} infeasible · click a combo to apply it</span>
-      </div>
-      <div class="combo-grid">
-        ${result.results.map((r, i) => renderComboCard(r, i, result.candidates, currentMask)).join('')}
-      </div>
-      <p style="margin-top:var(--space-3);font-size:12px;color:var(--text-tertiary);">Only combinations that never dip below your buffer are shown. Ranking: highest total bonus → highest blended APY → highest lowest-available cash. <strong>Low cash</strong> is how thin you'd run at the worst point.</p>
-    </section>
-  `;
-}
-
-function currentlyAppliedComboMask(candidates) {
-  let mask = 0;
-  for (let i = 0; i < candidates.length; i++) {
-    const o = App.state.offers.find(x => x.id === candidates[i].id);
-    if (o && o.includeInScenario) mask |= (1 << i);
-  }
-  return mask;
-}
-
-function renderComboCard(r, rank, candidates, currentMask) {
-  const offers = r.includedIds.map(id => candidates.find(o => o.id === id)).filter(Boolean);
-  const isSelected = r.mask === currentMask;
-  return `
-    <div class="combo-card ${isSelected ? 'selected' : ''}" data-action="apply-combo" data-mask="${r.mask}" role="button" tabindex="0">
-      <div class="combo-header">
-        <div>
-          <div class="combo-rank">#${rank + 1}${rank === 0 ? ' · <span class="recommended-tag">Recommended</span>' : ''}${isSelected ? ' · <span style="color:var(--accent);">Applied</span>' : ''}</div>
-          <div class="combo-bonus">${formatCurrency(r.totalBonus)}</div>
-        </div>
-      </div>
-      <div class="combo-meta">
-        <span><strong>${formatCompactCurrency(r.totalRequired)}</strong> capital</span>
-        <span><strong>${formatCompactCurrency(r.lowestAvailable)}</strong> low cash</span>
-        ${r.blendedAnnReturn != null ? `<span><strong>${formatPercent(r.blendedAnnReturn)}</strong> APY blended</span>` : ''}
-        ${r.belowBufferDays > 0 ? `<span style="color:#b45309;">${r.belowBufferDays}d below buffer</span>` : ''}
-      </div>
-      <div class="combo-offers">
-        ${offers.map(o => `
-          <div class="combo-offer">
-            <span class="name">${escapeHtml(offerDisplayLabel(o, { separator: ' · ' }))}</span>
-            <span class="amount">${formatCompactCurrency(o.signupBonusAmount)} / ${formatCompactCurrency(o.requiredFundingAmount)}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
 }
 
 // DD-method datapoint panel for an offer card: top 3 source methods (by
@@ -2311,4 +2159,4 @@ function niceStep(raw) {
   return nf * exp;
 }
 
-export { renderPlanner, renderOptimizerResults, currentlyAppliedComboMask, renderComboCard, renderDdMethodPanel, requirementChecklistCounts, renderRequirementChecklist, renderPipelineStrip, renderLifecycleInfo, renderLifecycleSuggest, offerExpirationChip, offerUpdatedStamp, offerDocLink, renderOfferCard, renderTimeline, OFFERS_SORT_OPTIONS, sortOffersList, renderOffers, renderOfferCardWithActions, renderOffersTable, renderSettings, renderDiagnostics, formatDiagTime, diagReportText, renderCommitmentsTable, renderEventsTable, renderSyncSection, renderProjectionDebugTable, renderEmptyState, renderChartsAfterMount, prefillSyncInputs, renderHeroChart, niceTicks, niceStep };
+export { renderPlanner, renderDdMethodPanel, requirementChecklistCounts, renderRequirementChecklist, renderPipelineStrip, renderLifecycleInfo, renderLifecycleSuggest, offerExpirationChip, offerUpdatedStamp, offerDocLink, renderOfferCard, renderTimeline, OFFERS_SORT_OPTIONS, sortOffersList, renderOffers, renderOfferCardWithActions, renderOffersTable, renderSettings, renderDiagnostics, formatDiagTime, diagReportText, renderCommitmentsTable, renderEventsTable, renderSyncSection, renderProjectionDebugTable, renderEmptyState, renderChartsAfterMount, prefillSyncInputs, renderHeroChart, niceTicks, niceStep };
