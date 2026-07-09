@@ -775,6 +775,11 @@ async function saveSyncConfigFromForm() {
   const token = tokenInput.value.trim();
   if (!token) { toast('Token is required', 'danger'); return; }
   if (!gistId) { toast('Gist ID is required (or use "Create new Gist")', 'danger'); return; }
+  // LOCAL-ORIGIN SYNC GUARD (mirrors js/sync-pwa.js): the "Save & test" join flow
+  // does its own raw ghGet pull below, outside the Sync.* method guards, so cover
+  // it here too — a localhost/127.0.0.1 test instance must never pull the owner's
+  // real cloud data. Opt in with localStorage yv-allow-local-sync="1".
+  if (Sync._localOriginBlocked()) return;
   Sync.setConfig({ gistId, token });
   Sync.setStatus('syncing');
   // "Save & test" semantic: this device is joining sync. If the Gist has

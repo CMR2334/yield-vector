@@ -27,6 +27,14 @@ function renderPlanner() {
   const includedCount = offers.filter(o => offerIsActiveForProjection(o)).length;
   const includedBonus = offers.filter(o => offerIsActiveForProjection(o)).reduce((s, o) => s + (o.signupBonusAmount || 0), 0);
 
+  // Lowest-projected tone — mirrors the Overview "Lowest projected" stat card
+  // (render-shell-overview statCard variant .stat-value danger/warn/lighten):
+  // shortfall → red (var(--danger) === the .stat-value.danger #e87171), otherwise
+  // mid amber #c88b2c (warn & lighten are the same amber by design). Same
+  // shortfallDays/belowBufferDays conditions the Overview uses, so both tabs'
+  // lowest-projected figure now reads identically.
+  const lowestToneColor = summary.shortfallDays > 0 ? 'var(--danger)' : '#c88b2c';
+
   const candidates = offers.filter(o => HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o));
 
   const optResult = App.optimizer.results;
@@ -54,7 +62,7 @@ function renderPlanner() {
         </div>
         <div class="metric">
           <span class="label">Lowest projected</span>
-          <span class="value" style="${summary.shortfallDays > 0 ? 'color:var(--danger);' : (summary.belowBufferDays > 0 ? 'color:#c88b2c;' : 'color:#0ea968;')}">${summary.lowest ? formatCompactCurrency(summary.lowest.availableCapital) : '—'}</span>
+          <span class="value" style="color:${lowestToneColor};">${summary.lowest ? formatCurrency(summary.lowest.availableCapital) : '—'}</span>
         </div>
         <div class="metric">
           <span class="label">Candidates for optimizer</span>

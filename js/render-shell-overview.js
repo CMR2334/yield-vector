@@ -263,7 +263,7 @@ function renderOverview() {
     <div class="overview-grid">
       ${statCard('Tied up today', formatCurrency(tiedUpToday), `${(today ? Math.round((today.confirmedTiedUp / Math.max(1, today.totalTiedUp)) * 100) : 0)}% confirmed`, 'accent', 'goto-timeline')}
       ${statCard('Selected bonuses', formatCurrency(expectedBonusTotal), `${includedOffers.length} offer${includedOffers.length === 1 ? '' : 's'} included`, 'success', 'goto-offers-included')}
-      ${statCard('Lowest projected', formatCompactCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'), lowest ? 'goto-lowest' : null)}
+      ${statCard('Lowest projected', formatCurrency(heroLowest), lowest ? formatDateMedium(lowest.date) : '—', summary.shortfallDays > 0 ? 'danger' : (summary.belowBufferDays > 0 ? 'warn' : 'lighten'), lowest ? 'goto-lowest' : null)}
 
       <section class="card overview-main">
         <div class="card-header">

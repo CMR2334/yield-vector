@@ -232,8 +232,31 @@ const Sync = {
     updateSyncIndicator();
   },
 
+  // LOCAL-ORIGIN SYNC GUARD. A dev/test instance served from localhost or
+  // 127.0.0.1 must NEVER touch the owner's real Gist: a stray push would
+  // overwrite live cloud data and a pull/sync would clobber the test copy. When
+  // the page origin is local AND the explicit opt-in flag is absent, every Gist
+  // network entry point (push scheduler + executor, safeSync/pull, history,
+  // createGist) short-circuits on this check. Set localStorage
+  // yv-allow-local-sync="1" to deliberately develop against a real Gist. Logs
+  // ONCE per session, then stays silent. Guards the sync METHODS only — never the
+  // shared ghGet/ghFetch helpers — so the DoC-import Worker fetch (a separate
+  // integration on its own URL) is unaffected.
+  _localSyncNoticeShown: false,
+  _localOriginBlocked() {
+    const h = (typeof location !== 'undefined' && location.hostname) || '';
+    if (h !== 'localhost' && h !== '127.0.0.1') return false;
+    try { if (localStorage.getItem('yv-allow-local-sync') === '1') return false; } catch {}
+    if (!this._localSyncNoticeShown) {
+      this._localSyncNoticeShown = true;
+      console.info('[yv] sync disabled on local origin — set localStorage yv-allow-local-sync="1" to enable');
+    }
+    return true;
+  },
+
   // Schedule a debounced push after local edits.
   schedulePush(delayMs = 2500) {
+    if (this._localOriginBlocked()) return;
     if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
     if (this.pushTimer) clearTimeout(this.pushTimer);
     this.setStatus('pending');
@@ -245,6 +268,7 @@ const Sync = {
   // from startup, focus, and visibilitychange. Throttled by SAFE_SYNC_COOLDOWN.
   _lastSafeSyncAt: 0,
   async safeSync({ force = false, reason = '' } = {}) {
+    if (this._localOriginBlocked()) return;
     if (!this.isConfigured()) { this.setStatus('unconfigured'); return; }
     const SAFE_SYNC_COOLDOWN = 5000;
     const now = Date.now();
@@ -393,6 +417,7 @@ const Sync = {
   },
 
   async pull({ silent = false } = {}) {
+    if (this._localOriginBlocked()) return;
     if (!this.isConfigured()) { toast('Sync not configured', 'danger'); return; }
     const cfg = this.getConfig();
     this.setStatus('syncing');
@@ -453,6 +478,7 @@ const Sync = {
   // resolveDirtyConflict() dialog, so a force here never double-prompts — and
   // (3) restoreState. NEVER from a plain manual push.
   async push({ silent = false, force = false } = {}) {
+    if (this._localOriginBlocked()) return;
     if (!this.isConfigured()) { if (!silent) toast('Sync not configured', 'danger'); return; }
     const cfg = this.getConfig();
     this.setStatus('syncing');
@@ -566,6 +592,7 @@ const Sync = {
   },
 
   async createGist(token) {
+    if (this._localOriginBlocked()) throw new Error('sync disabled on local origin — set localStorage yv-allow-local-sync="1" to enable');
     // Convenience: create a private Gist seeded with current state + feed.
     App.state._lastModified = Date.now();
     App.state._feed = computeFeedSafely(App.state);
@@ -592,12 +619,14 @@ const Sync = {
   // returns the revisions newest-first; fetchRevision() pulls one version's
   // parsed state; restoreState() makes a chosen revision current everywhere.
   async listHistory() {
+    if (this._localOriginBlocked()) return [];
     if (!this.isConfigured()) throw new Error('Sync not configured');
     const cfg = this.getConfig();
     const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}`, cfg.token);
     return Array.isArray(data.history) ? data.history : [];
   },
   async fetchRevision(version) {
+    if (this._localOriginBlocked()) return null;
     const cfg = this.getConfig();
     const data = await ghGet(`https://api.github.com/gists/${cfg.gistId}/${version}`, cfg.token);
     const file = (data.files && (data.files[SYNC_FILENAME] || Object.values(data.files)[0])) || null;
