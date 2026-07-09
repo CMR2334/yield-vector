@@ -1604,7 +1604,7 @@ function renderHeroChart(svg) {
     ${yTicks.map(t => {
       const y = yFor(t);
       // Gridline only — the $ label is rendered in the sticky .chart-yaxis.
-      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1"/>`;
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#eef0f2" stroke-width="1" stroke-dasharray="4 4"/>`;
     }).join('')}
     <!-- Buffer line -->
     <line x1="${padL}" y1="${yFor(buffer).toFixed(1)}" x2="${W - padR}" y2="${yFor(buffer).toFixed(1)}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.7"/>
@@ -1613,10 +1613,10 @@ function renderHeroChart(svg) {
     <!-- Area + line -->
     <path d="${areaPath}" fill="url(#area-grad)" />
     <path d="${linePath}" fill="none" stroke="#5b5cf6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    <!-- Today marker — neutral gray so it doesn't read as another Outflow
-         purple bubble. Line + dot + label all use the same tertiary gray. -->
+    <!-- Today marker — a neutral-gray "you are here" dot on the trendline.
+         The standing dashed vertical line was removed (owner request,
+         Wealthfront-style): "Today" now reads as a bottom axis-row label. -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <line x1="${xFor(todayIdx).toFixed(1)}" y1="${padT}" x2="${xFor(todayIdx).toFixed(1)}" y2="${padT + innerH}" stroke="#9099a8" stroke-width="1" stroke-dasharray="2 3" opacity="0.55" pointer-events="none"/>
       <circle cx="${xFor(todayIdx).toFixed(1)}" cy="${yFor(proj[todayIdx].availableCapital).toFixed(1)}" r="5" fill="#6b7280" stroke="white" stroke-width="2.5" pointer-events="none"/>
     ` : ''}
     <!-- Markers grouped by visual proximity. When two or more markers would
@@ -1656,15 +1656,23 @@ function renderHeroChart(svg) {
       });
       return out;
     })()}
-    <!-- X axis labels (months) -->
-    ${xTicks.map(t => {
-      const x = xFor(t.i);
-      return `<text x="${x.toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">${t.label}</text>`;
-    }).join('')}
-    <!-- "Today" anchor: small accent above the chart, not on the axis line.
-         Gray to match the rest of the Today line/dot. -->
+    <!-- X axis labels (months). "Today" shares this same axis row (rendered
+         below), so drop any month label whose text would overlap "Today". -->
+    ${(() => {
+      const estW = s => String(s).length * 6.8; // ≈ glyph advance at font-size 12
+      const showToday = todayIdx >= 0 && todayIdx < proj.length;
+      const xToday = showToday ? xFor(todayIdx) : 0;
+      const clashesToday = t => showToday && Math.abs(xFor(t.i) - xToday) < (estW('Today') / 2 + estW(t.label) / 2 + 3);
+      return xTicks.filter(t => !clashesToday(t)).map(t => {
+        const x = xFor(t.i);
+        return `<text x="${x.toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">${t.label}</text>`;
+      }).join('');
+    })()}
+    <!-- "Today" — bottom axis-row label (Wealthfront-style): same row / baseline
+         / type style as the month labels, centered on today's x. When today is
+         at the chart start it clips slightly at the left edge; that's accepted. -->
     ${todayIdx >= 0 && todayIdx < proj.length ? `
-      <text x="${(todayIdx > proj.length * 0.85 ? xFor(todayIdx) - 4 : xFor(todayIdx) + 4).toFixed(1)}" y="${(padT + 9).toFixed(1)}" fill="#6b7280" font-size="11" text-anchor="${todayIdx > proj.length * 0.85 ? 'end' : 'start'}" font-weight="600">Today</text>
+      <text x="${xFor(todayIdx).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="middle" font-weight="500">Today</text>
     ` : ''}
     <!-- Horizon end label: suppress if same month as last tick, or too close -->
     ${(() => {
@@ -1678,7 +1686,7 @@ function renderHeroChart(svg) {
     })()}
     <!-- Hover overlay -->
     <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="transparent" id="chart-hover-area"/>
-    <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0" stroke-dasharray="2 3"/>
+    <line id="chart-hover-line" x1="0" y1="${padT}" x2="0" y2="${padT + innerH}" stroke="#0d1421" stroke-width="1" opacity="0"/>
     <circle id="chart-hover-dot" cx="0" cy="0" r="5" fill="#6b7280" stroke="white" stroke-width="2" opacity="0"/>
   `;
 
