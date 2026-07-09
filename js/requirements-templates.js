@@ -328,6 +328,7 @@ const TEMPLATE_TERMS_KEYS = [
   'bankName', 'offerName', 'offerType',
   'signupBonusAmount', 'offerExpirationDate',
   'requiredFundingAmount', 'daysAfterSignupAllowedBeforeDeposit', 'daysFundsMustRemain',
+  'lockStartsFrom',
   'monthly_fee', 'fee_waiver_condition', 'promo_code',
   'early_termination_fee', 'etf_window_days',
   'bonus_post_min_days', 'bonus_post_max_days',
@@ -455,7 +456,12 @@ function templateToOffer(tpl) {
     optionalPlannedFundingDate: '',
     bonus_received_date: null,
     closed_date: null,
-    lockStartsFrom: 'funded date',
+    // Preserve the hold anchor across the round-trip: an 'open date'-anchored
+    // offer saved as a template (or churn "Run again") must NOT silently flip to
+    // funded-date (an under-hold that risks bonus clawback). Legacy templates
+    // stored before lockStartsFrom joined TEMPLATE_TERMS_KEYS carry no key and
+    // keep the historical 'funded date' default — exact backward compatibility.
+    lockStartsFrom: (t.lockStartsFrom === 'open date' ? 'open date' : 'funded date'),
     status: 'prospect',
     accountStatus: 'closed',
     subStatus: 'prospect',

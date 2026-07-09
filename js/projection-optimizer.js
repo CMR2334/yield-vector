@@ -1,8 +1,8 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate } from './dd-widgets.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './migrations-catalogs.js';
-import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate } from './offer-model.js';
-import { offerDisplayLabel } from './requirements-templates.js';
+import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
+import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
    ============================================================
@@ -71,7 +71,13 @@ function effectiveHorizonDays(state) {
 
 function generateProjection(state, options = {}) {
   const settings = state.settings;
-  const horizon = effectiveHorizonDays(state);
+  // C3: the optimizer passes an explicit horizon that covers the evaluated
+  // combo's full capital-lock life (see optimizerHorizonForState). EVERY other
+  // caller omits options.horizonDays and gets the user's configured horizon
+  // exactly as before — zero behavior change outside runOptimizer.
+  const horizon = (Number.isFinite(options.horizonDays) && options.horizonDays > 0)
+    ? Math.floor(options.horizonDays)
+    : effectiveHorizonDays(state);
   const start = parseDate(settings.projectionStartDate) || TODAY;
   const buffer = Number(settings.minimumCashBuffer) || 0;
   const liquid = Number(settings.currentLiquidCapital) || 0;
@@ -293,9 +299,42 @@ function convertOfferToCommitment(offer) {
    render. If candidates exceed the configured limit, we ask the user
    to deselect some via the planner cards.
    ============================================================ */
+// C3 ceiling for the optimizer's per-run evaluation horizon. Bank-bonus holds
+// run at most a few months; 730d (matching the '2years' preset) is a generous
+// cap that keeps the 2^n × horizon evaluation bounded while covering every
+// realistic offer. An offer whose relevant dates fall beyond this is not fully
+// modeled by the optimizer — a documented tradeoff of this pre-engine hotfix.
+const OPTIMIZER_HORIZON_CEILING_DAYS = 730;
+
+// C3: the horizon the optimizer evaluates each combo over. It must reach the
+// LATEST relevant date (safeToCloseDate = max of withdrawal-eligible /
+// expected-bonus-window-end / ETF window / requirement deadlines) across every
+// offer that can appear in a combo — the currently-active base set PLUS every
+// complete hypothetical candidate (the mask, not includeInScenario, decides a
+// candidate's inclusion) — then a 30-day margin, capped at the ceiling. It is
+// NEVER shorter than the user's display horizon (effectiveHorizonDays), so no
+// mode regresses; it only ever EXTENDS past the auto-mode 180d clamp so a late
+// shortfall can't hide beyond the end of the projection.
+function optimizerHorizonForState(state, horizonStart) {
+  const start = horizonStart || parseDate(state.settings.projectionStartDate) || TODAY;
+  const base = effectiveHorizonDays(state);
+  let latest = null;
+  for (const o of state.offers || []) {
+    const inPlay = offerIsActiveForProjection(o)
+      || (HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o));
+    if (!inPlay) continue;
+    const iso = safeToCloseDate(o) || withdrawalEligibleDate(o) || lockStartDate(o);
+    const d = iso ? parseDate(iso) : null;
+    if (d && (latest == null || d > latest)) latest = d;
+  }
+  const needed = latest ? daysBetween(start, addDays(latest, 30)) : 0;
+  return Math.max(30, base, Math.min(OPTIMIZER_HORIZON_CEILING_DAYS, needed));
+}
+
 function runOptimizer(state) {
   const horizonStart = parseDate(state.settings.projectionStartDate) || TODAY;
-  const horizonEnd = addDays(horizonStart, effectiveHorizonDays(state));
+  const optimizerHorizonDays = optimizerHorizonForState(state, horizonStart);
+  const horizonEnd = addDays(horizonStart, optimizerHorizonDays);
 
   const candidates = state.offers.filter(o => {
     if (!HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return false;
@@ -325,6 +364,20 @@ function runOptimizer(state) {
   const total = 1 << candidates.length;
   const results = [];
   let infeasibleCount = 0;
+
+  // C2: while a combo is under test, the owner's currently-active NON-candidate
+  // offers (confirmed/open commitments and opted-in scenarios) must REMAIN in
+  // the projection — otherwise their committed capital vanishes and a candidate
+  // that is actually infeasible gets reported feasible. The override handed to
+  // generateProjection is therefore the active non-candidate set UNION the
+  // candidate subset under test, computed once here and unioned per mask below.
+  // `includedIds` (the reported combo) stays the SUBSET only — the base offers
+  // are already committed, not a user choice, and applyOptimizerCombo re-derives
+  // selection from the mask, not from this list.
+  const candidateIds = new Set(candidates.map(o => o.id));
+  const baseActiveIds = state.offers
+    .filter(o => !candidateIds.has(o.id) && offerIsActiveForProjection(o))
+    .map(o => o.id);
 
   for (let mask = 0; mask < total; mask++) {
     const includedIds = [];
@@ -358,7 +411,10 @@ function runOptimizer(state) {
       }
     }
 
-    const proj = generateProjection(state, { includedOfferIds: includedIds });
+    const proj = generateProjection(state, {
+      includedOfferIds: baseActiveIds.concat(includedIds),
+      horizonDays: optimizerHorizonDays
+    });
     let lowest = Infinity;
     let belowBufferDays = 0;
     let shortfallDays = 0;
@@ -406,4 +462,132 @@ function runOptimizer(state) {
   };
 }
 
-export { effectiveHorizonDays, generateProjection, summarizeProjection, convertOfferToCommitment, runOptimizer };
+/* ============================================================
+   FEASIBILITY REGRESSION PINS (C2 / C3 / C-template)
+   ============================================================
+   Permanent guards for the combo-feasibility hotfix (run
+   2026-07-08-planner-optimizer). Mirrors the testDocParserRegressions()
+   in-app + harness pattern: call testFeasibilityPins() from the DevTools
+   console (window.testFeasibilityPins) or from Node against the real
+   module. Returns { pass, fail, results }.
+
+   C2   — a combo's projection must KEEP the owner's currently-active
+          non-candidate offers (confirmed/open commitments); their tied-up
+          capital can make a candidate infeasible. Dropping them over-reports
+          feasibility.
+   C3   — the evaluated horizon must cover a combo's full capital-lock life,
+          not the auto-mode 180-day DISPLAY clamp; a shortfall that lands past
+          the clamp must not be truncated away. Includes a long-dated POSITIVE
+          control that must stay feasible (the extension must not invent
+          shortfalls).
+   Ctpl — an 'open date' hold anchor must survive the offer→template→offer
+          round-trip; a legacy template object without the key still yields the
+          historical 'funded date' default.
+   ============================================================ */
+function _fpIso(start, offsetDays) { return isoDate(addDays(start, offsetDays)); }
+
+// A complete new-funds-held offer (no directDeposits required by isOfferComplete).
+function _fpOffer(over) {
+  return Object.assign({
+    id: uid('off'), bankName: 'Pin Bank', offerType: 'new-funds-held',
+    requiredFundingAmount: 10000, signupBonusAmount: 300,
+    daysFundsMustRemain: 60, lockStartsFrom: 'funded date',
+    plannedSignupDate: '', optionalPlannedFundingDate: '',
+    status: 'prospect', accountStatus: 'closed', subStatus: 'prospect',
+    includeInScenario: false, directDeposits: [], requirements: []
+  }, over || {});
+}
+
+function _fpState(over) {
+  return Object.assign({
+    settings: {
+      projectionStartDate: '2026-07-01', projectionHorizonMode: 'auto',
+      minimumCashBuffer: 0, currentLiquidCapital: 50000, maxOptimizerCandidates: 15
+    },
+    offers: [], commitments: [], events: []
+  }, over || {});
+}
+
+function testFeasibilityPins() {
+  const results = [];
+  const check = (name, expected, actual, extra) => {
+    results.push({ name, expected, actual, ok: expected === actual, extra: extra || '' });
+  };
+  const start = parseDate('2026-07-01');
+  // With one candidate, the only non-empty subset is the offerCount===1 result.
+  const candOnly = (r) => (r.allResults || []).find(x => x.offerCount === 1) || null;
+
+  // ---- C2: a confirmed offer's committed capital must sink an over-committed
+  // candidate. Liquid 50k; confirmed ties 40k [~d10,~d70]; candidate ties 30k
+  // [~d20,~d80]; overlap needs 70k > 50k → the candidate-only combo is INFEASIBLE.
+  {
+    const confirmed = _fpOffer({
+      id: 'off_confirmed', bankName: 'Confirmed', status: 'funded',
+      accountStatus: 'open', subStatus: 'on-track', includeInScenario: true,
+      requiredFundingAmount: 40000, daysFundsMustRemain: 60,
+      plannedSignupDate: _fpIso(start, 10), optionalPlannedFundingDate: _fpIso(start, 10)
+    });
+    const candidate = _fpOffer({
+      id: 'off_candidate', bankName: 'Candidate', status: 'prospect',
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      plannedSignupDate: _fpIso(start, 20), optionalPlannedFundingDate: _fpIso(start, 20)
+    });
+    const cand = candOnly(runOptimizer(_fpState({ offers: [confirmed, candidate] })));
+    check('C2 confirmed capital kept in combo (candidate infeasible)',
+      false, cand ? cand.feasible : null, cand ? `lowest=${cand.lowestAvailable}` : 'no result');
+  }
+
+  // ---- C3-neg: a late shortfall past the 180-day auto clamp must be caught.
+  // Candidate ties 30k [~d100,~d240]; a -35k expense on d200 drives -15k over
+  // d200..d240 — entirely beyond the clamp. Must be INFEASIBLE post-fix.
+  {
+    const candidate = _fpOffer({
+      id: 'off_c3neg', bankName: 'LateHold', status: 'prospect', includeInScenario: true,
+      requiredFundingAmount: 30000, daysFundsMustRemain: 140,
+      plannedSignupDate: _fpIso(start, 100), optionalPlannedFundingDate: _fpIso(start, 100)
+    });
+    const cand = candOnly(runOptimizer(_fpState({
+      offers: [candidate],
+      events: [{ id: 'ev_c3neg', includeInProjection: true, amount: -35000, date: _fpIso(start, 200) }]
+    })));
+    check('C3 late shortfall past 180d clamp caught (infeasible)',
+      false, cand ? cand.feasible : null, cand ? `lowest=${cand.lowestAvailable}` : 'no result');
+  }
+
+  // ---- C3-pos: a genuinely-feasible long-dated combo must STAY feasible under
+  // the extended horizon. Same shape, but only a -10k expense → +10k floor.
+  {
+    const candidate = _fpOffer({
+      id: 'off_c3pos', bankName: 'LateHoldOK', status: 'prospect', includeInScenario: true,
+      requiredFundingAmount: 30000, daysFundsMustRemain: 140,
+      plannedSignupDate: _fpIso(start, 100), optionalPlannedFundingDate: _fpIso(start, 100)
+    });
+    const cand = candOnly(runOptimizer(_fpState({
+      offers: [candidate],
+      events: [{ id: 'ev_c3pos', includeInProjection: true, amount: -10000, date: _fpIso(start, 200) }]
+    })));
+    check('C3 long-dated positive control stays feasible',
+      true, cand ? cand.feasible : null, cand ? `lowest=${cand.lowestAvailable}` : 'no result');
+  }
+
+  // ---- Ctpl: 'open date' hold anchor must survive the template round-trip;
+  // a legacy template (no key) still defaults to 'funded date'.
+  {
+    const rt = templateToOffer(offerToTemplate(_fpOffer({ lockStartsFrom: 'open date', daysFundsMustRemain: 90 })));
+    check('Ctpl open-date anchor preserved through round-trip', 'open date', rt.lockStartsFrom);
+    const legacy = templateToOffer({ bankName: 'Legacy', offerType: 'new-funds-held', daysFundsMustRemain: 90 });
+    check('Ctpl legacy template (no key) still defaults funded date', 'funded date', legacy.lockStartsFrom);
+  }
+
+  const pass = results.filter(r => r.ok).length;
+  const fail = results.length - pass;
+  if (typeof console !== 'undefined') {
+    console.log(`testFeasibilityPins: PASS ${pass}  FAIL ${fail}`);
+    for (const r of results) {
+      console.log(`  ${r.ok ? 'ok ' : 'X  '}${r.name} -> got ${JSON.stringify(r.actual)} want ${JSON.stringify(r.expected)}${r.extra ? '  [' + r.extra + ']' : ''}`);
+    }
+  }
+  return { pass, fail, results };
+}
+
+export { effectiveHorizonDays, generateProjection, summarizeProjection, convertOfferToCommitment, runOptimizer, testFeasibilityPins };

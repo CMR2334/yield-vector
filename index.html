@@ -26,23 +26,23 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09c",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09c",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09c",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09c",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09c",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09c",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.09c",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09c",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09c",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09c",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.09c",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09c",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09c",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09c",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09c",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09c",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09c"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09d",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09d",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09d",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09d",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09d",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09d",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.09d",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09d",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09d",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09d",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.09d",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09d",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09d",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09d",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09d",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09d",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09d"
   }
 }
 </script>
@@ -2841,7 +2841,7 @@ import './js/migrations-catalogs.js';
 import './js/date-format-core.js';
 import './js/dd-widgets.js';
 import './js/offer-model.js';
-import './js/projection-optimizer.js';
+import { testFeasibilityPins } from './js/projection-optimizer.js';
 import './js/reminders.js';
 import './js/render-main-views.js';
 import './js/ui-utils.js';
@@ -2856,10 +2856,12 @@ import './js/events-actions-data.js';
    ============================================================ */
 window.App = App;
 window.Sync = Sync;
-window.YieldVector = { App, Sync, parseDocPost, testDocParser, testDocParserRegressions, render };
+window.YieldVector = { App, Sync, parseDocPost, testDocParser, testDocParserRegressions, testFeasibilityPins, render };
 // Documented bare-console workflow (comments :11825/:11890, doc-samples/README.md:176): keep these callable un-namespaced from DevTools.
 window.testDocParser = testDocParser;
 window.testDocParserRegressions = testDocParserRegressions;
+// Combo-feasibility hotfix pins (C2/C3/C-template) — console + Node harness callable.
+window.testFeasibilityPins = testFeasibilityPins;
 
 /* ============================================================
    INIT
