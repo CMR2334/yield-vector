@@ -11,8 +11,8 @@ import { convertOfferToCommitment, generateProjection, runOptimizer, summarizePr
 import { updateUpcomingPage } from './reminders.js';
 import { diagReportText } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
-import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
-import { ErrCode, STORAGE_KEY, clearDiagLog, copyText, defaultAccountForSub, logError, normalizeOfferStatus } from './runtime-status.js';
+import { offerDisplayLabel, offerToTemplate, syncRequirementsWithLegacy, templateToOffer } from './requirements-templates.js';
+import { ErrCode, STORAGE_KEY, clearDiagLog, copyText, defaultAccountForSub, logError, migrateDdIds, normalizeOfferStatus } from './runtime-status.js';
 import { SYNC_FILENAME, Sync, ghGet, revisionOf, updateSyncIndicator } from './sync-pwa.js';
 import { toast } from './ui-utils.js';
 /* ============================================================
@@ -198,6 +198,8 @@ function onClick(e) {
     case 'select-optimizer-alt':
       App._optimizerAltIndex = Math.max(0, Number(target.dataset.altIndex) || 0); render();
       break;
+    case 'apply-optimizer-plan': applyOptimizerPlan(); break;
+    case 'undo-optimizer-apply': undoOptimizerApply(); break;
 
     case 'toggle-advanced': App.filters.offersAdvanced = !App.filters.offersAdvanced; render(); break;
 
@@ -772,6 +774,146 @@ function runPlannerOptimizerNow() {
     const n = (plan.includedIds || []).length;
     toast(`Proposed a plan with ${n} offer${n === 1 ? '' : 's'} · ${formatCurrency(plan.objective.grossBonus)} gross`);
   }
+}
+
+// JSON deep clone — offers are plain JSON (ISO-string dates, no functions), so
+// a round-trip is a faithful snapshot for the one-shot undo.
+function optDeepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// Apply an engine schedule to an EXISTING offer (op 'update'), in place.
+// Mirrors modal-save semantics: last_edited stamp, reconcileClosedDate (no-op
+// with no status change), syncRequirementsWithLegacy (re-dates derived rows in
+// place, preserving done/done_date/notes). DD ids are PRESERVED — feed items
+// key on them — so planned dates are moved by id, never rebuilt.
+function applyScheduleToOffer(o, sched, now) {
+  o.plannedSignupDate = sched.plannedSignupDate || '';
+  o.optionalPlannedFundingDate = sched.optionalPlannedFundingDate || '';
+  const byId = new Map((sched.directDeposits || []).map(d => [d.id, d.plannedDate]));
+  for (const dd of (o.directDeposits || [])) {
+    if (dd && dd.id && byId.has(dd.id)) dd.plannedDate = byId.get(dd.id);
+  }
+  o.includeInScenario = true;
+  o.last_edited = now;
+  reconcileClosedDate(o, o.accountStatus);
+  syncRequirementsWithLegacy(o);
+}
+
+// Materialize a synthesized churn candidate (op 'create') into a REAL Run-again
+// offer with full create-fidelity (step-3 inherited issue). The engine used a
+// stable churn_<sourceId> id + a capital-faithful hand-rolled offer purely for
+// deterministic evaluation; APPLY reconciles it to the canonical run-again
+// object — templateToOffer(offerToTemplate(source)) — the exact fidelity the
+// manual "Run again" button produces (bankName, offerName, color, hold anchor
+// preserved via TEMPLATE_TERMS_KEYS), then overlays the optimizer-chosen
+// schedule. DDs (templates carry none) are reconstructed at the engine's
+// scheduled dates with the same even funding split the engine used.
+function materializeChurnOffer(source, sched, now) {
+  const seed = templateToOffer(offerToTemplate(source));
+  seed.plannedSignupDate = sched.plannedSignupDate || '';
+  seed.optionalPlannedFundingDate = sched.optionalPlannedFundingDate || '';
+  const schedDds = (sched.directDeposits || []).filter(d => d && d.plannedDate);
+  if (schedDds.length) {
+    const fund = Number(seed.requiredFundingAmount) || 0;
+    const per = Math.round(fund / schedDds.length);
+    seed.directDeposits = schedDds.map(d => ({ amount: per, plannedDate: d.plannedDate }));
+  }
+  const reRun = `Re-run of ${offerDisplayLabel(source)}`;
+  seed.notes = seed.notes ? `${seed.notes}\n${reRun}` : reRun;
+  seed.last_edited = now;
+  normalizeOfferStatus(seed);
+  reconcileClosedDate(seed, undefined);
+  migrateDdIds(seed);
+  syncRequirementsWithLegacy(seed);
+  return seed;
+}
+
+// Apply the focused proposal (P2-6). ONE batched App.update → one save → one
+// render; a one-shot undo snapshot (deep clone of every touched offer + the ids
+// of any created offers) is captured BEFORE mutation. Op model: update (mutate
+// in place), create (push a materialized run-again offer). delete never fires
+// on apply — undo of a create IS a delete.
+function applyOptimizerPlan() {
+  const top = App.optimizerPlan;
+  if (!top || top.tooMany) return;
+  const plans = (top.alternatives && top.alternatives.length) ? top.alternatives : [top];
+  const idx = Math.min(Math.max(0, App._optimizerAltIndex || 0), plans.length - 1);
+  const focused = plans[idx];
+  if (!focused || !(focused.includedIds || []).length) { toast('This plan has no offers to apply'); return; }
+  if (!focused.valid) { toast('This plan is not feasible — adjust and re-run', 'danger'); return; }
+
+  const undo = { updated: {}, createdOfferIds: [] };
+  const now = new Date().toISOString();
+  const includedSet = new Set(focused.includedIds);
+  let created = 0, updated = 0, excluded = 0;
+  try {
+    App.update(s => {
+      for (const id of focused.includedIds) {
+        const sched = focused.schedule[id];
+        if (!sched) continue;
+        if (sched.op === 'create') {
+          const cand = (top.candidates || []).find(c => c.id === id);
+          const source = s.offers.find(o => o.id === (cand ? cand.sourceOfferId : id));
+          if (!source) continue;
+          const off = materializeChurnOffer(source, sched, now);
+          s.offers.push(off);
+          undo.createdOfferIds.push(off.id);
+          created++;
+        } else {
+          const o = s.offers.find(x => x.id === id);
+          if (!o) continue;
+          undo.updated[id] = optDeepClone(o);
+          applyScheduleToOffer(o, sched, now);
+          updated++;
+        }
+      }
+      // De-select any candidate the optimizer chose NOT to include but that is
+      // currently in the scenario. The engine's evaluated set is baseline
+      // (active non-candidates) + selected candidates, so a dropped-but-
+      // included hypothetical must leave includeInScenario — otherwise the
+      // applied capital curve won't match the proposal (P1-1 parity). Mirrors
+      // applyOptimizerCombo's include toggle: no last_edited stamp, since only
+      // the scenario flag changes. Create candidates aren't in state.offers.
+      for (const cand of (top.candidates || [])) {
+        if (cand.op !== 'update' || includedSet.has(cand.id)) continue;
+        const o = s.offers.find(x => x.id === cand.originalOfferId);
+        if (!o || o.includeInScenario !== true) continue;
+        if (!undo.updated[o.id]) undo.updated[o.id] = optDeepClone(o);
+        o.includeInScenario = false;
+        excluded++;
+      }
+    });
+  } catch (e) {
+    logError(ErrCode.RENDER, e, 'applyOptimizerPlan');
+    toast('Could not apply the plan — see diagnostics', 'danger');
+    return;
+  }
+  App._optimizerUndo = undo;
+  render();
+  const parts = [];
+  if (updated) parts.push(`${updated} rescheduled`);
+  if (created) parts.push(`${created} new re-run${created === 1 ? '' : 's'}`);
+  if (excluded) parts.push(`${excluded} de-selected`);
+  toast(`Plan applied — ${parts.join(', ') || 'no changes'}. Dates & inclusion updated (no reminders fire until an offer is committed).`);
+}
+
+// One-shot inverse of applyOptimizerPlan: restore each updated offer from its
+// pre-apply deep clone, and splice out every created offer. One batched update.
+function undoOptimizerApply() {
+  const undo = App._optimizerUndo;
+  if (!undo) return;
+  App.update(s => {
+    for (const id of Object.keys(undo.updated || {})) {
+      const i = s.offers.findIndex(o => o.id === id);
+      if (i >= 0) s.offers[i] = optDeepClone(undo.updated[id]);
+    }
+    if ((undo.createdOfferIds || []).length) {
+      const del = new Set(undo.createdOfferIds);
+      s.offers = s.offers.filter(o => !del.has(o.id));
+    }
+  });
+  App._optimizerUndo = null;
+  render();
+  toast('Apply undone');
 }
 
 function runOptimizerNow() {

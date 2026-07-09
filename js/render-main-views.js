@@ -270,7 +270,28 @@ function renderOptPlanCard(focused, topPlan, idx, total) {
           : `<div class="opt-empty-seq">This plan adds no offers — your current schedule already sits at the buffer limit, or no candidate fits the constraints.</div>`}
       </div>
       ${renderOptBindingHints(focused, topPlan)}
+      ${renderOptApplyRow(focused)}
     </section>`;
+}
+
+// Apply / Undo affordance (one-shot). While an apply is pending
+// (App._optimizerUndo set), Apply is hidden on every alternative and only Undo
+// shows — enforcing the one-shot undo. Apply is offered only on a feasible plan
+// that actually changes something.
+function renderOptApplyRow(focused) {
+  if (App._optimizerUndo) {
+    return `
+      <div class="opt-apply-row">
+        <span class="opt-applied">✓ Plan applied</span>
+        <button class="btn btn-ghost btn-sm" data-action="undo-optimizer-apply">Undo</button>
+      </div>`;
+  }
+  if (!focused.valid || !(focused.includedIds || []).length) return '';
+  return `
+    <div class="opt-apply-row">
+      <button class="btn btn-primary" data-action="apply-optimizer-plan">Apply this plan</button>
+      <span class="opt-apply-note">Writes sign-up dates + inclusion. One-tap undo.</span>
+    </div>`;
 }
 
 function renderOptSequenceRow(focused, topPlan, id) {
