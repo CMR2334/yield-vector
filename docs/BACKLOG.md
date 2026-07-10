@@ -30,6 +30,27 @@ Priorities are owner-directed — nothing here self-dispatches.
   approval. Only the unused class rule was deleted; the `--card-soft` color
   variable and all live uses remain.
 
+## Bugs — QUEUED FIX (v2026.07.09l candidate, dispatch after the champions batch lands)
+- **DD posting-date qualification gaps** (Codex read-only audit 2026-07-09, owner-prompted;
+  full table in the audit log — key rows preserved here). The engine's DD qualification
+  compares `directDepositEffectiveDate` (weekend/holiday shift ONLY) against literal
+  cutoffs, ignoring ACH transit (`ddRoundTrip(dd,cfg).post` = initiate + inDays business
+  days). CONFIRMED by live probe: DD planned Fri 2026-01-16, user deadline Mon 2026-01-19
+  (MLK) → plan returns valid:true while the modeled post is Tue 2026-01-20. Four gaps:
+  (1) count-mode cutoff check, optimizer-engine.js:507 — use ACH post date;
+  (2) frequency-mode bucket/window check, :490 — same;
+  (3) frequency mode builds but NEVER APPLIES user/expiry cutoffs, :482;
+  (4) dd-core.js ddWindowEndDate count mode uses effective not post — DECISION NEEDED:
+  fixing it also changes reminders/feed deadlines (more conservative = more truthful,
+  but an intentional feed change — flag, don't sneak); alternatively fix engine-side
+  only and leave the display helper. Also: legacy runOptimizer (projection-optimizer.js:339)
+  has no qualification layer — unused by UI, document or guard. Fix must add pins for the
+  MLK repro + a frequency-cutoff fixture; note enhancement: local repair could pull an
+  individual DD's initiation earlier instead of rejecting the date wholesale (P1-3 group
+  shift doesn't move DDs independently today). SAFE side confirmed by the same audit:
+  deposit deadline (bizDay-effective vs literal, :524), suggestedFundingDate backward
+  walk, expiry, withdrawal/completion, horizon.
+
 ## Features
 - **Opt-in dark mode** — fresh implementation against the module structure. Idea
   preserved from closed PR #2 (2026-07-02 audit branch; its diff targeted the
