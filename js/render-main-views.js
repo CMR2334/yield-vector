@@ -138,15 +138,40 @@ function renderOptimizerProposal(topPlan) {
       ${reviewNotes}`;
   }
 
-  const plans = (topPlan.alternatives && topPlan.alternatives.length) ? topPlan.alternatives : [topPlan];
-  const idx = Math.min(Math.max(0, App._optimizerAltIndex || 0), plans.length - 1);
-  const focused = plans[idx];
+  // Named champions (per objective axis) come straight from the engine's
+  // feasible pool. optimizerProposalModel builds the ordered, selectable list —
+  // champion plans first (index 0 = the "Best total return" winner), then the
+  // 09i diversity-deduped feasible remainder with champions removed. The Apply
+  // action indexes App._optimizerAltIndex into the SAME list, so tap-to-focus +
+  // Apply stay in lockstep.
+  const { champions, championPlans, others, list } = optimizerProposalModel(topPlan);
+  const idx = Math.min(Math.max(0, App._optimizerAltIndex || 0), list.length - 1);
+  const focused = list[idx];
+  const focusedChampion = champions.find(c => c.plan.canonicalVector === focused.canonicalVector);
 
   return `
-    ${renderOptPlanCard(focused, topPlan, idx, plans.length)}
-    ${renderOptAltList(plans, idx)}
+    ${renderOptPlanCard(focused, topPlan, idx, list.length, focusedChampion ? focusedChampion.labels : null)}
+    ${renderOptChampionList(champions, others, championPlans.length, idx)}
     ${reviewNotes}
   `;
+}
+
+// Shared builder for the Optimize panel's ordered, selectable plan list. BOTH
+// the renderer and the Apply action (events-actions-data.js) index
+// App._optimizerAltIndex into the returned `list`, so they must agree byte-for-
+// byte. Order: champion plans (the engine's per-axis winners) first, then the
+// 09i diversity-deduped feasible remainder with champion vectors removed. With
+// no feasible plan at all the remainder is left as-is (may be infeasible) and,
+// if even that is empty, the list falls back to [topPlan] so Apply always has a
+// target. Pure — derived entirely from topPlan.champions + topPlan.alternatives.
+function optimizerProposalModel(topPlan) {
+  const champions = (topPlan && topPlan.champions) || [];
+  const championPlans = champions.map(c => c.plan);
+  const championVectors = new Set(championPlans.map(p => p.canonicalVector));
+  const remainder = ((topPlan && topPlan.alternatives) || []).filter(p => !championVectors.has(p.canonicalVector));
+  const others = championPlans.length ? remainder.filter(p => p.valid) : remainder;
+  const list = championPlans.concat(others);
+  return { champions, championPlans, others, list: list.length ? list : [topPlan] };
 }
 
 // Resolve a schedule/constraint offerId to a display name. Churn 'create'
@@ -194,18 +219,21 @@ function optReviewName(topPlan, r) {
   return isChurn && src ? `Re-run: ${base}` : base;
 }
 
-function renderOptPlanCard(focused, topPlan, idx, total) {
+function renderOptPlanCard(focused, topPlan, idx, total, championLabels) {
   const cc = focused.capitalCurveSummary || {};
   const obj = focused.objective || {};
   const included = focused.includedIds || [];
   const validBadge = focused.valid
     ? `<span class="opt-valid ok">Feasible</span>`
     : `<span class="opt-valid bad">Not feasible</span>`;
+  const rankLabel = championLabels && championLabels.length
+    ? `Proposed plan · ${championLabels.map(escapeHtml).join(' · ')}`
+    : `Proposed plan${total > 1 ? ` · option ${idx + 1} of ${total}` : ''}`;
   return `
     <section class="card opt-plan-card ${focused.valid ? '' : 'invalid'}">
       <div class="opt-plan-head">
         <div>
-          <div class="combo-rank">Proposed plan${total > 1 ? ` · option ${idx + 1} of ${total}` : ''}</div>
+          <div class="combo-rank">${rankLabel}</div>
           <div class="combo-bonus">${formatCurrency(obj.grossBonus || 0)} <span class="opt-bonus-cap">gross</span></div>
         </div>
         ${validBadge}
@@ -324,44 +352,66 @@ function renderOptBindingHints(focused, topPlan) {
   return `<div class="opt-hints"><div class="opt-hints-title">What pinned this plan</div>${rows.join('')}</div>`;
 }
 
-function renderOptAltList(plans, idx) {
-  if (plans.length <= 1) return '';
+// Champion cards (one per objective axis, with the axis label as the badge)
+// followed by the "Other feasible plans" remainder. Both sections select by the
+// card's position in the combined list built in renderOptimizerProposal:
+// champion i → index i, other j → index championCount + j.
+function renderOptChampionList(champions, others, championCount, idx) {
+  if (!champions.length && !others.length) return '';
+  const champCards = champions.map((c, i) =>
+    renderOptScenarioCard(c.plan, i, i === idx, c.labels)).join('');
+  const otherCards = others.map((p, j) => {
+    const li = championCount + j;
+    return renderOptScenarioCard(p, li, li === idx, null);
+  }).join('');
+  // Header on the remainder is truthful: "feasible" only when champions (all
+  // feasible) head the list; otherwise it is the old best-effort "Other options".
+  const othersTitle = championCount ? 'Other feasible plans' : 'Other options';
   return `
     <div class="opt-alts">
-      <div class="opt-alts-title">Other options</div>
-      <div class="opt-alts-list">
-        ${plans.map((p, i) => {
-          const n = (p.includedIds || []).length;
-          const cc = p.capitalCurveSummary || {};
-          const obj = p.objective || {};
-          const apy = obj.blendedAnnReturn != null ? formatPercent(obj.blendedAnnReturn) : '—';
-          const back = obj.latestCompletionISO ? formatDateMedium(parseDate(obj.latestCompletionISO)) : '—';
-          return `
-          <button class="opt-alt ${i === idx ? 'active' : ''}${p.valid ? '' : ' infeasible'}" data-action="select-optimizer-alt" data-alt-index="${i}">
-            <span class="opt-alt-cell opt-alt-bonus">
-              <span class="opt-alt-val">${formatCurrency(obj.grossBonus || 0)}</span>
-              <span class="opt-alt-lbl">gross${p.valid ? '' : ' · infeasible'}</span>
-            </span>
-            <span class="opt-alt-cell">
-              <span class="opt-alt-val">${n}</span>
-              <span class="opt-alt-lbl">offer${n === 1 ? '' : 's'}</span>
-            </span>
-            <span class="opt-alt-cell">
-              <span class="opt-alt-val">${formatCurrency(cc.lowestAvailable || 0)}</span>
-              <span class="opt-alt-lbl">low cash</span>
-            </span>
-            <span class="opt-alt-cell">
-              <span class="opt-alt-val">${apy}</span>
-              <span class="opt-alt-lbl">blended APY</span>
-            </span>
-            <span class="opt-alt-cell">
-              <span class="opt-alt-val">${back}</span>
-              <span class="opt-alt-lbl">capital back</span>
-            </span>
-          </button>`;
-        }).join('')}
-      </div>
+      ${champions.length ? `<div class="opt-alts-list opt-champ-list">${champCards}</div>` : ''}
+      ${others.length ? `<div class="opt-alts-title${champions.length ? ' opt-alts-title-sub' : ''}">${othersTitle}</div>
+      <div class="opt-alts-list">${otherCards}</div>` : ''}
     </div>`;
+}
+
+// One comparison-row scenario card (gross · offers · low cash · APY · capital
+// back). When labels are present it renders as a champion: the axis label(s)
+// sit in a full-width badge above the metrics row.
+function renderOptScenarioCard(p, listIdx, active, labels) {
+  const n = (p.includedIds || []).length;
+  const cc = p.capitalCurveSummary || {};
+  const obj = p.objective || {};
+  const apy = obj.blendedAnnReturn != null ? formatPercent(obj.blendedAnnReturn) : '—';
+  const back = obj.latestCompletionISO ? formatDateMedium(parseDate(obj.latestCompletionISO)) : '—';
+  const isChampion = !!(labels && labels.length);
+  const badge = isChampion
+    ? `<span class="opt-alt-badge">${labels.map(escapeHtml).join(' · ')}</span>`
+    : '';
+  return `
+    <button class="opt-alt${isChampion ? ' champion' : ''}${active ? ' active' : ''}${p.valid ? '' : ' infeasible'}" data-action="select-optimizer-alt" data-alt-index="${listIdx}">
+      ${badge}
+      <span class="opt-alt-cell opt-alt-bonus">
+        <span class="opt-alt-val">${formatCurrency(obj.grossBonus || 0)}</span>
+        <span class="opt-alt-lbl">gross${p.valid ? '' : ' · infeasible'}</span>
+      </span>
+      <span class="opt-alt-cell">
+        <span class="opt-alt-val">${n}</span>
+        <span class="opt-alt-lbl">offer${n === 1 ? '' : 's'}</span>
+      </span>
+      <span class="opt-alt-cell">
+        <span class="opt-alt-val">${formatCurrency(cc.lowestAvailable || 0)}</span>
+        <span class="opt-alt-lbl">low cash</span>
+      </span>
+      <span class="opt-alt-cell">
+        <span class="opt-alt-val">${apy}</span>
+        <span class="opt-alt-lbl">blended APY</span>
+      </span>
+      <span class="opt-alt-cell">
+        <span class="opt-alt-val">${back}</span>
+        <span class="opt-alt-lbl">capital back</span>
+      </span>
+    </button>`;
 }
 
 function renderOptCandidateReview(review, topPlan) {
@@ -2264,4 +2314,4 @@ function niceStep(raw) {
   return nf * exp;
 }
 
-export { renderPlanner, renderDdMethodPanel, requirementChecklistCounts, renderRequirementChecklist, renderPipelineStrip, renderLifecycleInfo, renderLifecycleSuggest, offerExpirationChip, offerUpdatedStamp, offerDocLink, renderOfferCard, renderTimeline, OFFERS_SORT_OPTIONS, sortOffersList, renderOffers, renderOfferCardWithActions, renderOffersTable, renderSettings, renderDiagnostics, formatDiagTime, diagReportText, renderCommitmentsTable, renderEventsTable, renderSyncSection, renderProjectionDebugTable, renderEmptyState, renderChartsAfterMount, prefillSyncInputs, renderHeroChart, niceTicks, niceStep };
+export { optimizerProposalModel, renderPlanner, renderDdMethodPanel, requirementChecklistCounts, renderRequirementChecklist, renderPipelineStrip, renderLifecycleInfo, renderLifecycleSuggest, offerExpirationChip, offerUpdatedStamp, offerDocLink, renderOfferCard, renderTimeline, OFFERS_SORT_OPTIONS, sortOffersList, renderOffers, renderOfferCardWithActions, renderOffersTable, renderSettings, renderDiagnostics, formatDiagTime, diagReportText, renderCommitmentsTable, renderEventsTable, renderSyncSection, renderProjectionDebugTable, renderEmptyState, renderChartsAfterMount, prefillSyncInputs, renderHeroChart, niceTicks, niceStep };

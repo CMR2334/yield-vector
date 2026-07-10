@@ -671,6 +671,7 @@ function invalidPlan(ctx, reason, bindingConstraints = [], extra = {}) {
     objective: { grossBonus: 0, blendedAnnReturn: null, latestCompletionISO: '' },
     badges: {},
     alternatives: [],
+    champions: [],
     evaluated: 0,
     strategy: 'none',
     earlyOut: false,
@@ -836,6 +837,80 @@ function comparePlans(a, b) {
   return byteCompare(a.canonicalVector, b.canonicalVector);
 }
 
+// ── Named champion plans ────────────────────────────────────────────────────
+// One card per objective axis, chosen from the SAME evaluated feasible pool (no
+// new search) so a single card can speak to what each axis rewards:
+//   total   — the overall winner (max gross via the full comparePlans chain);
+//             stays the default/selected plan (it is always plan[0]).
+//   rate    — highest blended annualized return on locked capital (may be a
+//             small single-offer plan at far lower gross — that IS the message).
+//   fastest — earliest final capital-release date (tie-break by gross, then the
+//             standard chain).
+// Ordered total → rate → fastest; when one plan wins multiple axes it collapses
+// to ONE entry with merged labels (never a duplicate card). Pure + deterministic
+// (each axis breaks ties through comparePlans, a total order), so it is
+// pin-testable and render just consumes plan.champions.
+const CHAMPION_AXES = [
+  { key: 'total', label: 'Best total return' },
+  { key: 'rate', label: 'Best rate of return' },
+  { key: 'fastest', label: 'Fastest capital back' }
+];
+
+function championRate(p) {
+  const r = p && p.objective ? p.objective.blendedAnnReturn : null;
+  return r == null ? -Infinity : r;
+}
+
+// Best RATE: highest blended annualized return first; ties fall through the full
+// comparePlans chain so the pick is deterministic.
+function compareByRate(a, b) {
+  const ra = championRate(a);
+  const rb = championRate(b);
+  if (ra !== rb) return rb > ra ? 1 : -1;
+  return comparePlans(a, b);
+}
+
+// FASTEST capital back: earliest final capital-release date first; ties fall
+// through comparePlans (gross, then the standard chain) per the owner spec.
+function compareByFastest(a, b) {
+  const ca = (a && a.objective && a.objective.latestCompletionISO) || '9999-12-31';
+  const cb = (b && b.objective && b.objective.latestCompletionISO) || '9999-12-31';
+  if (ca !== cb) return byteCompare(ca, cb);
+  return comparePlans(a, b);
+}
+
+const CHAMPION_AXIS_PICKERS = {
+  total: plans => plans.slice().sort(comparePlans)[0],
+  rate: plans => plans.slice().sort(compareByRate)[0],
+  fastest: plans => plans.slice().sort(compareByFastest)[0]
+};
+
+// Select the champion set from an evaluated plan pool. Champions are drawn from
+// the FEASIBLE plans only; when none are feasible the set is empty. Merging is
+// keyed on canonicalVector so two axis picks that resolve to the same schedule
+// (whether the same object or an equal one) collapse into a single entry whose
+// labels list both axes, preserving first-seen order.
+function selectChampions(plans) {
+  const feasible = (plans || []).filter(p => p && p.valid);
+  if (!feasible.length) return [];
+  const out = [];
+  const byVector = new Map();
+  for (const axis of CHAMPION_AXES) {
+    const pick = CHAMPION_AXIS_PICKERS[axis.key](feasible);
+    if (!pick) continue;
+    const key = pick.canonicalVector;
+    let entry = byVector.get(key);
+    if (!entry) {
+      entry = { plan: pick, axes: [], labels: [] };
+      byVector.set(key, entry);
+      out.push(entry);
+    }
+    entry.axes.push(axis.key);
+    entry.labels.push(axis.label);
+  }
+  return out;
+}
+
 function assignmentKey(assignment) {
   return JSON.stringify(Object.keys(assignment).sort(byteCompare).map(id => [id, assignment[id]]));
 }
@@ -985,6 +1060,7 @@ function exactSearch(ctx, records, grids) {
   visit(0);
   best = best || invalidPlan(ctx, 'no-evaluations');
   best.alternatives = rankAlternatives(plans, ctx.options.alternativeLimit);
+  best.champions = selectChampions(plans);
   best.evaluated = evaluated;
   best.earlyOut = evaluated >= ctx.options.evalCap;
   return best;
@@ -1025,7 +1101,9 @@ function beamSearch(ctx, records, grids, strategy) {
   const repaired = localRepair(ctx, records, bestNode.assignment, allPlans, evaluated);
   const best = repaired.best || bestNode.plan;
   best.strategy = strategy;
-  best.alternatives = rankAlternatives(allPlans.concat(repaired.plans), ctx.options.alternativeLimit);
+  const beamPool = allPlans.concat(repaired.plans);
+  best.alternatives = rankAlternatives(beamPool, ctx.options.alternativeLimit);
+  best.champions = selectChampions(beamPool);
   best.evaluated = repaired.evaluated;
   best.earlyOut = repaired.evaluated >= ctx.options.evalCap;
   return best;
@@ -1492,6 +1570,59 @@ function testOptimizerPins() {
       }
     }
     check('churn tie-break: comparator stays a transitive total order (no cycle)', totalOrder);
+  }
+  {
+    // ── Named champion scenario cards ───────────────────────────────────────
+    // selectChampions picks one plan per objective axis from the feasible pool,
+    // ordered total → rate → fastest, merging axes any single plan wins.
+    const champPlan = (cv, gross, apy, cashISO) => ({
+      valid: true, canonicalVector: cv, includedIds: [cv],
+      capitalCurveSummary: { lowestAvailable: 0 },
+      objective: { grossBonus: gross, blendedAnnReturn: apy, latestCompletionISO: cashISO, churnNextEligible: [] }
+    });
+    // Distinct winners: biggest gross, highest APY, and earliest cash are 3
+    // separate plans → 3 single-axis champion cards (input order shuffled).
+    const pTotal = champPlan('v_total', 1000, 0.04, '2026-12-01');
+    const pRate = champPlan('v_rate', 300, 0.10, '2026-10-01');
+    const pFast = champPlan('v_fast', 500, 0.02, '2026-08-01');
+    const champs = selectChampions([pRate, pFast, pTotal]);
+    const axisOf = k => champs.find(c => c.axes.length === 1 && c.axes[0] === k);
+    check('champions: distinct axis winners identified',
+      champs.length === 3
+      && champs[0].plan === pTotal && champs[0].axes[0] === 'total' && champs[0].labels[0] === 'Best total return'
+      && !!axisOf('rate') && axisOf('rate').plan === pRate
+      && !!axisOf('fastest') && axisOf('fastest').plan === pFast,
+      `${champs.length} champions`);
+    // Merged: one plan wins BOTH total and rate → ONE card, two labels.
+    const pBig = champPlan('v_big', 1000, 0.10, '2026-12-01');
+    const pEarly = champPlan('v_early', 400, 0.03, '2026-08-01');
+    const merged = selectChampions([pBig, pEarly]);
+    check('champions: one plan winning two axes collapses to a single merged card',
+      merged.length === 2
+      && merged[0].plan === pBig && merged[0].axes.length === 2
+      && merged[0].labels.join(' · ') === 'Best total return · Best rate of return'
+      && merged[1].plan === pEarly && merged[1].axes.length === 1 && merged[1].axes[0] === 'fastest',
+      `${merged.length} cards`);
+    check('champions: no feasible plan yields no champions',
+      selectChampions([{ valid: false, canonicalVector: 'x', objective: {} }]).length === 0);
+    // Engine wiring + determinism: a real optimize run exposes plan.champions
+    // with the overall winner as the total champion (plan[0]), all champion
+    // plans valid, no vector duplicated, identical across runs.
+    const wa = _pinOffer({ id: 'off_champ', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' });
+    const wInput = _pinState({ offers: [wa], candidateIds: ['off_champ'] });
+    const wp1 = optimizePlanner(wInput);
+    const wp2 = optimizePlanner(wInput);
+    const c1 = wp1.champions || [];
+    const vectors = c1.map(c => c.plan.canonicalVector);
+    const vecKey = cs => cs.map(c => c.plan.canonicalVector + ':' + c.axes.join(',')).join('|');
+    check('champions: engine wires a feasible champion set with the winner as total',
+      c1.length >= 1
+      && c1[0].axes[0] === 'total'
+      && c1[0].plan.canonicalVector === wp1.canonicalVector
+      && c1.every(c => c.plan.valid)
+      && new Set(vectors).size === vectors.length,
+      `${c1.length} champions`);
+    check('champions: deterministic across runs', vecKey(c1) === vecKey(wp2.champions || []));
   }
 
   const pass = results.filter(r => r.ok).length;

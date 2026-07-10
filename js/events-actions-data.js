@@ -9,7 +9,7 @@ import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarge
 import { isOfferComplete, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
 import { convertOfferToCommitment, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { updateUpcomingPage } from './reminders.js';
-import { diagReportText } from './render-main-views.js';
+import { diagReportText, optimizerProposalModel } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
 import { offerDisplayLabel, offerToTemplate, syncRequirementsWithLegacy, templateToOffer } from './requirements-templates.js';
 import { ErrCode, STORAGE_KEY, clearDiagLog, copyText, defaultAccountForSub, logError, migrateDdIds, normalizeOfferStatus } from './runtime-status.js';
@@ -1106,7 +1106,10 @@ function materializeChurnOffer(source, sched, now) {
 function applyOptimizerPlan() {
   const top = App.optimizerPlan;
   if (!top || top.tooMany) return;
-  const plans = (top.alternatives && top.alternatives.length) ? top.alternatives : [top];
+  // Index into the SAME ordered list the renderer builds (champions first, then
+  // the feasible remainder), so App._optimizerAltIndex — set by tapping a card —
+  // resolves to the identical plan the proposal pane is showing.
+  const plans = optimizerProposalModel(top).list;
   const idx = Math.min(Math.max(0, App._optimizerAltIndex || 0), plans.length - 1);
   const focused = plans[idx];
   if (!focused || !(focused.includedIds || []).length) { toast('This plan has no offers to apply'); return; }
