@@ -366,6 +366,32 @@ function churnEligibleDate(offer) {
   return isoDate(eligible);
 }
 
+// The ISO date a churnable offer would become churn-eligible AGAIN after THIS
+// plan schedules it — the throughput signal for the plan-ordering tie-breaker
+// (how soon the offer can be cycled again). HONORS the offer's churn_anchor: an
+// `account_opened` offer measures the wait from its (plan-scheduled) sign-up
+// date, so `churnEligibleDate` already returns the correct next-cycle date once
+// the plan sets plannedSignupDate — reuse it verbatim rather than assuming the
+// capital-free date. Only when the configured anchor date isn't derivable from
+// the plan-scheduled offer (a fresh prospect has no bonus_received / closed date
+// yet, so a `bonus_received` / `account_closed` anchor yields null) do we fall
+// back to the withdrawal-eligible (capital-free) date + churn_wait_months as the
+// stable, deterministic proxy for when this cycle wraps up. Returns null for a
+// non-churnable offer, a missing/non-positive wait, or an undatable completion,
+// so a plan with no churnables contributes an empty vector and is never
+// penalized. Pure; reuses the same clamp-safe month add as churnEligibleDate.
+function churnNextEligibleAfterPlan(offer, cfg) {
+  if (!offer || offer.churnable !== true) return null;
+  const months = Number(offer.churn_wait_months);
+  if (!Number.isFinite(months) || months <= 0) return null;
+  const anchored = churnEligibleDate(offer);
+  if (anchored) return anchored;
+  const complete = parseDate(withdrawalEligibleDate(offer, cfg));
+  if (!complete) return null;
+  const next = addMonthsClamped(complete, months);
+  return next ? isoDate(next) : null;
+}
+
 // Whether an offer's churn is currently snoozed. True when churn_snoozed_until
 // is the sentinel 'forever' OR an ISO date strictly after today. A TIMED snooze
 // whose date is today-or-earlier has lapsed and reads as NOT snoozed — the
@@ -530,4 +556,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

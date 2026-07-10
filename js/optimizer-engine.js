@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate, churnEligibleDate, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate, churnEligibleDate, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -605,8 +605,11 @@ function objectiveForOffers(offers, cfg) {
   let annNum = 0;
   let annDen = 0;
   let latestCompletionISO = '';
+  const churnNextEligible = [];
   for (const offer of offers || []) {
     grossBonus += Number(offer.signupBonusAmount) || 0;
+    const nextChurn = churnNextEligibleAfterPlan(offer, cfg);
+    if (nextChurn) churnNextEligible.push(nextChurn);
     const ar = annualizedReturn(offer, cfg);
     let weight = 0;
     if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
@@ -628,7 +631,11 @@ function objectiveForOffers(offers, cfg) {
   return {
     grossBonus: Math.round(grossBonus),
     blendedAnnReturn: annDen > 0 ? annNum / annDen : null,
-    latestCompletionISO
+    latestCompletionISO,
+    // Sorted vector of next churn-eligibility dates for the churn-flagged
+    // included offers — the deterministic key the throughput tie-breaker reads
+    // (comparePlans). Empty when no included offer is churnable (neutral).
+    churnNextEligible: churnNextEligible.sort(byteCompare)
   };
 }
 
@@ -774,6 +781,37 @@ function evaluateAssignment(ctx, records, assignment) {
   };
 }
 
+// Per-plan throughput key. A plan WITH churnable included offers keys on its
+// sorted next-churn-eligibility vector; a plan WITHOUT churnables keys on a
+// single-element [cash-release] proxy (the date its capital frees). Every plan
+// therefore gets a REAL, comparable key — a bare "empty vector ⇒ neutral 0"
+// short-circuit is non-transitive once the cash-release fallback runs (a
+// churnless plan could sit between two churnable plans that the vector orders the
+// other way, cycling the sort). Because a churnable offer's next-eligibility is
+// always its own cash-release + churn_wait (strictly later), a churnless plan's
+// cash-release proxy never demotes it below a churnable plan that frees capital
+// later — so a plan is never penalized for having no/fewer churnables.
+function planThroughputKey(plan) {
+  const v = (plan.objective && plan.objective.churnNextEligible) || [];
+  if (v.length) return v;
+  return [(plan.objective && plan.objective.latestCompletionISO) || '9999-12-31'];
+}
+
+// Lexicographic compare of two plans' throughput keys — earlier next-eligibility
+// (or capital-back, for a churnless plan) ranks first. TOTAL order + deterministic
+// (byteCompare on ISO strings): on a shared prefix the shorter key (fewer
+// churnables) sorts first, so it is never penalized. The caller only reaches here
+// on a gross+APY tie.
+function compareChurnThroughput(a, b) {
+  const va = planThroughputKey(a);
+  const vb = planThroughputKey(b);
+  const n = Math.min(va.length, vb.length);
+  for (let i = 0; i < n; i++) {
+    if (va[i] !== vb[i]) return byteCompare(va[i], vb[i]);
+  }
+  return va.length - vb.length;
+}
+
 function comparePlans(a, b) {
   if (!a && !b) return 0;
   if (!a) return 1;
@@ -785,6 +823,13 @@ function comparePlans(a, b) {
   const aa = Math.round(((a.objective.blendedAnnReturn == null ? -Infinity : a.objective.blendedAnnReturn) / ANN_EPSILON)) * ANN_EPSILON;
   const ba = Math.round(((b.objective.blendedAnnReturn == null ? -Infinity : b.objective.blendedAnnReturn) / ANN_EPSILON)) * ANN_EPSILON;
   if (aa !== ba) return ba > aa ? 1 : -1;
+  // Churn-throughput tie-breaker: among plans tied on gross bonus AND blended
+  // return, prefer the one whose churnable included offers reach their next
+  // churn-eligibility sooner (higher throughput — cycle them again faster). A
+  // churnless plan keys on its cash-release date, so it is never penalized and
+  // the comparator stays a total, transitive order. Deterministic.
+  const ct = compareChurnThroughput(a, b);
+  if (ct !== 0) return ct;
   const ac = a.objective.latestCompletionISO || '9999-12-31';
   const bc = b.objective.latestCompletionISO || '9999-12-31';
   if (ac !== bc) return byteCompare(ac, bc);
@@ -1386,6 +1431,67 @@ function testOptimizerPins() {
       .filter(x => ((x.includedIds) || []).join(',') === topSet)
       .every(x => ((top.objective || {}).latestCompletionISO || '') <= ((x.objective || {}).latestCompletionISO || '9999-12-31'));
     check('collapsed representative is the earliest cash-release variant', earliest);
+  }
+  {
+    // Churn-throughput tie-breaker (inserted after gross + APY, before earliest
+    // cash release). Two plans that tie on gross bonus AND blended APY but hold
+    // churnable offers with different next-eligibility must order by the earlier
+    // eligibility; plans without churnables must be unaffected (neutral key).
+    const churnOffer = (id, wait) => _pinOffer({
+      id, signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30,
+      lockStartsFrom: 'funded date', offerExpirationDate: '2026-12-31',
+      churnable: true, churn_wait_months: wait, churn_anchor: 'bonus_received'
+    });
+    const planSoon = evaluateOptimizerPlan(_pinState({ offers: [churnOffer('off_churn_soon', 6)], candidateIds: ['off_churn_soon'] }), { off_churn_soon: '2026-07-20' });
+    const planLate = evaluateOptimizerPlan(_pinState({ offers: [churnOffer('off_churn_late', 12)], candidateIds: ['off_churn_late'] }), { off_churn_late: '2026-07-20' });
+    // Identical capital params → equal gross and equal APY; only churn_wait differs.
+    const equalValueApy = planSoon.objective.grossBonus === planLate.objective.grossBonus
+      && Math.abs((planSoon.objective.blendedAnnReturn || 0) - (planLate.objective.blendedAnnReturn || 0)) < 1e-9;
+    const vecSoon = planSoon.objective.churnNextEligible || [];
+    const vecLate = planLate.objective.churnNextEligible || [];
+    check('churn tie-break: equal value/APY plans order by earlier next-eligibility',
+      equalValueApy && vecSoon.length === 1 && vecLate.length === 1 && vecSoon[0] < vecLate[0]
+      && comparePlans(planSoon, planLate) < 0 && comparePlans(planLate, planSoon) > 0,
+      `${vecSoon[0] || '—'} vs ${vecLate[0] || '—'}`);
+    // Anchor-honoring (Codex P2 #2): an account_opened churnable offer measures
+    // next-eligibility from its plan SIGN-UP date, not the capital-free date —
+    // signup 2026-07-20 + 12mo = 2027-07-20 (NOT withdrawal 2027-01-16 + 12mo).
+    const openAnchor = _pinOffer({
+      id: 'off_churn_open', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 180,
+      lockStartsFrom: 'open date', offerExpirationDate: '2027-12-31',
+      churnable: true, churn_wait_months: 12, churn_anchor: 'account_opened'
+    });
+    const openPlan = evaluateOptimizerPlan(_pinState({ offers: [openAnchor], candidateIds: ['off_churn_open'] }), { off_churn_open: '2026-07-20' });
+    const openVec = openPlan.objective.churnNextEligible || [];
+    check('churn tie-break: account_opened anchor measures next-eligibility from sign-up',
+      openVec.length === 1 && openVec[0] === '2027-07-20', openVec[0] || '—');
+    // A plan whose included offers are NOT churnable contributes an empty vector.
+    const plain = evaluateOptimizerPlan(_pinState({ offers: [_pinOffer({ id: 'off_plain', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' })], candidateIds: ['off_plain'] }), { off_plain: '2026-07-20' });
+    check('churn tie-break: non-churnable plan contributes an empty eligibility vector',
+      Array.isArray(plain.objective.churnNextEligible) && plain.objective.churnNextEligible.length === 0);
+    // Neutrality: two churnless plans still order purely by cash release (their
+    // throughput key IS cash release), and a churnless plan with earlier cash
+    // release is never out-ranked by a churnable plan whose eligibility is later
+    // (never penalized).
+    const mkPlan = (churnVec, cashISO, cv) => ({ valid: true, canonicalVector: cv, objective: { grossBonus: 500, blendedAnnReturn: 0.05, latestCompletionISO: cashISO, churnNextEligible: churnVec } });
+    check('churn tie-break: churnless plans unaffected — ordered by cash release',
+      comparePlans(mkPlan([], '2026-08-01', 'a'), mkPlan([], '2026-09-01', 'b')) < 0
+      && comparePlans(mkPlan([], '2026-08-01', 'a'), mkPlan(['2026-10-01'], '2026-09-01', 'c')) < 0);
+    // Transitivity guard (Codex P2): mixed churnable/churnless plans tied on
+    // gross+APY must stay a TOTAL order — no A<B<C<A cycle (a bare empty-vector
+    // "neutral 0" broke this once the cash-release fallback ran).
+    const A = mkPlan(['2027-02-01'], '2026-08-01', 'A'); // churnable · late elig · early cash
+    const B = mkPlan([],             '2026-09-01', 'B'); // churnless  · mid cash
+    const C = mkPlan(['2026-11-01'], '2026-10-01', 'C'); // churnable · early elig · late cash
+    const trio = [A, B, C];
+    let totalOrder = true;
+    for (const x of trio) for (const y of trio) {
+      if (x !== y && !((comparePlans(x, y) < 0) !== (comparePlans(y, x) < 0))) totalOrder = false; // antisymmetry
+      for (const z of trio) {
+        if (comparePlans(x, y) < 0 && comparePlans(y, z) < 0 && !(comparePlans(x, z) < 0)) totalOrder = false; // transitivity
+      }
+    }
+    check('churn tie-break: comparator stays a transitive total order (no cycle)', totalOrder);
   }
 
   const pass = results.filter(r => r.ok).length;

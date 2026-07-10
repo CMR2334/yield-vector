@@ -167,7 +167,11 @@ function optimizerOfferName(topPlan, offerId) {
 // OR the synthetic churn_<sourceId> id of a candidate whose date window was
 // empty. Never print the raw synthetic id: strip/resolve to the source offer's
 // "bank · name" and keep the churn/re-run context explicit.
-function optReviewName(topPlan, r) {
+// Resolve a review row to { srcId, isChurn } — the SOURCE offer id behind a
+// (possibly synthetic churn_<id>) review row, and whether the row is churn
+// context. Shared by optReviewName (display) and the tap-through (which opens
+// that source offer's edit modal).
+function optReviewResolve(topPlan, r) {
   const offerId = r.offerId;
   const isChurnReason = r.reason === 'churn-snoozed' || r.reason === 'missing-churn-anchor';
   const cand = (topPlan.candidates || []).find(c => c.id === offerId);
@@ -180,6 +184,11 @@ function optReviewName(topPlan, r) {
     srcId = String(offerId).slice('churn_'.length);
     isChurn = true;
   }
+  return { srcId, isChurn };
+}
+
+function optReviewName(topPlan, r) {
+  const { srcId, isChurn } = optReviewResolve(topPlan, r);
   const src = (App.state.offers || []).find(o => o.id === srcId);
   const base = src ? (offerDisplayLabel(src, { separator: ' · ' }) || src.bankName || srcId) : (isChurn ? 'Re-run offer' : (srcId || 'offer'));
   return isChurn && src ? `Re-run: ${base}` : base;
@@ -366,7 +375,16 @@ function renderOptCandidateReview(review, topPlan) {
           const name = optReviewName(topPlan, r);
           const reason = OPT_REVIEW_REASON_COPY[r.reason] || r.reason;
           const cls = r.status === 'needs-date' ? 'needs-date' : 'excluded';
-          return `<div class="opt-review-row ${cls}"><span class="opt-review-name">${escapeHtml(name)}</span><span class="opt-review-reason">${escapeHtml(reason)}</span></div>`;
+          // Tap-through: open the SOURCE offer's edit modal (for churn re-run
+          // candidates the underlying offer, not the synthetic id) so the owner
+          // can fix the gap. Only when that offer actually exists in state; the
+          // reason stays visible on the row either way.
+          const { srcId } = optReviewResolve(topPlan, r);
+          const src = srcId && (App.state.offers || []).find(o => o.id === srcId);
+          const inner = `<span class="opt-review-name">${escapeHtml(name)}</span><span class="opt-review-reason">${escapeHtml(reason)}</span>`;
+          return src
+            ? `<button class="opt-review-row tappable ${cls}" data-action="edit-offer-from-optimize" data-id="${escapeAttr(srcId)}" title="Open this offer to fix — Save & run re-optimizes">${inner}</button>`
+            : `<div class="opt-review-row ${cls}">${inner}</div>`;
         }).join('')}
       </div>
     </section>`;
@@ -581,6 +599,44 @@ function renderLifecycleSuggest(o) {
   </div>`;
 }
 
+// Live "needs info" chip (item 3): a prospect/selected offer missing a
+// plan-critical DATE the optimizer needs, so it doesn't sit silently. Derived
+// PURELY from the offer itself (never from transient optimizer-run state), so it
+// is stable across renders and independent of whether a plan has been run.
+// Covers the FIXABLE date gaps the optimizer would exclude on:
+//   - a direct-deposit / held-and-dd offer with zero DATED DDs → isOfferComplete
+//     drops it from candidates silently ("DD offers with zero dated DDs");
+//   - a held-and-dd offer with no funding date (same silent drop);
+//   - an OPEN account with no planned sign-up date (isOfferComplete drops it);
+//   - a churnable offer whose re-run anchor date isn't set (the optimizer's
+//     'missing-churn-anchor' review reason).
+// A dateless CLOSED prospect is intentionally NOT flagged: it's a valid
+// candidate the optimizer schedules a date for, so it isn't "excluded".
+function offerNeedsInfoReason(o) {
+  if (!o || !HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return null;
+  const isDD = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  if (isDD) {
+    const datedDds = Array.isArray(o.directDeposits) && o.directDeposits.some(dd => dd && dd.plannedDate && parseDate(dd.plannedDate));
+    if (!datedDds) return 'needs-dd-date';
+    if (o.offerType === 'held-and-dd' && !(o.optionalPlannedFundingDate && parseDate(o.optionalPlannedFundingDate))) return 'needs-fund-date';
+  }
+  if (o.accountStatus === 'open' && !(o.plannedSignupDate && parseDate(o.plannedSignupDate))) return 'needs-signup-date';
+  if (o.churnable === true && !churnSnoozeActive(o) && !churnEligibleDate(o)) return 'needs-churn-date';
+  return null;
+}
+const OFFER_NEEDS_INFO_COPY = {
+  'needs-dd-date':     { label: 'Needs DD date',   title: 'This direct-deposit offer has no dated direct deposits — the optimizer skips it until at least one DD has a date.' },
+  'needs-fund-date':   { label: 'Needs fund date', title: 'This held + DD offer has no funding date — the optimizer skips it until the held lump sum is dated.' },
+  'needs-signup-date': { label: 'Needs date',      title: 'This open account has no planned sign-up date — add one so the plan can include it.' },
+  'needs-churn-date':  { label: 'Needs re-run date', title: 'Churnable, but its re-run anchor date is not set yet — add it to schedule the next cycle.' }
+};
+function offerNeedsInfoChip(o) {
+  const reason = offerNeedsInfoReason(o);
+  if (!reason) return '';
+  const c = OFFER_NEEDS_INFO_COPY[reason];
+  return `<span class="chip chip-warn" title="${escapeAttr(c.title)}">${escapeHtml(c.label)}</span>`;
+}
+
 // Expiration/freshness chip for an offer card (display only — the offer-expires
 // FEED item is computed separately and untouched). An offer's expiration date
 // only governs SIGNING UP, so the chip is shown ONLY for pre-confirmation
@@ -734,6 +790,7 @@ function renderOfferCard(o) {
           'Held'
         }</span>
         <span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || o.subStatus || '—'}</span>
+        ${offerNeedsInfoChip(o)}
         ${offerExpirationChip(o)}
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
@@ -1171,13 +1228,6 @@ function renderSettings() {
             <input id="s-horizon" type="number" min="30" max="1825" step="1" class="input" value="${s.projectionHorizonDays}" data-setting="projectionHorizonDays" />
           </div>
         </div>` : ''}
-        <div class="field">
-          <div class="field-box">
-            <label for="s-max">Optimizer max candidates</label>
-            <input id="s-max" type="number" min="1" max="20" step="1" class="input" value="${s.maxOptimizerCandidates}" data-setting="maxOptimizerCandidates" />
-          </div>
-          <span class="field-hint">Brute force evaluates 2^n subsets. 15 ≈ 32k subsets.</span>
-        </div>
         <div class="field">
           <label>Default lock interval start</label>
           <div class="radio-group">

@@ -401,14 +401,53 @@ in the UI; fee-netting is a declared future enhancement.
    (`js/offer-model.js:431-461`), blended by dollar-days for a set exactly as
    `runOptimizer` weights it (`js/projection-optimizer.js:341-357`). *(Reads
    `ddTransfer` via `ddCapitalTime` — C4; thread the injected config.)*
-2. **Earlier completion = cash-release only `[G-P2]`** — earlier max
+2. **Higher churn throughput (SHIPPED v2026.07.09j) `[G-P2]`** — among plans tied
+   on gross AND blended return, prefer the one whose **churnable included offers
+   reach their next churn-eligibility sooner**, so the account can be cycled again
+   faster. Each plan carries a **sorted vector** of next-eligibility ISO dates —
+   `churnNextEligibleAfterPlan` (`js/offer-model.js`) HONORS the offer's
+   `churn_anchor`: it reuses `churnEligibleDate` (so an `account_opened` offer
+   measures the wait from its plan sign-up date, `bonus_received`/`account_closed`
+   from their stored anchor), falling back to plan-scheduled `withdrawalEligibleDate`
+   + `churn_wait_months` only when a fresh prospect has no anchor date yet.
+   Computed for every `churnable === true` included offer and stashed on
+   `objective.churnNextEligible`.
+   `compareChurnThroughput` (`js/optimizer-engine.js`) compares each plan's
+   **throughput key** lexicographically: a churnable plan keys on its sorted
+   next-eligibility vector; a **churnless plan keys on a single-element
+   `[cash-release]` proxy** (the date its capital frees). Every plan thus gets a
+   real, comparable key, so the comparator is a **TOTAL, transitive order** — a
+   bare "empty vector ⇒ neutral 0" short-circuit is non-transitive once the
+   cash-release fallback runs (a churnless plan could sit between two churnable
+   plans the vector orders the other way, cycling `sort()`; guarded by a pin).
+   Because a churnable offer's next-eligibility is always its own cash-release +
+   `churn_wait` (strictly later), the churnless plan's proxy **never demotes it
+   below a churnable plan that frees capital later** — so a plan is **never
+   penalized** for having no/fewer churnables (shorter key ⇒ sorts first on a
+   shared prefix). Deterministic (byteCompare on ISO dates). Only reorders plans
+   that tie on the first two objectives; pinned in `testOptimizerPins` (§10),
+   including a transitivity guard.
+3. **Earlier completion = cash-release only `[G-P2]`** — earlier max
    `withdrawalEligibleDate` across the set (the date all locked capital is free
    again, `js/offer-model.js:50-76`). **`safeToCloseDate` and ETF/`etf_window_days`
    timing are explicitly NOT in the objective** — the tie-break rewards freeing
    *cash* sooner, not closing the *account* sooner. `safeToCloseDate` exists and
    is exported (`js/offer-model.js:531`) but is deliberately excluded;
    account-close/ETF-aware sequencing is a **declared future enhancement**, noted
-   so a later revision can add a third tie-break without reopening the contract.
+   so a later revision can add a further tie-break without reopening the contract.
+
+**Future enhancement — WEIGHTED continuation value (owner decision, deferred).**
+The shipped throughput tie-break is a pure *ordering* signal: it reorders only
+gross+APY ties and never changes a plan's headline value. A richer variant would
+fold **continuation value** into the objective itself — e.g. weight each churnable
+offer's *repeatable* bonus by a **decay factor on its next-cycle timing** (bonus ×
+`decay(next_eligibility − today)`), so a plan that unlocks a $700 re-churn three
+months sooner could out-score a marginally higher one-shot plan. This is left as a
+**future owner decision**, not shipped, because of its **calibration risk**: the
+decay curve (rate, horizon cap) and the bonus-vs-timing exchange rate are
+subjective and would make the "gross" headline no longer a pure realized-dollar
+figure — the owner must set that risk appetite before it enters the objective.
+Until then the tie-break stays a neutral reordering only.
 
 **Determinism — full canonical-vector spec `[P2-5][G-P2]`.** Identical inputs ⇒
 byte-identical plan. The engine never relies on incidental array/mask order

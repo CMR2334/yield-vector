@@ -32,6 +32,7 @@ const App = {
   _optimizerAltIndex: 0,   // which of plan.alternatives is focused for detail/apply
   _optimizerUndo: null,    // one-shot undo snapshot after an apply (set in step 4-iii)
   _optimizerRecheck: null, // in-flight churn re-check gate: { sourceId, before, hadPlan }
+  _optimizerEditReturn: false, // set when the edit modal was opened from the Optimize review (tap-through): save button reads "Save & run" and a successful save re-runs the optimizer + returns to the Optimize panel
   _churnVerifyInFlight: null, // sourceId of an in-flight one-click churn verify (spinner guard)
   _churnVerifiedToday: null,  // { [sourceId]: todayISO } — one-click verifies that found no change (badge flip)
 
@@ -126,7 +127,6 @@ const App = {
         projectionStartDate: isoDate(TODAY),
         projectionHorizonMode: 'auto',  // 'auto' | '3months' | '6months' | '1year' | '2years' | 'custom'
         projectionHorizonDays: 365,     // used only when mode === 'custom'
-        maxOptimizerCandidates: 15,
         defaultLockStartsFrom: 'funded date',
         // Global DD transfer-timing model (business days per leg). The
         // round trip is initiate → +inDays → posts as DD → +seasonDays

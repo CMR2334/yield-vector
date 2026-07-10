@@ -490,7 +490,7 @@ function showOfferModal(offerId = null, seed = null) {
         <div style="display:flex;gap:var(--space-2);">
           ${isEdit ? `<button class="btn btn-secondary" data-action="save-as-template" data-id="${o.id}" title="Save these offer terms as a reusable template (your personal dates, notes and status are not saved)">Save as template</button>` : ''}
           <button class="btn btn-secondary" data-action="close-modal">Cancel</button>
-          <button class="btn btn-primary" data-action="save-offer" data-id="${o.id}" data-isedit="${isEdit ? '1' : '0'}">${isEdit ? 'Save changes' : 'Add offer'}</button>
+          <button class="btn btn-primary" data-action="save-offer" data-id="${o.id}" data-isedit="${isEdit ? '1' : '0'}">${App._optimizerEditReturn ? 'Save & run' : (isEdit ? 'Save changes' : 'Add offer')}</button>
         </div>
       </div>
     </div>

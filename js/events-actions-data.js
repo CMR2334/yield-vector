@@ -136,11 +136,12 @@ function onClick(e) {
     // Any add/edit that isn't the in-flight churn re-check clears the stale
     // gate so a later unrelated save can't spuriously re-run the optimizer.
     case 'add-offer': App._optimizerRecheck = null; showOfferModal(); break;
-    case 'edit-offer': if (App._optimizerRecheck && App._optimizerRecheck.sourceId !== id) App._optimizerRecheck = null; showOfferModal(id); break;
+    case 'edit-offer': if (App._optimizerRecheck && App._optimizerRecheck.sourceId !== id) App._optimizerRecheck = null; App._optimizerEditReturn = false; showOfferModal(id); break;
+    case 'edit-offer-from-optimize': editOfferFromOptimize(id); break;
     case 'duplicate-offer': duplicateOffer(id); break;
     case 'convert-offer': convertOffer(id); break;
     case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
-    case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { deleteOffer(id); closeModal(); } break;
+    case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { App._optimizerRecheck = null; App._optimizerEditReturn = false; deleteOffer(id); closeModal(); } break;
     case 'save-offer': saveOfferFromForm(id, target.dataset.isedit === '1'); break;
     case 'save-as-template': saveOfferAsTemplate(id); break;
     case 'save-offer-as-template-card': saveOfferAsTemplateFromCard(id); break;
@@ -166,7 +167,7 @@ function onClick(e) {
     case 'churn-snooze': churnSnooze(id, target.dataset.snooze); break;
     case 'churn-unsnooze': churnUnsnooze(id); break;
     case 'churn-reveal-toggle': toggleChurnSnoozedReveal(target); break;
-    case 'close-modal': App._optimizerRecheck = null; closeModal(); break;
+    case 'close-modal': App._optimizerRecheck = null; App._optimizerEditReturn = false; closeModal(); break;
 
     case 'add-commitment': showCommitmentModal(); break;
     case 'edit-commitment': showCommitmentModal(id); break;
@@ -281,7 +282,6 @@ function onChange(e) {
       : (el.type === 'number' ? Number(el.value) : el.value);
     if (isMoneySetting) value = Math.max(0, value);
     if (key === 'projectionHorizonDays') value = Math.max(30, Math.min(1825, value));
-    if (key === 'maxOptimizerCandidates') value = Math.max(1, Math.min(20, value));
     // Nested settings (e.g. "ddTransfer.inDays") — clamp transfer legs 0–10.
     if (key.includes('.')) {
       const [parent, child] = key.split('.');
@@ -451,6 +451,18 @@ function saveOfferFromForm(id, isEdit) {
       toast('Re-checked — terms unchanged');
     }
   }
+  // "Save & run" gate (item 2): the modal was opened from the Optimize review
+  // (tap-through). After the normal save, ALWAYS re-run the optimizer and return
+  // the owner to the refreshed Optimize panel — regardless of whether any input
+  // changed (they came from Optimize to act on it). Consumed one-shot; a plain
+  // Cancel/close already cleared the flag so it never fires spuriously.
+  if (App._optimizerEditReturn) {
+    App._optimizerEditReturn = false;
+    App._planSegment = 'optimize';
+    App.view = 'planner';
+    runPlannerOptimizerNow();          // renders the refreshed Optimize panel + toasts the new plan
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
 }
 
 // Signature of EVERY offer field the optimizer's capital model, qualifier, or
@@ -515,6 +527,20 @@ function recheckChurnCandidate(sourceId) {
   toast(src.docUrl
     ? 'Re-check: use "Import from URL" to pull the latest terms, then Save'
     : 'Re-check: verify the terms and Save');
+}
+
+// Tap-through from the Optimize "Not in this plan" review (item 1): open the
+// SOURCE offer's edit modal so the owner can fill the missing date / fix the
+// gap. Sets the "return to Optimize" gate so the modal's primary button reads
+// "Save & run" and a successful save re-runs the optimizer and lands back on the
+// Optimize panel (see the gate in saveOfferFromForm). Clears the churn re-check
+// gate so the two paths can't both fire.
+function editOfferFromOptimize(sourceId) {
+  const src = (App.state.offers || []).find(o => o && o.id === sourceId);
+  if (!src) return;
+  App._optimizerRecheck = null;
+  App._optimizerEditReturn = true;
+  showOfferModal(sourceId);
 }
 
 // Build a patch of the optimization inputs a DoC parse reliably produces AND
@@ -1362,7 +1388,6 @@ function seedSampleData(state) {
   settings.projectionStartDate = isoDate(today);
   settings.projectionHorizonMode = 'auto';
   settings.projectionHorizonDays = 365;
-  settings.maxOptimizerCandidates = 15;
 
   const inDays = (n) => isoDate(addDays(today, n));
 

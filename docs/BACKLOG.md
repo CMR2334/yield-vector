@@ -6,6 +6,15 @@ chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
 ## Recently resolved
+- **Inert "Optimizer max candidates" Settings input** — shipped v2026.07.09j:
+  owner chose DELETE. Removed the user-facing knob — the Settings number input +
+  hint (`render-main-views.js`), its 1–20 change-handler clamp
+  (`events-actions-data.js`), the sample-seed write, and the `app-state.js`
+  settings default (`maxOptimizerCandidates: 15`). The live Optimize engine keeps
+  its own internal cap (`MAX_OPTIMIZER_CANDIDATES` = 20, untouched); the retired
+  `runOptimizer` still tolerates the now-absent field via its `|| 15` fallback,
+  and old persisted `settings.maxOptimizerCandidates` values are simply unread
+  (no migration). Context: R79 / Codex P2 → owner delete decision.
 - **Churn re-check one-click verify UX** — shipped v2026.07.09g: the Optimize
   panel's control is now a one-tap **"Verify value"** that fetches the source
   offer's stored DoC URL through the Worker WITHOUT opening the modal (the tap is
@@ -35,11 +44,6 @@ Priorities are owner-directed — nothing here self-dispatches.
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.
 
 ## Cleanup (fold into the next app-touching batch)
-- **Inert "Optimizer max candidates" Settings input** — its last consumer (the
-  Planner combo picker) retired in v2026.07.09h; the live Optimize engine uses its
-  own default cap (20). Owner call: wire `settings.maxOptimizerCandidates` into
-  `buildOptimizerInput()` options (tightens live cap 20→15 at default) or DELETE
-  the input. Planner-side recommendation: delete. Context: R79 / Codex P2.
 - **Unreachable legacy `case 'timeline'` route** — `renderActiveView`
   (js/render-shell-overview.js:180); `goto-timeline` now routes via
   `App.setView('planner')` + segment. Pre-existing; re-verify then remove.
