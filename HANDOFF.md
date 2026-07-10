@@ -74,7 +74,21 @@ grows past ~8 entries, keeping the newest 3–4 live.
   showing exactly **1 champion card, no filler**; a validator-excluded **tappable** review row reading
   "Direct-deposit cadence/window can't be met" whose tap flipped `_optimizerEditReturn` and opened the modal with
   the **"Save & run"** primary button (cancelled without saving); **380px zero horizontal overflow**; **zero
-  console errors/warnings**. **REVIEW-AFTER:** _pending — see below._ Owner-owned dirty paths
+  console errors/warnings**. **REVIEW-AFTER — Codex OUTAGE (still out of credits):** per the outage rule, substituted an INDEPENDENT ADVERSARIAL
+  CLAUDE REVIEW (fresh general-purpose subagent, prompted to REFUTE; not self-review) over the batch diff
+  `899679f..a4ff92f`. **Verdict: SHIP** — zero CRITICAL/HIGH/MEDIUM; it re-ran pins 50/50 + node --check and probed
+  `selectChampions`/`captureValidatorExclusions` on adversarial inputs. Confirmed: the `-1e-9` APY tolerance admits
+  only `[0.019999999, 0.02)` (never a meaningfully-sub-2pp delta); the reason-pick loop never misses a whitelisted
+  reason nor false-positives a qualifying offer (uses the FULL grid, shared ctx/ddTransfer, cloned records);
+  build-time vs validator rows are disjoint; churn ids resolve cleanly; render values are numeric + `escapeHtml`-
+  wrapped (no XSS); Apply/renderer index the same list (lockstep intact); the timeline route is genuinely
+  unreachable and `renderTimeline` still serves the Plan segment. **2 LOW (dispositioned, not actioned):** (1)
+  validator rows can appear when NO feasible plan exists to "outrank" them — this is the *intended* R83-gap fix
+  (explains why nothing could be scheduled) and stays strictly truthful, so kept; (2) `championGrossQualifies`
+  degenerates to a no-op when the headline gross rounds to $0 (needs a $0-bonus offer) — gate (d) still applies and
+  the output stays truthful, and the suggested guard is itself a no-op for non-negative gross, so not actioned.
+  **1 NIT (out of scope):** `renderTimeline` is still exported though no module imports it now (still used internally
+  by the Plan segment) — harmless, left for a future cleanup pass. Owner-owned dirty paths
   (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path
   `git add` only. **Remaining (owner gate): device-check v2026.07.09m.** **Open:** cash-only exclusions (offers
   that qualify but lose on cash/ranking) remain unsurfaced in the review — by design (ITEM 2 scope is validator
