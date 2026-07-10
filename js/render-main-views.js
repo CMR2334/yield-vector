@@ -3,7 +3,7 @@ import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrenc
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
@@ -81,6 +81,40 @@ const OPT_PLAN_REASON_COPY = {
   'horizon-exceeded': 'Extends past the planning horizon.',
   'too-many-candidates': 'Too many candidates to search.'
 };
+// ISSUE 2(b) (owner verbatim: "show what's missing … so I'm not searching
+// aimlessly"): a missing-churn-anchor row names the EXACT date owed per the
+// source's churn_anchor, so the owner knows which field to fill — not a vague
+// "needs a date". Keyed on the review row's `anchor` (set by the engine).
+const CHURN_ANCHOR_MISSING_COPY = {
+  'account_closed': "Needs the prior run's close date (churn timing)",
+  'account_opened': "Needs the prior run's sign-up date (churn timing)",
+  'bonus_received': 'Needs the prior bonus-received date (churn timing)'
+};
+// Resolve a review row to its human copy — anchor-specific for missing-churn-
+// anchor, the static map otherwise.
+function optReviewReasonCopy(r) {
+  if (r && r.reason === 'missing-churn-anchor') {
+    return CHURN_ANCHOR_MISSING_COPY[r.anchor] || CHURN_ANCHOR_MISSING_COPY.bonus_received;
+  }
+  return (r && OPT_REVIEW_REASON_COPY[r.reason]) || (r && r.reason) || '';
+}
+// ISSUE 2(c): the edit-modal field the tap-through should scroll to + highlight
+// for a needs-data row — the exact input the owner must fill. Returns an element
+// id ('' when the reason has no single fixable field). Churn anchor maps per the
+// row's `anchor`; DD timing → the DD entries block; deposit-deadline → funding.
+function optReviewFocusField(r) {
+  if (!r) return '';
+  if (r.reason === 'missing-churn-anchor') {
+    const map = { account_closed: 'f-closed', account_opened: 'f-signup', bonus_received: 'f-bonus-received' };
+    return map[r.anchor] || 'f-bonus-received';
+  }
+  switch (r.reason) {
+    case 'dd-window':
+    case 'dd-post-late': return 'dd-entries';
+    case 'deposit-deadline': return 'f-funded';
+    default: return '';
+  }
+}
 
 function renderOptimizeSegment() {
   const offers = App.state.offers || [];
@@ -467,7 +501,7 @@ function renderOptCandidateReview(review, topPlan) {
       <div class="opt-review-list">
         ${items.map(r => {
           const name = optReviewName(topPlan, r);
-          const reason = OPT_REVIEW_REASON_COPY[r.reason] || r.reason;
+          const reason = optReviewReasonCopy(r);
           const cls = r.status === 'needs-date' ? 'needs-date' : 'excluded';
           // Tap-through: open the SOURCE offer's edit modal (for churn re-run
           // candidates the underlying offer, not the synthetic id) so the owner
@@ -476,8 +510,10 @@ function renderOptCandidateReview(review, topPlan) {
           const { srcId } = optReviewResolve(topPlan, r);
           const src = srcId && (App.state.offers || []).find(o => o.id === srcId);
           const inner = `<span class="opt-review-name">${escapeHtml(name)}</span><span class="opt-review-reason">${escapeHtml(reason)}</span>`;
+          // ISSUE 2(c): carry the exact field to scroll-to + highlight on open.
+          const focus = optReviewFocusField(r);
           return src
-            ? `<button class="opt-review-row tappable ${cls}" data-action="edit-offer-from-optimize" data-id="${escapeAttr(srcId)}" title="Open this offer to fix — Save & run re-optimizes">${inner}</button>`
+            ? `<button class="opt-review-row tappable ${cls}" data-action="edit-offer-from-optimize" data-id="${escapeAttr(srcId)}"${focus ? ` data-focus="${escapeAttr(focus)}"` : ''} title="Open this offer to fix — Save & run re-optimizes">${inner}</button>`
             : `<div class="opt-review-row ${cls}">${inner}</div>`;
         }).join('')}
       </div>
@@ -658,8 +694,13 @@ function renderLifecycleInfo(o) {
           : ` <span class="yv-life-snooze">— snoozed</span>`;
       }
       parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v ${snoozeSuffix ? '' : (past ? 'success' : '')}">${past ? 'eligible now' : 'eligible ' + escapeHtml(formatDateDisplay(elig))}${snoozeSuffix}</span></div>`);
+    } else if (!hasGenuinePriorRun(o)) {
+      // ISSUE 2(c) (owner-directed 2026-07-10): a never-run offer (pre-account
+      // prospect/applied) has no prior run, so it must NOT demand a close/anchor
+      // date — churn timing only starts once this offer actually completes.
+      parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">applies after this offer completes</span></div>`);
     } else if (Number(o.churn_wait_months) > 0) {
-      // Churnable with a wait set but the anchor date isn't recorded yet.
+      // A genuine prior run whose anchor date isn't recorded yet — name the field.
       const anchorLabel = CHURN_ANCHOR_LABELS[o.churn_anchor] || CHURN_ANCHOR_LABELS.bonus_received;
       parts.push(`<div class="yv-life-line"><span class="yv-life-k">Churn</span><span class="yv-life-v muted">needs ${escapeHtml(anchorLabel)} date</span></div>`);
     } else {
@@ -715,7 +756,9 @@ function offerNeedsInfoReason(o) {
     if (o.offerType === 'held-and-dd' && !(o.optionalPlannedFundingDate && parseDate(o.optionalPlannedFundingDate))) return 'needs-fund-date';
   }
   if (o.accountStatus === 'open' && !(o.plannedSignupDate && parseDate(o.plannedSignupDate))) return 'needs-signup-date';
-  if (o.churnable === true && !churnSnoozeActive(o) && !churnEligibleDate(o)) return 'needs-churn-date';
+  // Only a GENUINE churn source (a real prior run) can owe a re-run anchor date;
+  // a never-run prospect is a normal candidate, not a churn re-run (ISSUE 2a).
+  if (o.churnable === true && hasGenuinePriorRun(o) && !churnSnoozeActive(o) && !churnEligibleDate(o)) return 'needs-churn-date';
   return null;
 }
 const OFFER_NEEDS_INFO_COPY = {

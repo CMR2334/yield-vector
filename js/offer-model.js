@@ -366,6 +366,22 @@ function churnEligibleDate(offer) {
   return isoDate(eligible);
 }
 
+// Does this offer represent a GENUINELY COMPLETED (or in-progress) prior run —
+// an account that was actually opened? Churn is a RE-run: it presupposes a real
+// prior account. A pre-account prospect/applied has never been opened (its
+// accountStatus is auto-set to 'closed' meaning "not opened yet", NOT a real
+// post-open closure), and a denied application never opened either — so NEITHER
+// is a churn re-run source; each is an ordinary new-account candidate. Used by
+// the optimizer's churn synthesis, the Offers "needs info" chip, and the
+// lifecycle churn row so all three agree on when a churn anchor date is genuinely
+// owed (owner-directed 2026-07-10). Pure; tolerant of legacy single-field offers.
+function hasGenuinePriorRun(offer) {
+  if (!offer) return false;
+  if (offer.accountStatus === 'open') return true;                       // holds the account now → opened
+  if (offer.subStatus) return !PRE_ACCOUNT_SUB_STATUSES.has(offer.subStatus) && offer.subStatus !== 'denied';
+  return offer.status === 'funded' || offer.status === 'completed';      // legacy single-field fallback
+}
+
 // The ISO date a churnable offer would become churn-eligible AGAIN after THIS
 // plan schedules it — the throughput signal for the plan-ordering tie-breaker
 // (how soon the offer can be cycled again). HONORS the offer's churn_anchor: an
@@ -556,4 +572,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

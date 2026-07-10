@@ -17,7 +17,63 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 84)
+## Current state (as of 2026-07-10, Round 85)
+
+- **R85 (v2026.07.10a — owner-directed fix batch: PARETO-DOMINANCE alternatives filter + NEVER-RUN-PROSPECT churn fix + reason specificity + tap-through focus):**
+  Two owner issues, both grounded in phone screenshots. **ISSUE 1 — dominated plans cluttered "Other feasible
+  plans":** owner's real run showed 7 alternatives all with the same Oct 8 capital-back, four of them
+  ($1,800/$1,750/$1,400/$1,350) STRICTLY DOMINATED by the $1,950 or $1,550 plan (worse-or-equal on gross, low cash,
+  AND blended APY, same-or-later capital back). **FIX (`js/optimizer-engine.js`, new PURE `filterDominatedAlternatives`
+  + axis helpers `altMetricGross/LowCash/Apy/Back`, `altWeaklyDominates`, `altStrictlyBetterSomewhere`):** wired into
+  `optimizePlanner` AFTER champion extraction + the 09i same-set dedup. Hides any alternative a DISPLAYED plan
+  beats-or-ties on ALL of (gross, low cash, blended APY) with a same-or-EARLIER capital-back date and strictly beats
+  on ≥1; a cross-set EXACT tie on all four is a duplicate → later representative hidden (earlier kept). Champions +
+  the headline (alts[0]) are EXEMPT from removal but still DOMINATE. Strict domination is transitive → tested against
+  the full displayed pool = order-independent (yields the Pareto frontier); exact-tie pass keeps the earliest.
+  Deterministic (byteCompare on the ISO capital-back axis; `-1e-9` APY FP tolerance). Exported for E2E. **ISSUE 2 —
+  a never-run prospect demanded a close date + aimless reasons.** **(2a) churn candidacy (`js/offer-model.js` new PURE
+  `hasGenuinePriorRun`, shared; `js/optimizer-engine.js` churn-synthesis guard):** ROOT CAUSE — a churnable offer at a
+  PRE-ACCOUNT status (subStatus prospect/applied; accountStatus auto-set to 'closed' meaning "not opened yet", NOT a
+  real closure) entered the churn-synthesis loop; with `churn_anchor='account_closed'` and no `closed_date`,
+  `churnEligibleDate` returned null → a generic `missing-churn-anchor` needs-date row demanding a close date that can
+  NEVER exist for a never-opened account. `hasGenuinePriorRun` (accountStatus 'open' → true; else non-pre-account &&
+  non-denied subStatus; legacy funded/completed fallback) now GATES churn synthesis — a never-run prospect is skipped
+  SILENTLY (it is already a NORMAL candidate). **(2b) reason specificity (`js/render-main-views.js` new
+  `CHURN_ANCHOR_MISSING_COPY` + `optReviewReasonCopy`; engine tags the review row with `anchor`):** a genuine churn
+  source still owing its anchor names the EXACT date — "Needs the prior run's close date (churn timing)" /
+  "…sign-up date…" / "Needs the prior bonus-received date (churn timing)" per churn_anchor, not "Needs a date to
+  re-run". **(2c) tap-through focus (`js/render-main-views.js` `optReviewFocusField`; `js/events-actions-data.js`
+  `editOfferFromOptimize`+`focusOfferField`; `index.html` `.yv-field-flash`):** the needs-data review row carries a
+  `data-focus` (f-closed/f-signup/f-bonus-received/dd-entries/f-funded); the tap-through expands the Advanced section
+  if needed, scrolls to, and flashes an accent ring on the named field (transient, 1.8s, auto-clears; no programmatic
+  focus so a yv-date picker never pops). The lifecycle CHURN row (`renderLifecycleInfo`) for a never-run offer now
+  reads "applies after this offer completes" instead of "needs account closed date"; the Offers `needs-churn-date`
+  chip is likewise gated to genuine sources. **RIDER (CSS regression the longer copy exposed):** the horizontal
+  `.opt-review-row` squeezed a full-sentence reason + the offer name into 1-char columns at 380px → restacked to a
+  vertical name-over-reason list (both `overflow-wrap:anywhere`), readable at any width. **Pins +7 → optimizer 57/57:**
+  ISSUE 1 — owner-numbers fixture (four dominated hidden, three trade-offs survive), exact-tie duplicate hidden,
+  headline exempt when dominated, determinism; ISSUE 2 — never-run prospect gets NO churn row + is scheduled as a
+  normal candidate, genuine completed run still needs its anchor tagged with the anchor kind. All existing 50 stay
+  green (the single-offer near-dup/determinism/earliest-representative alternatives pins unaffected — the filter only
+  drops dominated same-outcome variants, headline always survives). **Full battery green:** node --check all 19
+  modules + inline entry + sw.js; **fidelity 67/67, parser 20/20, p2b PASS, dd-matrix ALL PASS, feasibility 5/5,
+  optimizer 57/57 (~3.6s)**. **APP_VERSION → 2026.07.10a** (runtime-status.js + sw.js + 19 import-map `?v=`; sw
+  precache derives `yv-precache-2026.07.10a`; 0 strays of 09m; 2 remaining `09h` are historical comments).
+  **Preview E2E** (port 8765, owner's real localStorage STRICTLY READ-ONLY — App.save() NEVER called, stored bytes
+  10337→10337 identical, transient BofA injection reverted from an in-memory snapshot): dominance before/after on the
+  owner's exact numbers via the real exported `filterDominatedAlternatives` — 7 plans → 3 (the four dominated hidden);
+  a real optimizer run rendered **1 champion + 5 "Other feasible plans"** with **0 Pareto violations** among displayed
+  alternatives; the owner's genuine churnable US Bank source (account open, no bonus_received_date) surfaced a tappable
+  row reading **"Needs the prior bonus-received date (churn timing)"** with `data-focus="f-bonus-received"`; tapping it
+  opened the modal ("Save & run" primary), **auto-expanded Advanced**, and the flash animation (`yv-field-flash`, 1.8s)
+  validated; a transiently-injected BofA-class never-run prospect got **NO churn row, NO synthetic churn candidate,
+  and was scheduled as a normal candidate**; `renderLifecycleInfo` returned "applies after this offer completes" for a
+  never-run offer vs "needs account closed date" for a genuine one; **380px zero horizontal overflow**; zero console
+  errors/warnings. **REVIEW-AFTER:** pending (Codex-first per the credit-reset directive). Owner-owned dirty paths
+  (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path `git add`
+  only. **Remaining (owner gate): device-check v2026.07.10a.** **Open:** `no-valid-date-window` review copy stays
+  generic (not a single missing field); the Offers needs-info chip vs draft-banner co-occurrence dedupe still an owner
+  call (carried from R84).
 
 - **R84 (v2026.07.09m — owner-directed: CONSTRAINED CHAMPION CARDS + validator-excluded review rows + 2 riders):**
   Owner on seeing 09k live: *"I don't think I like the 3 scenario focus… I didn't create this tool to run an

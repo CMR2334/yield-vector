@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09m",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09m",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09m",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09m",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09m",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09m",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09m",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.09m",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09m",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09m",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09m",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09m",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.09m",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09m",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09m",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09m",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09m",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09m",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09m"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.10a",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.10a",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.10a",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.10a",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.10a",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.10a",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.10a",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.10a",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.10a",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.10a",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.10a",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.10a",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.10a",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.10a",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.10a",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.10a",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.10a",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.10a",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.10a"
   }
 }
 </script>
@@ -2453,6 +2453,17 @@ a { color: inherit; text-decoration: none; }
 .advanced-fields { display: none; flex-direction: column; gap: var(--space-4); }
 .advanced-fields.open { display: flex; }
 
+/* Transient highlight when a needs-data review row taps through to its field
+   (ISSUE 2c) — an accent ring that fades out, reusing the accent tokens. */
+@keyframes yv-field-flash {
+  0%, 20% { box-shadow: 0 0 0 3px var(--accent-mid); }
+  100%    { box-shadow: 0 0 0 3px transparent; }
+}
+.yv-field-flash {
+  animation: yv-field-flash 1.8s ease-out forwards;
+  border-radius: var(--radius, 8px);
+}
+
 /* ============================================================
    TABLES
    ============================================================ */
@@ -2581,13 +2592,15 @@ table.data-table {
 .opt-alt.champion.active { border-color: var(--accent); }
 .opt-review { margin-bottom: var(--space-4); }
 .opt-review-list { display: flex; flex-direction: column; gap: 4px; }
-.opt-review-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); font-size: 13px; padding: 6px 10px; background: var(--bg); border-radius: 6px; }
+/* Stack the offer name over its reason so a full-sentence needs-data reason
+   (ISSUE 2b) reads at any width instead of squeezing both into 1-char columns. */
+.opt-review-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 13px; padding: 8px 10px; background: var(--bg); border-radius: 6px; }
 .opt-review-row.needs-date { background: var(--warning-soft); }
 button.opt-review-row.tappable { width: 100%; border: 1px solid transparent; font: inherit; cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s; }
 button.opt-review-row.tappable:hover { border-color: var(--accent-mid); }
 button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 .opt-review-name { color: var(--text); font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
-.opt-review-reason { color: var(--text-tertiary); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.opt-review-reason { color: var(--text-tertiary); font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
 .opt-apply-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-soft); }
 .opt-apply-note { font-size: 12px; color: var(--text-tertiary); }
 .opt-applied { font-size: 14px; font-weight: 600; color: var(--success); }

@@ -1,8 +1,8 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate, churnEligibleDate, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
-import { HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
+import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
    PURE PLANNER OPTIMIZER ENGINE
@@ -426,13 +426,23 @@ function buildCandidateRecords(ctx) {
   if (ctx.options.includeChurn !== false) {
     for (const source of ctx.offers || []) {
       if (!source || !source.id || source.churnable !== true) continue;
+      // ISSUE 2(a) (owner-directed 2026-07-10): a churn re-run source must have a
+      // GENUINELY COMPLETED prior run. A pre-account prospect/applied (never
+      // opened — its accountStatus is auto-set to 'closed', which is NOT a real
+      // closure) is NOT a churn source and must not be made to demand a
+      // closed_date; it is already handled as a normal candidate above. Skip it
+      // SILENTLY (no review row) so its real needs surface through normal
+      // candidacy, not an aimless "needs a date to re-run".
+      if (!hasGenuinePriorRun(source)) continue;
       if (churnSnoozeActive(source, ctx.todayDate)) {
         review.push({ offerId: source.id, status: 'excluded', reason: 'churn-snoozed' });
         continue;
       }
       const eligible = churnEligibleDate(source);
       if (!eligible) {
-        review.push({ offerId: source.id, status: 'needs-date', reason: 'missing-churn-anchor' });
+        // A genuine prior run whose churn-anchor date isn't recorded yet: name the
+        // EXACT date owed (ISSUE 2(b)) via the source's churn_anchor.
+        review.push({ offerId: source.id, status: 'needs-date', reason: 'missing-churn-anchor', anchor: source.churn_anchor || 'bonus_received' });
         continue;
       }
       if (commitmentLinked.has(source.id)) {
@@ -1144,6 +1154,89 @@ function rankAlternatives(plans, limit) {
   return out;
 }
 
+// ── Pareto-dominance filter for the "Other feasible plans" list (owner-directed
+// 2026-07-10) ────────────────────────────────────────────────────────────────
+// After champion extraction + the 09i same-set dedup, the alternatives list can
+// still carry STRICTLY DOMINATED plans: a plan that some other DISPLAYED plan
+// beats-or-ties on ALL of (gross bonus, low cash, blended APY) with a same-or-
+// EARLIER capital-back date, and strictly beats on at least one axis. These are
+// pure clutter — no genuine trade-off for the owner to weigh — so they are
+// hidden. A genuine trade-off (higher gross but thinner cushion, higher APY but
+// later capital back, …) wins on at least one axis and SURVIVES. Champions and
+// the headline are EXEMPT from removal (their own gates govern them) but still
+// serve as dominators, since they are displayed. Deterministic: a plan is hidden
+// iff a strict dominator exists in the displayed pool, OR it ties an already-kept
+// plan on all four metrics (a cross-set duplicate) — in which case the earlier
+// list representative is kept.
+const ALT_DOMINANCE_APY_EPSILON = 1e-9;   // FP tolerance on the APY axis
+
+// Axis accessors — higher gross/low-cash/APY is better; an EARLIER capital-back
+// ISO is better. Missing APY sorts worst (−∞, matching championRate); missing
+// completion sorts latest ('9999-12-31', matching compareByFastest). Gross and
+// low cash round to whole dollars (matches comparePlans / the card display).
+function altMetricGross(p) { return Math.round(((p && p.objective) || {}).grossBonus || 0); }
+function altMetricLowCash(p) { return Math.round(((p && p.capitalCurveSummary) || {}).lowestAvailable || 0); }
+function altMetricApy(p) {
+  const r = ((p && p.objective) || {}).blendedAnnReturn;
+  return (r == null) ? -Infinity : r;
+}
+function altMetricBack(p) { return ((p && p.objective) || {}).latestCompletionISO || '9999-12-31'; }
+
+// Does A beat-or-tie B on EVERY axis? APY carries an FP epsilon so a floating tie
+// isn't misread as a loss; capital-back compares ISO lexically (earlier = better).
+function altWeaklyDominates(A, B) {
+  return altMetricGross(A) >= altMetricGross(B)
+    && altMetricLowCash(A) >= altMetricLowCash(B)
+    && altMetricApy(A) >= altMetricApy(B) - ALT_DOMINANCE_APY_EPSILON
+    && byteCompare(altMetricBack(A), altMetricBack(B)) <= 0;
+}
+
+// A is strictly better than B on at least one axis (the "strictly worse on at
+// least one", read from the dominator's side).
+function altStrictlyBetterSomewhere(A, B) {
+  return altMetricGross(A) > altMetricGross(B)
+    || altMetricLowCash(A) > altMetricLowCash(B)
+    || altMetricApy(A) > altMetricApy(B) + ALT_DOMINANCE_APY_EPSILON
+    || byteCompare(altMetricBack(A), altMetricBack(B)) < 0;
+}
+
+// Drop strictly-dominated + cross-set-duplicate plans from the alternatives list.
+// `alternatives[0]` (the headline) and every plan behind a champion card are
+// exempt from removal but participate as dominators. Because strict Pareto
+// dominance is transitive, testing each plan against the FULL displayed pool is
+// order-independent and yields the Pareto frontier; the exact-tie (duplicate)
+// pass then keeps only the earliest representative, so the result is stable.
+function filterDominatedAlternatives(alternatives, champions) {
+  const alts = (alternatives || []).slice();
+  if (alts.length <= 1) return alts;
+  const championVectors = new Set(
+    (champions || []).map(c => c && c.plan && c.plan.canonicalVector).filter(Boolean)
+  );
+  const headlineVector = alts[0] && alts[0].canonicalVector;
+  const isExempt = p => !!p && (p.canonicalVector === headlineVector || championVectors.has(p.canonicalVector));
+  // Displayed dominator pool: every champion plan (some may not appear in `alts`)
+  // plus every alternative.
+  const dominators = (champions || []).map(c => c && c.plan).filter(Boolean).concat(alts);
+  const kept = [];
+  const out = [];
+  for (const B of alts) {
+    if (isExempt(B)) { out.push(B); kept.push(B); continue; }
+    let hidden = dominators.some(A => A
+      && A.canonicalVector !== B.canonicalVector
+      && altWeaklyDominates(A, B) && altStrictlyBetterSomewhere(A, B));
+    if (!hidden) {
+      // Cross-set duplicate: ties an already-kept plan on all four metrics → hide
+      // the later one (the earlier representative is already kept).
+      hidden = kept.some(A => A.canonicalVector !== B.canonicalVector
+        && altWeaklyDominates(A, B) && altWeaklyDominates(B, A));
+    }
+    if (hidden) continue;
+    out.push(B);
+    kept.push(B);
+  }
+  return out;
+}
+
 function exactSearch(ctx, records, grids) {
   const plans = [];
   let evaluated = 0;
@@ -1322,6 +1415,11 @@ function optimizePlanner(input = {}) {
     plan = beamSearch(ctx, records, grids, beamCost <= ctx.options.evalCap ? 'beam' : 'coarse-beam');
   }
   plan.candidateCount = records.length;
+  // ISSUE 1 (owner-directed 2026-07-10): hide strictly-dominated plans from the
+  // "Other feasible plans" list. Runs AFTER champion extraction + the 09i same-set
+  // dedup (both done inside the search); champions + the headline stay (exempt)
+  // but still dominate. Genuine trade-offs survive.
+  plan.alternatives = filterDominatedAlternatives(plan.alternatives, plan.champions);
   // Build-time exclusions (commitment-linked / churn-snoozed / needs-date /
   // no-window) PLUS validator-time exclusions (item 2): candidates that cleared
   // build but the qualifier rejects at every schedulable date, dropped from the
@@ -1534,6 +1632,43 @@ function testOptimizerPins() {
     check('churn synthesis creates candidate from eligible source', plan.valid && !!sched);
     check('open-date churn carry preserves hold-anchor metadata', plan.candidates.some(c => c.id === 'churn_off_churn_source' && c.lockStartsFrom === 'open date'));
     check('unverified churn badge carries value date', plan.badges.churn_off_churn_source && plan.badges.churn_off_churn_source.some(b => b.kind === 'unverified-churn-value' && b.dateISO === '2026-06-15'));
+  }
+  {
+    // ── Churn candidacy: never-run prospect is NOT a churn source (ISSUE 2a,
+    // owner-directed 2026-07-10) ────────────────────────────────────────────
+    // The BofA repro: a churnable offer at a PRE-ACCOUNT status (subStatus
+    // 'prospect', accountStatus auto-set to 'closed', churn_anchor 'account_closed'
+    // with no closed_date) must NOT enter the churn path and demand a closed_date.
+    // It is already a NORMAL candidate — so it gets NO churn review row at all,
+    // and (given a valid window) is schedulable as a normal offer.
+    const bofa = _pinOffer({
+      id: 'off_bofa', bankName: 'Bank of America', offerName: 'Business Advantage Banking',
+      status: 'prospect', accountStatus: 'closed', subStatus: 'prospect',
+      signupBonusAmount: 300, requiredFundingAmount: 5000, daysFundsMustRemain: 60,
+      churnable: true, churn_wait_months: 12, churn_anchor: 'account_closed', closed_date: null,
+      offerExpirationDate: '2026-12-31'
+    });
+    const bofaPlan = optimizePlanner(_pinState({ offers: [bofa], candidateIds: ['off_bofa'], options: { includeChurn: true, defaultWindowDays: 120 } }));
+    const bofaRows = (bofaPlan.candidateReview || []).filter(r => r.offerId === 'off_bofa');
+    check('churn candidacy: never-run prospect gets NO churn needs-date row',
+      !bofaRows.some(r => r.reason === 'missing-churn-anchor')
+      && !bofaPlan.candidates.some(c => c.id === 'churn_off_bofa'),
+      `${bofaRows.length} rows`);
+    check('churn candidacy: the never-run prospect is scheduled as a normal candidate',
+      bofaPlan.valid && bofaPlan.includedIds.includes('off_bofa'), JSON.stringify(bofaPlan.includedIds));
+    // A GENUINE prior run (closed + earned) whose account_closed anchor date is
+    // NOT recorded still owes it — surfaces a needs-date row carrying the anchor
+    // so the copy layer can name the exact field (ISSUE 2b).
+    const genuine = _pinOffer({
+      id: 'off_genuine', status: 'completed', accountStatus: 'closed', subStatus: 'earned',
+      plannedSignupDate: '2025-01-01', churnable: true, churn_wait_months: 12,
+      churn_anchor: 'account_closed', closed_date: null
+    });
+    const genPlan = optimizePlanner(_pinState({ offers: [genuine], candidateIds: ['off_genuine'], options: { includeChurn: true, defaultWindowDays: 120 } }));
+    const genRow = (genPlan.candidateReview || []).find(r => r.offerId === 'off_genuine' && r.reason === 'missing-churn-anchor');
+    check('churn candidacy: genuine completed run still needs its anchor, tagged with the anchor kind',
+      !!genRow && genRow.status === 'needs-date' && genRow.anchor === 'account_closed',
+      genRow ? genRow.anchor : 'no row');
   }
   {
     const dd = _pinOffer({
@@ -1916,6 +2051,57 @@ function testOptimizerPins() {
       && !(cplan.candidateReview || []).some(r => r.offerId === 'off_big2'),
       JSON.stringify(cplan.includedIds));
   }
+  {
+    // ── Pareto-dominance filter for "Other feasible plans" (ISSUE 1, owner-
+    // directed 2026-07-10) ─────────────────────────────────────────────────────
+    // Modeled on the owner's real screenshot: seven plans, all with the SAME
+    // capital-back date (2026-10-08). The $1,800 / $1,750 / $1,400 / $1,350 cards
+    // are strictly dominated (the $1,950 or $1,550 plan beats-or-ties them on
+    // gross, low cash, AND blended APY at the same capital-back), so they must be
+    // hidden. The three genuine trade-offs ($2,150 = best gross / thin cushion;
+    // $1,950 = high APY + mid cushion; $1,550 = fattest cushion) each win an axis
+    // and SURVIVE.
+    const domPlan = (cv, gross, low, apy, backISO) => ({
+      valid: true, canonicalVector: cv, includedIds: [cv],
+      capitalCurveSummary: { lowestAvailable: low },
+      objective: { grossBonus: gross, blendedAnnReturn: apy, latestCompletionISO: backISO }
+    });
+    const BACK = '2026-10-08';
+    const pA = domPlan('v_2150', 2150, 11945, 0.145, BACK);   // best gross (headline)
+    const pB = domPlan('v_1950', 1950, 32945, 0.203, BACK);   // best APY + mid cushion
+    const pC = domPlan('v_1800', 1800, 22945, 0.149, BACK);   // dominated by B
+    const pD = domPlan('v_1750', 1750, 27945, 0.161, BACK);   // dominated by B
+    const pE = domPlan('v_1550', 1550, 36945, 0.180, BACK);   // fattest cushion
+    const pF = domPlan('v_1400', 1400, 26945, 0.126, BACK);   // dominated by B and E
+    const pG = domPlan('v_1350', 1350, 31945, 0.137, BACK);   // dominated by B and E
+    const ownerAlts = [pA, pB, pC, pD, pE, pF, pG];
+    const kept = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]);
+    const keptVecs = kept.map(p => p.canonicalVector).join(',');
+    check('dominance: four strictly-dominated owner plans hidden, three trade-offs survive',
+      keptVecs === 'v_2150,v_1950,v_1550', keptVecs || '(empty)');
+    // Boundary: two plans equal on ALL four metrics (a cross-set duplicate) → the
+    // later representative is hidden; the earlier one (and the headline) survive.
+    // headline is a genuine trade-off vs the dups (best gross, thinnest cushion),
+    // so it does NOT itself dominate them — isolating the duplicate rule.
+    const hL = domPlan('v_head', 3000, 2000, 0.10, BACK);      // headline (exempt)
+    const dupP = domPlan('v_dup_p', 1000, 5000, 0.10, BACK);
+    const dupQ = domPlan('v_dup_q', 1000, 5000, 0.10, BACK);   // byte-identical metrics
+    const dedup = filterDominatedAlternatives([hL, dupP, dupQ], [{ plan: hL }]);
+    check('dominance: exact-tie duplicate (equal on all four) is hidden as a duplicate',
+      dedup.map(p => p.canonicalVector).join(',') === 'v_head,v_dup_p',
+      dedup.map(p => p.canonicalVector).join(','));
+    // The headline (alts[0]) and champion plans are NEVER hidden even when strictly
+    // dominated: pWeak is worse on every axis than pStrong yet survives as headline.
+    const pStrong = domPlan('v_strong', 2000, 40000, 0.25, '2026-09-01');
+    const pWeak = domPlan('v_weak', 500, 1000, 0.02, '2026-12-01'); // dominated by pStrong
+    const exempt = filterDominatedAlternatives([pWeak, pStrong], [{ plan: pWeak }]);
+    check('dominance: the headline is exempt even when strictly dominated',
+      exempt.some(p => p.canonicalVector === 'v_weak') && exempt.some(p => p.canonicalVector === 'v_strong'));
+    // Determinism: identical input yields identical output ordering across runs.
+    const run1 = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]).map(p => p.canonicalVector).join(',');
+    const run2 = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]).map(p => p.canonicalVector).join(',');
+    check('dominance: filter is deterministic across runs', run1 === run2, run1);
+  }
 
   const pass = results.filter(r => r.ok).length;
   const fail = results.length - pass;
@@ -1932,5 +2118,6 @@ export {
   optimizePlanner,
   runPlannerOptimizer,
   evaluateOptimizerPlan,
+  filterDominatedAlternatives,
   testOptimizerPins
 };

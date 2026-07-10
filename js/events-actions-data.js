@@ -137,7 +137,7 @@ function onClick(e) {
     // gate so a later unrelated save can't spuriously re-run the optimizer.
     case 'add-offer': App._optimizerRecheck = null; showOfferModal(); break;
     case 'edit-offer': if (App._optimizerRecheck && App._optimizerRecheck.sourceId !== id) App._optimizerRecheck = null; App._optimizerEditReturn = false; showOfferModal(id); break;
-    case 'edit-offer-from-optimize': editOfferFromOptimize(id); break;
+    case 'edit-offer-from-optimize': editOfferFromOptimize(id, target.dataset.focus); break;
     case 'duplicate-offer': duplicateOffer(id); break;
     case 'convert-offer': convertOffer(id); break;
     case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
@@ -535,12 +535,35 @@ function recheckChurnCandidate(sourceId) {
 // "Save & run" and a successful save re-runs the optimizer and lands back on the
 // Optimize panel (see the gate in saveOfferFromForm). Clears the churn re-check
 // gate so the two paths can't both fire.
-function editOfferFromOptimize(sourceId) {
+function editOfferFromOptimize(sourceId, focusField) {
   const src = (App.state.offers || []).find(o => o && o.id === sourceId);
   if (!src) return;
   App._optimizerRecheck = null;
   App._optimizerEditReturn = true;
   showOfferModal(sourceId);
+  // ISSUE 2(c): scroll to + transiently highlight the exact field the review row
+  // named, so the owner lands on what to fill instead of hunting. Deferred past
+  // showOfferModal's own setTimeout(0) wiring (which focuses #f-bank) so this
+  // scroll/highlight wins.
+  if (focusField) setTimeout(() => focusOfferField(focusField), 130);
+}
+
+// Reveal (expanding the Advanced section if needed), scroll to, and briefly
+// flash a modal field by element id. Container ids (e.g. 'dd-entries') flash the
+// block itself. Highlight auto-clears; nothing is focused (a yv-date focus would
+// pop the date picker uninvited).
+function focusOfferField(fieldId) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  const adv = el.closest('#advanced-fields');
+  if (adv && !adv.classList.contains('open')) {
+    const toggle = document.querySelector('.advanced-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    adv.classList.add('open');
+  }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('yv-field-flash');
+  setTimeout(() => el.classList.remove('yv-field-flash'), 2000);
 }
 
 // Build a patch of the optimization inputs a DoC parse reliably produces AND
