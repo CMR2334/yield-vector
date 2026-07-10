@@ -1,6 +1,6 @@
 import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, formatCompactCurrency, formatCurrency, formatDateDisplay, isoDate, nextEventInstance, parseDate, relativeDays } from './date-format-core.js';
-import { directDepositEffectiveDate, ddWindowEndDate } from './dd-core.js';
+import { ddWindowEndDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
 import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel, requirementSummary } from './requirements-templates.js';

@@ -557,6 +557,50 @@ function validateOfferQualification(offer, ctx) {
   return constraints;
 }
 
+// Qualification-timing reasons worth a dedicated "Not in this plan" review row
+// (item 2, R83 gap). A candidate that clears build (has a date grid) but is
+// dropped by the VALIDATOR at EVERY schedulable date — while a valid alternative
+// outranks it — otherwise vanishes silently. `completeness` / `schedule-before-
+// today` are intentionally excluded: a draft/incomplete offer is surfaced by the
+// Offers "needs info" chip + draft banner, not this timing review.
+const VALIDATOR_REVIEW_KINDS = new Set([
+  'dd-post-late', 'dd-window', 'deposit-deadline', 'debit-deadline', 'requirement-deadline', 'expiry'
+]);
+
+// PURE. For each candidate record NOT in the FINAL plan, decide whether it is
+// absent because the qualification validator rejects it at EVERY schedulable
+// date (a hard timing failure, independent of cash/other offers) and, if so,
+// emit a review row carrying the specific reason. TRUTHFUL by construction:
+//   • an offer IN the final plan is skipped (obviously not excluded);
+//   • an offer that qualifies at ANY grid date is skipped — it is absent only
+//     because a rejected candidate schedule lost on cash/ranking, NOT the
+//     validator (the reason it is absent from the FINAL plan is not a hard
+//     timing gap, so surfacing one would misrepresent it).
+// The surfaced reason is drawn from the date CLOSEST to qualifying (fewest
+// constraints), preferring a timing kind — the most actionable nudge. Rows are
+// build-order deterministic (records are id-sorted; grid dates are sorted).
+function captureValidatorExclusions(ctx, records, plan) {
+  const included = new Set((plan && plan.includedIds) || []);
+  const rows = [];
+  for (const r of records || []) {
+    if (included.has(r.id)) continue;
+    let qualifies = false;
+    let reason = null;
+    let reasonScore = Infinity;
+    for (const iso of r.grid || []) {
+      const cons = validateOfferQualification(applyDateGroup(r, iso), ctx);
+      if (!cons.length) { qualifies = true; break; }
+      if (cons.length < reasonScore) {
+        const hit = cons.find(c => VALIDATOR_REVIEW_KINDS.has(c.kind));
+        if (hit) { reason = hit; reasonScore = cons.length; }
+      }
+    }
+    if (qualifies || !reason) continue;
+    rows.push({ offerId: r.id, status: 'excluded', reason: reason.kind, dateISO: reason.dateISO || '' });
+  }
+  return rows;
+}
+
 function horizonDatesForOffer(offer, ctx) {
   const dates = [];
   const push = iso => { if (iso && parseDate(iso)) dates.push(iso); };
@@ -854,24 +898,34 @@ function comparePlans(a, b) {
   return byteCompare(a.canonicalVector, b.canonicalVector);
 }
 
-// ── Named champion plans ────────────────────────────────────────────────────
-// One card per objective axis, chosen from the SAME evaluated feasible pool (no
-// new search) so a single card can speak to what each axis rewards:
-//   total   — the overall winner (max gross via the full comparePlans chain);
-//             stays the default/selected plan (it is always plan[0]).
-//   rate    — highest blended annualized return on locked capital (may be a
-//             small single-offer plan at far lower gross — that IS the message).
-//   fastest — earliest final capital-release date (tie-break by gross, then the
-//             standard chain).
-// Ordered total → rate → fastest; when one plan wins multiple axes it collapses
-// to ONE entry with merged labels (never a duplicate card). Pure + deterministic
-// (each axis breaks ties through comparePlans, a total order), so it is
-// pin-testable and render just consumes plan.champions.
-const CHAMPION_AXES = [
-  { key: 'total', label: 'Best total return' },
-  { key: 'rate', label: 'Best rate of return' },
-  { key: 'fastest', label: 'Fastest capital back' }
-];
+// ── Named champion plans (CONSTRAINED redesign, owner-directed 2026-07-09) ────
+// Drawn from the SAME evaluated feasible pool (no new search). The headline
+// "Best total return" plan is always the default/selected plan and always the
+// first champion (when any ≥1-offer feasible plan exists). A SECONDARY champion
+// (rate / fastest) is offered ONLY when it competes NEAR THE TOP of total return
+// AND beats the headline plan on its own axis by a MATERIAL margin — otherwise
+// the axis degenerates to a trivial single-offer answer, the owner's exact
+// objection to the unconstrained 09k design ("return a single offer I entered
+// myself"). Gates on every secondary (documented named constants below; NOT a
+// user setting):
+//   (a) ≥ 1 offer          — the 0-offer "do nothing" plan is NEVER a champion
+//                            (also the headline; fixes the 09l reviewer NIT that
+//                            a lone empty plan could surface as a champion card).
+//   (b) gross ≥ THRESHOLD×best — must earn near the top of total return.
+//   (c) genuinely distinct — post-09i dedup (alternativeCollapses) vs the
+//                            headline, and never the same canonicalVector.
+//   (d) material axis margin — rate: blended APY better by ≥ RATE_MATERIAL_PP
+//                            percentage points; fastest: final capital-release
+//                            ≥ FASTEST_MATERIAL_DAYS days earlier.
+// Each secondary champion carries a PURE `trade` = { grossDelta, apyDeltaPp,
+// daysSooner } (arithmetic vs the headline plan) that the card renders as an
+// explicit trade line ("+9.2% APY · -$450 vs best"). Two secondaries that
+// resolve to the SAME plan merge into ONE entry carrying both labels (the rare
+// case a single qualifying plan wins both secondary axes). Pure + deterministic
+// (each axis breaks ties through comparePlans, a total order), so pin-testable.
+const CHAMPION_GROSS_THRESHOLD = 0.85;      // (b) secondary must reach ≥85% of best gross
+const CHAMPION_RATE_MATERIAL_PP = 0.02;     // (d) blended APY better by ≥2 percentage points
+const CHAMPION_FASTEST_MATERIAL_DAYS = 7;   // (d) final capital-release ≥7 days earlier
 
 function championRate(p) {
   const r = p && p.objective ? p.objective.blendedAnnReturn : null;
@@ -896,34 +950,77 @@ function compareByFastest(a, b) {
   return comparePlans(a, b);
 }
 
-const CHAMPION_AXIS_PICKERS = {
-  total: plans => plans.slice().sort(comparePlans)[0],
-  rate: plans => plans.slice().sort(compareByRate)[0],
-  fastest: plans => plans.slice().sort(compareByFastest)[0]
-};
+// Secondary axes only — the headline "total" plan is added first, unconditionally
+// (when a ≥1-offer feasible plan exists). Ordered rate → fastest.
+const CHAMPION_SECONDARY_AXES = [
+  { key: 'rate', label: 'Best rate of return', pick: plans => plans.slice().sort(compareByRate)[0] },
+  { key: 'fastest', label: 'Fastest capital back', pick: plans => plans.slice().sort(compareByFastest)[0] }
+];
 
-// Select the champion set from an evaluated plan pool. Champions are drawn from
-// the FEASIBLE plans only; when none are feasible the set is empty. Merging is
-// keyed on canonicalVector so two axis picks that resolve to the same schedule
-// (whether the same object or an equal one) collapse into a single entry whose
-// labels list both axes, preserving first-seen order.
+// PURE trade arithmetic for a secondary champion `pick` vs the headline `best`.
+// All three deltas are always computed (a merged rate+fastest card reads both);
+// the material-margin gate reads the axis-relevant one. grossDelta<0 means the
+// secondary earns less than the headline (the trade the owner is being shown).
+// daysSooner>0 means the secondary frees capital earlier.
+function championTrade(pick, best) {
+  const po = pick.objective || {};
+  const bo = best.objective || {};
+  const grossDelta = Math.round(po.grossBonus || 0) - Math.round(bo.grossBonus || 0);
+  const pa = po.blendedAnnReturn;
+  const ba = bo.blendedAnnReturn;
+  const apyDeltaPp = (pa != null && ba != null) ? (pa - ba) : null;
+  let daysSooner = null;
+  const pc = parseDate(po.latestCompletionISO);
+  const bc = parseDate(bo.latestCompletionISO);
+  if (pc && bc) daysSooner = daysBetween(pc, bc); // >0 ⇒ pick frees capital earlier
+  return { grossDelta, apyDeltaPp, daysSooner };
+}
+
+// (b) Near-top-of-total gate: the secondary's gross must reach ≥ THRESHOLD × the
+// headline plan's gross. Rounded (matches comparePlans / the card display).
+function championGrossQualifies(pick, best) {
+  const bg = Math.round((best.objective || {}).grossBonus || 0);
+  const pg = Math.round((pick.objective || {}).grossBonus || 0);
+  return pg >= CHAMPION_GROSS_THRESHOLD * bg;
+}
+
+// Select the CONSTRAINED champion set from an evaluated plan pool. The headline
+// (max total return among ≥1-offer feasible plans) is always the first entry;
+// rate/fastest secondaries are appended ONLY when they clear gates (b)–(d).
+// Empty when no ≥1-offer feasible plan exists (gate a). Two secondaries that
+// resolve to the same plan merge into one entry (both labels, one trade).
 function selectChampions(plans) {
-  const feasible = (plans || []).filter(p => p && p.valid);
+  const feasible = (plans || []).filter(p => p && p.valid && (p.includedIds || []).length > 0);
   if (!feasible.length) return [];
+  const best = feasible.slice().sort(comparePlans)[0];
   const out = [];
   const byVector = new Map();
-  for (const axis of CHAMPION_AXES) {
-    const pick = CHAMPION_AXIS_PICKERS[axis.key](feasible);
-    if (!pick) continue;
-    const key = pick.canonicalVector;
-    let entry = byVector.get(key);
+  const add = (plan, key, label, trade) => {
+    let entry = byVector.get(plan.canonicalVector);
     if (!entry) {
-      entry = { plan: pick, axes: [], labels: [] };
-      byVector.set(key, entry);
+      entry = { plan, axes: [], labels: [], trade: null };
+      byVector.set(plan.canonicalVector, entry);
       out.push(entry);
     }
-    entry.axes.push(axis.key);
-    entry.labels.push(axis.label);
+    entry.axes.push(key);
+    entry.labels.push(label);
+    if (trade && !entry.trade) entry.trade = trade;
+    return entry;
+  };
+  add(best, 'total', 'Best total return', null);
+  for (const axis of CHAMPION_SECONDARY_AXES) {
+    const pick = axis.pick(feasible);
+    if (!pick || pick.canonicalVector === best.canonicalVector) continue;   // same as headline
+    if (alternativeCollapses(best, pick)) continue;                          // (c) not genuinely distinct
+    if (!championGrossQualifies(pick, best)) continue;                       // (b) near-top-of-total
+    const trade = championTrade(pick, best);
+    const material = axis.key === 'rate'
+      // -1e-9 tolerance so a delta that lands exactly on the 2pp boundary isn't
+      // lost to IEEE-754 subtraction noise (0.06 - 0.04 = 0.019999…).
+      ? (trade.apyDeltaPp != null && trade.apyDeltaPp >= CHAMPION_RATE_MATERIAL_PP - 1e-9)
+      : (trade.daysSooner != null && trade.daysSooner >= CHAMPION_FASTEST_MATERIAL_DAYS);
+    if (!material) continue;                                                  // (d) material axis margin
+    add(pick, axis.key, axis.label, trade);
   }
   return out;
 }
@@ -1225,7 +1322,11 @@ function optimizePlanner(input = {}) {
     plan = beamSearch(ctx, records, grids, beamCost <= ctx.options.evalCap ? 'beam' : 'coarse-beam');
   }
   plan.candidateCount = records.length;
-  plan.candidateReview = built.review;
+  // Build-time exclusions (commitment-linked / churn-snoozed / needs-date /
+  // no-window) PLUS validator-time exclusions (item 2): candidates that cleared
+  // build but the qualifier rejects at every schedulable date, dropped from the
+  // final plan without a review row otherwise.
+  plan.candidateReview = built.review.concat(captureValidatorExclusions(ctx, records, plan));
   plan.candidates = records.map(r => ({
     id: r.id,
     op: r.op,
@@ -1663,42 +1764,103 @@ function testOptimizerPins() {
     check('churn tie-break: comparator stays a transitive total order (no cycle)', totalOrder);
   }
   {
-    // ── Named champion scenario cards ───────────────────────────────────────
-    // selectChampions picks one plan per objective axis from the feasible pool,
-    // ordered total → rate → fastest, merging axes any single plan wins.
+    // ── CONSTRAINED champion scenario cards (owner redesign 2026-07-09) ──────
+    // The headline "Best total return" plan is always the first champion. A
+    // rate/fastest SECONDARY appears ONLY when it (a) has ≥1 offer, (b) earns
+    // ≥85% of the headline's gross, (c) is genuinely distinct, and (d) beats the
+    // headline on its axis by a material margin (APY ≥ +2pp / capital back ≥ 7d
+    // sooner). Each secondary carries a pure trade delta. All fixtures below are
+    // 1-offer plans (includedIds:[cv]) so gate (a) passes; distinct cv + distinct
+    // includedIds so alternativeCollapses never fires (gate c).
     const champPlan = (cv, gross, apy, cashISO) => ({
       valid: true, canonicalVector: cv, includedIds: [cv],
       capitalCurveSummary: { lowestAvailable: 0 },
       objective: { grossBonus: gross, blendedAnnReturn: apy, latestCompletionISO: cashISO, churnNextEligible: [] }
     });
-    // Distinct winners: biggest gross, highest APY, and earliest cash are 3
-    // separate plans → 3 single-axis champion cards (input order shuffled).
+    // [UPDATED from 09k] Distinct winners: a headline, a materially-higher-rate
+    // plan, and a materially-earlier plan that ALL clear the gross gate → 3
+    // cards (total, rate, fastest). The 09k version used tiny-gross secondaries
+    // ($300 / $500 vs $1000) — exactly the degenerate case the redesign now
+    // rejects — so the fixtures were lifted above the 85% gross floor.
     const pTotal = champPlan('v_total', 1000, 0.04, '2026-12-01');
-    const pRate = champPlan('v_rate', 300, 0.10, '2026-10-01');
-    const pFast = champPlan('v_fast', 500, 0.02, '2026-08-01');
+    const pRate = champPlan('v_rate', 900, 0.10, '2026-11-01');   // gross 900≥850, +6pp APY
+    const pFast = champPlan('v_fast', 880, 0.03, '2026-08-01');   // gross 880≥850, ~122d sooner
     const champs = selectChampions([pRate, pFast, pTotal]);
     const axisOf = k => champs.find(c => c.axes.length === 1 && c.axes[0] === k);
-    check('champions: distinct axis winners identified',
+    check('champions: distinct constrained axis winners identified',
       champs.length === 3
-      && champs[0].plan === pTotal && champs[0].axes[0] === 'total' && champs[0].labels[0] === 'Best total return'
-      && !!axisOf('rate') && axisOf('rate').plan === pRate
-      && !!axisOf('fastest') && axisOf('fastest').plan === pFast,
+      && champs[0].plan === pTotal && champs[0].axes[0] === 'total'
+      && champs[0].labels[0] === 'Best total return' && champs[0].trade === null
+      && !!axisOf('rate') && axisOf('rate').plan === pRate && !!axisOf('rate').trade
+      && !!axisOf('fastest') && axisOf('fastest').plan === pFast && !!axisOf('fastest').trade,
       `${champs.length} champions`);
-    // Merged: one plan wins BOTH total and rate → ONE card, two labels.
-    const pBig = champPlan('v_big', 1000, 0.10, '2026-12-01');
-    const pEarly = champPlan('v_early', 400, 0.03, '2026-08-01');
-    const merged = selectChampions([pBig, pEarly]);
-    check('champions: one plan winning two axes collapses to a single merged card',
+    // [UPDATED from 09k] Merged now applies to the SECONDARY axes only (total is
+    // always its own card). A single qualifying plan that wins BOTH rate and
+    // fastest → ONE card, two secondary labels, one shared trade.
+    const pTop = champPlan('v_top', 1200, 0.03, '2026-12-01');
+    const pBoth = champPlan('v_both', 1100, 0.09, '2026-08-01'); // gross 1100≥1020, +6pp, ~122d sooner
+    const merged = selectChampions([pTop, pBoth]);
+    check('champions: one secondary plan winning two axes collapses to a single merged card',
       merged.length === 2
-      && merged[0].plan === pBig && merged[0].axes.length === 2
-      && merged[0].labels.join(' · ') === 'Best total return · Best rate of return'
-      && merged[1].plan === pEarly && merged[1].axes.length === 1 && merged[1].axes[0] === 'fastest',
+      && merged[0].plan === pTop && merged[0].axes.join(',') === 'total'
+      && merged[1].plan === pBoth && merged[1].axes.length === 2
+      && merged[1].labels.join(' · ') === 'Best rate of return · Fastest capital back'
+      && merged[1].trade && merged[1].trade.apyDeltaPp != null && merged[1].trade.daysSooner != null,
       `${merged.length} cards`);
+    // [KEPT + EXTENDED] No feasible plan → no champions; the 0-offer "do nothing"
+    // plan is never a champion (gate a — the 09l NIT), even alongside real plans
+    // (where it is never the headline).
+    const emptyPlan = { valid: true, canonicalVector: 'empty', includedIds: [], capitalCurveSummary: { lowestAvailable: 0 }, objective: { grossBonus: 0, blendedAnnReturn: null, latestCompletionISO: '', churnNextEligible: [] } };
     check('champions: no feasible plan yields no champions',
       selectChampions([{ valid: false, canonicalVector: 'x', objective: {} }]).length === 0);
-    // Engine wiring + determinism: a real optimize run exposes plan.champions
-    // with the overall winner as the total champion (plan[0]), all champion
-    // plans valid, no vector duplicated, identical across runs.
+    check('champions: lone 0-offer feasible plan is never a champion',
+      selectChampions([emptyPlan]).length === 0);
+    const withEmpty = selectChampions([emptyPlan, champPlan('v_real', 500, 0.05, '2026-09-01')]);
+    check('champions: 0-offer plan excluded when a real plan exists (headline is the real plan)',
+      withEmpty.length === 1 && withEmpty[0].axes[0] === 'total' && withEmpty[0].plan.canonicalVector === 'v_real');
+    // [NEW] Gross-threshold boundary: a rate secondary at EXACTLY 85% of best
+    // gross qualifies; one dollar of gross below it does not. (Equal cash so the
+    // fastest picker resolves to the headline and never confounds the rate test.)
+    const bTot = champPlan('v_bt', 1000, 0.04, '2026-12-01');
+    const rAbove = selectChampions([bTot, champPlan('v_ra', 850, 0.10, '2026-12-01')]);
+    const rBelow = selectChampions([bTot, champPlan('v_rb', 849, 0.10, '2026-12-01')]);
+    check('champions: gross-threshold boundary (≥85% qualifies, below excludes)',
+      rAbove.some(c => c.axes.includes('rate')) && !rBelow.some(c => c.axes.includes('rate')),
+      `above=${rAbove.length} below=${rBelow.length}`);
+    // [NEW] Rate material-margin boundary: +2pp APY qualifies, +1.5pp does not.
+    const mrAbove = selectChampions([champPlan('v_mt', 1000, 0.04, '2026-12-01'), champPlan('v_mr', 900, 0.06, '2026-12-01')]);
+    const mrBelow = selectChampions([champPlan('v_mt2', 1000, 0.04, '2026-12-01'), champPlan('v_mr2', 900, 0.055, '2026-12-01')]);
+    check('champions: rate material-margin boundary (+2pp qualifies, +1.5pp excludes)',
+      mrAbove.some(c => c.axes.includes('rate')) && !mrBelow.some(c => c.axes.includes('rate')),
+      `above=${mrAbove.length} below=${mrBelow.length}`);
+    // [NEW] Fastest material-margin boundary: 7 days sooner qualifies, 6 does not.
+    // (Headline holds the highest APY so the rate picker never confounds this.)
+    const mfAbove = selectChampions([champPlan('v_ft', 1000, 0.10, '2026-12-08'), champPlan('v_ff', 900, 0.03, '2026-12-01')]);
+    const mfBelow = selectChampions([champPlan('v_ft2', 1000, 0.10, '2026-12-08'), champPlan('v_ff2', 900, 0.03, '2026-12-02')]);
+    check('champions: fastest material-margin boundary (7d sooner qualifies, 6d excludes)',
+      mfAbove.some(c => c.axes.includes('fastest')) && !mfBelow.some(c => c.axes.includes('fastest')),
+      `above=${mfAbove.length} below=${mfBelow.length}`);
+    // [NEW] Trade-delta arithmetic: grossDelta = pick − best; apyDeltaPp = pick −
+    // best APY; daysSooner = business/calendar days the pick frees capital earlier.
+    const dTot = champPlan('v_dt', 1000, 0.04, '2026-12-01');
+    const dSec = champPlan('v_ds', 900, 0.13, '2026-10-01');
+    const dChamps = selectChampions([dTot, dSec]);
+    const dEntry = dChamps.find(c => c.plan.canonicalVector === 'v_ds');
+    check('champions: trade-delta arithmetic (gross/apy/days) vs headline',
+      !!dEntry && dEntry.trade.grossDelta === -100
+      && Math.abs(dEntry.trade.apyDeltaPp - 0.09) < 1e-9
+      && dEntry.trade.daysSooner === 61,
+      dEntry ? `Δ$${dEntry.trade.grossDelta} · Δ${dEntry.trade.apyDeltaPp.toFixed(2)}pp · ${dEntry.trade.daysSooner}d` : 'no entry');
+    // [NEW] No-filler: a tiny-gross, high-APY, early-cash plan (the owner's
+    // degenerate "single offer I entered myself" case) clears NO gate → only the
+    // headline card renders. This is the redesign's whole point.
+    const nfChamps = selectChampions([champPlan('v_nt', 1000, 0.05, '2026-12-01'), champPlan('v_ns', 100, 0.90, '2026-07-01')]);
+    check('champions: no-filler — degenerate tiny-gross plan yields only the headline card',
+      nfChamps.length === 1 && nfChamps[0].axes[0] === 'total', `${nfChamps.length} champions`);
+    // [KEPT] Engine wiring: a real optimize run exposes plan.champions with the
+    // overall winner as the total champion (plan[0]), all champion plans valid,
+    // no vector duplicated. A single-offer run yields exactly the headline card
+    // (rate/fastest resolve to the headline → skipped, no label absorption).
     const wa = _pinOffer({ id: 'off_champ', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' });
     const wInput = _pinState({ offers: [wa], candidateIds: ['off_champ'] });
     const wp1 = optimizePlanner(wInput);
@@ -1710,10 +1872,49 @@ function testOptimizerPins() {
       c1.length >= 1
       && c1[0].axes[0] === 'total'
       && c1[0].plan.canonicalVector === wp1.canonicalVector
-      && c1.every(c => c.plan.valid)
+      && c1.every(c => c.plan.valid && (c.plan.includedIds || []).length > 0)
       && new Set(vectors).size === vectors.length,
       `${c1.length} champions`);
+    // [KEPT] Determinism across real runs AND across a shuffled synthetic pool
+    // (constrained selection is order-independent — each axis is a total order).
     check('champions: deterministic across runs', vecKey(c1) === vecKey(wp2.champions || []));
+    check('champions: constrained selection is shuffle-invariant',
+      vecKey(selectChampions([pRate, pFast, pTotal])) === vecKey(selectChampions([pTotal, pFast, pRate])));
+  }
+  {
+    // ── Validator-time exclusion review rows (item 2, R83 gap) ──────────────
+    // A candidate that clears BUILD (has a date grid) but the qualifier rejects
+    // at EVERY schedulable date — while a valid alternative outranks it — now
+    // surfaces a tappable "Not in this plan" review row with the specific reason.
+    // Repro: a DD offer needing 2 DDs with only 1 provided fails dd-window at
+    // every date (count is signup-invariant); a clean held offer outranks it.
+    const ddShort = _pinOffer({
+      id: 'off_dd_short', offerType: 'direct-deposit', signupBonusAmount: 400,
+      daysFundsMustRemain: null, ddRequirement: { mode: 'count', count: 2 },
+      directDeposits: [{ id: 'dd1', plannedDate: '2026-07-13', amount: 5000 }]
+    });
+    const clean = _pinOffer({ id: 'off_clean', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30 });
+    const vplan = optimizePlanner(_pinState({ offers: [ddShort, clean], candidateIds: ['off_dd_short', 'off_clean'] }));
+    const vrow = (vplan.candidateReview || []).find(r => r.offerId === 'off_dd_short');
+    check('review: validator-excluded candidate surfaces a row with its specific reason',
+      vplan.valid && vplan.includedIds.includes('off_clean') && !vplan.includedIds.includes('off_dd_short')
+      && !!vrow && vrow.status === 'excluded' && vrow.reason === 'dd-window',
+      vrow ? vrow.reason : 'no row');
+    // TRUTHFUL: the offer that IS in the final plan never gets a row.
+    check('review: an offer in the final plan gets no validator row',
+      !(vplan.candidateReview || []).some(r => r.offerId === 'off_clean'));
+    // TRUTHFUL: an offer that QUALIFIES (no timing gap) but is dropped for CASH
+    // gets no validator row — it is absent for cash/ranking, not the validator.
+    const big1 = _pinOffer({ id: 'off_big1', signupBonusAmount: 700, requiredFundingAmount: 60000, daysFundsMustRemain: 400, offerExpirationDate: '2026-10-31' });
+    const big2 = _pinOffer({ id: 'off_big2', signupBonusAmount: 400, requiredFundingAmount: 60000, daysFundsMustRemain: 400, offerExpirationDate: '2026-10-31' });
+    const cplan = optimizePlanner(_pinState({
+      offers: [big1, big2], candidateIds: ['off_big1', 'off_big2'],
+      settings: { projectionStartDate: '2026-07-09', minimumCashBuffer: 0, currentLiquidCapital: 100000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } }
+    }));
+    check('review: a cash-dropped but qualifying offer gets no validator row',
+      cplan.valid && cplan.includedIds.includes('off_big1') && !cplan.includedIds.includes('off_big2')
+      && !(cplan.candidateReview || []).some(r => r.offerId === 'off_big2'),
+      JSON.stringify(cplan.includedIds));
   }
 
   const pass = results.filter(r => r.ok).length;

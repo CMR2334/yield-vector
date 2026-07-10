@@ -65,7 +65,15 @@ const OPT_REVIEW_REASON_COPY = {
   'commitment-linked': 'Already tracked as a commitment',
   'churn-snoozed': 'Churn snoozed',
   'missing-churn-anchor': 'Needs a date to re-run',
-  'no-valid-date-window': 'No valid sign-up window'
+  'no-valid-date-window': 'No valid sign-up window',
+  // Validator-time exclusions (item 2): a candidate the qualifier rejects at
+  // every schedulable date while a valid alternative outranks it.
+  'dd-post-late': 'A direct deposit would post after the deadline — initiate it sooner',
+  'dd-window': "Direct-deposit cadence/window can't be met",
+  'deposit-deadline': 'Funding would miss the deposit deadline',
+  'debit-deadline': 'Debit requirement deadline has passed',
+  'requirement-deadline': 'A requirement deadline has passed',
+  'expiry': 'Offer expires before it can start'
 };
 const OPT_PLAN_REASON_COPY = {
   'cash-infeasible': 'Dips below your cash buffer.',
@@ -151,7 +159,7 @@ function renderOptimizerProposal(topPlan) {
   const focusedChampion = champions.find(c => c.plan.canonicalVector === focused.canonicalVector);
 
   return `
-    ${renderOptPlanCard(focused, topPlan, idx, list.length, focusedChampion ? focusedChampion.labels : null)}
+    ${renderOptPlanCard(focused, topPlan, idx, list.length, focusedChampion || null)}
     ${renderOptChampionList(champions, others, championPlans.length, idx)}
     ${reviewNotes}
   `;
@@ -226,21 +234,25 @@ function optReviewName(topPlan, r) {
   return isChurn && src ? `Re-run: ${base}` : base;
 }
 
-function renderOptPlanCard(focused, topPlan, idx, total, championLabels) {
+function renderOptPlanCard(focused, topPlan, idx, total, champion) {
   const cc = focused.capitalCurveSummary || {};
   const obj = focused.objective || {};
   const included = focused.includedIds || [];
+  const championLabels = champion ? champion.labels : null;
   const validBadge = focused.valid
     ? `<span class="opt-valid ok">Feasible</span>`
     : `<span class="opt-valid bad">Not feasible</span>`;
   const rankLabel = championLabels && championLabels.length
     ? `Proposed plan · ${championLabels.map(escapeHtml).join(' · ')}`
     : `Proposed plan${total > 1 ? ` · option ${idx + 1} of ${total}` : ''}`;
+  // A focused SECONDARY champion states its trade delta vs the headline plan.
+  const tradeLine = champion && champion.trade ? formatChampionTrade(champion.trade, champion.axes) : '';
   return `
     <section class="card opt-plan-card ${focused.valid ? '' : 'invalid'}">
       <div class="opt-plan-head">
         <div>
           <div class="combo-rank">${rankLabel}</div>
+          ${tradeLine ? `<div class="opt-plan-trade">${escapeHtml(tradeLine)}</div>` : ''}
           <div class="combo-bonus">${formatCurrency(obj.grossBonus || 0)} <span class="opt-bonus-cap">gross</span></div>
         </div>
         ${validBadge}
@@ -366,10 +378,10 @@ function renderOptBindingHints(focused, topPlan) {
 function renderOptChampionList(champions, others, championCount, idx) {
   if (!champions.length && !others.length) return '';
   const champCards = champions.map((c, i) =>
-    renderOptScenarioCard(c.plan, i, i === idx, c.labels)).join('');
+    renderOptScenarioCard(c.plan, i, i === idx, c.labels, c.trade, c.axes)).join('');
   const otherCards = others.map((p, j) => {
     const li = championCount + j;
-    return renderOptScenarioCard(p, li, li === idx, null);
+    return renderOptScenarioCard(p, li, li === idx, null, null, null);
   }).join('');
   // Header on the remainder is truthful: "feasible" only when champions (all
   // feasible) head the list; otherwise it is the old best-effort "Other options".
@@ -382,10 +394,33 @@ function renderOptChampionList(champions, others, championCount, idx) {
     </div>`;
 }
 
+// Format a secondary champion's PURE trade delta (from the engine) into an
+// explicit "what you give up vs the headline" line. Axis-relevant clauses first
+// (rate → APY gain; fastest → days sooner), then the gross cost, e.g.
+// "+9.2% APY · -$450 vs best" or "capital back 34 days sooner · -$450 vs best".
+// Full comma dollars per the owner formatting rule (never compact K).
+function formatChampionTrade(trade, axes) {
+  if (!trade) return '';
+  const has = k => Array.isArray(axes) && axes.indexOf(k) !== -1;
+  const parts = [];
+  if (has('rate') && trade.apyDeltaPp != null) {
+    parts.push(`+${formatPercent(trade.apyDeltaPp)} APY`);
+  }
+  if (has('fastest') && trade.daysSooner != null) {
+    parts.push(`capital back ${trade.daysSooner} day${trade.daysSooner === 1 ? '' : 's'} sooner`);
+  }
+  const g = trade.grossDelta;
+  if (g < 0) parts.push(`-${formatCurrency(Math.abs(g))} vs best`);
+  else if (g > 0) parts.push(`+${formatCurrency(g)} vs best`);
+  else parts.push('same gross as best');
+  return parts.join(' · ');
+}
+
 // One comparison-row scenario card (gross · offers · low cash · APY · capital
 // back). When labels are present it renders as a champion: the axis label(s)
-// sit in a full-width badge above the metrics row.
-function renderOptScenarioCard(p, listIdx, active, labels) {
+// sit in a full-width badge above the metrics row, and a secondary champion's
+// trade delta (from the engine) sits just below it.
+function renderOptScenarioCard(p, listIdx, active, labels, trade, axes) {
   const n = (p.includedIds || []).length;
   const cc = p.capitalCurveSummary || {};
   const obj = p.objective || {};
@@ -395,9 +430,11 @@ function renderOptScenarioCard(p, listIdx, active, labels) {
   const badge = isChampion
     ? `<span class="opt-alt-badge">${labels.map(escapeHtml).join(' · ')}</span>`
     : '';
+  const tradeLine = formatChampionTrade(trade, axes);
   return `
     <button class="opt-alt${isChampion ? ' champion' : ''}${active ? ' active' : ''}${p.valid ? '' : ' infeasible'}" data-action="select-optimizer-alt" data-alt-index="${listIdx}">
       ${badge}
+      ${tradeLine ? `<span class="opt-alt-trade">${escapeHtml(tradeLine)}</span>` : ''}
       <span class="opt-alt-cell opt-alt-bonus">
         <span class="opt-alt-val">${formatCurrency(obj.grossBonus || 0)}</span>
         <span class="opt-alt-lbl">gross${p.valid ? '' : ' · infeasible'}</span>

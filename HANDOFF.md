@@ -17,7 +17,69 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 83)
+## Current state (as of 2026-07-09, Round 84)
+
+- **R84 (v2026.07.09m — owner-directed: CONSTRAINED CHAMPION CARDS + validator-excluded review rows + 2 riders):**
+  Owner on seeing 09k live: *"I don't think I like the 3 scenario focus… I didn't create this tool to run an
+  optimization pass to return a single offer that I entered/identified myself."* The unconstrained 09k axis
+  champions degenerated to trivial single-offer answers. **ITEM 1 — constrained champions (`js/optimizer-engine.js`,
+  `selectChampions` rewritten, PURE):** the headline "Best total return" plan is always the first champion (and
+  the default plan, unchanged). A **secondary** champion (rate/fastest) now renders ONLY when it clears every gate:
+  (a) **≥1 offer** — the 0-offer do-nothing plan is NEVER champion-eligible (also fixes the 09l NIT that a lone
+  empty plan could surface as a champion); (b) **gross ≥ `CHAMPION_GROSS_THRESHOLD` (0.85) × best gross** — must
+  compete near the top of total return; (c) **genuinely distinct** (post-09i `alternativeCollapses` + distinct
+  canonicalVector); (d) **material axis margin** — rate: blended APY better by ≥ `CHAMPION_RATE_MATERIAL_PP`
+  (0.02 = **2 percentage points**); fastest: final capital-release ≥ `CHAMPION_FASTEST_MATERIAL_DAYS` (**7 days**)
+  earlier. No qualifying plan for an axis → **no card** (owner's no-filler rule). Merged behavior now applies to the
+  SECONDARY axes only (total is always its own card): a single qualifying plan winning BOTH rate+fastest → one card,
+  both labels. Each secondary carries a PURE `trade = { grossDelta, apyDeltaPp, daysSooner }` (new `championTrade`);
+  render (`js/render-main-views.js`, new `formatChampionTrade`) shows it as an explicit trade line on the scenario
+  card AND the proposal pane — e.g. **"+9.2% APY · capital back 159 days sooner · -$150 vs best"** (full comma
+  dollars, owner rule; new `.opt-alt-trade` / `.opt-plan-trade` CSS in `index.html`). APY material gate carries a
+  `-1e-9` FP tolerance so a delta landing exactly on 2pp isn't lost to IEEE-754 subtraction noise. **ITEM 2 —
+  validator-excluded review rows (`js/optimizer-engine.js`, new PURE `captureValidatorExclusions` wired into
+  `optimizePlanner`):** a candidate that clears BUILD (has a date grid) but the qualifier rejects at EVERY
+  schedulable date — while a valid alternative outranks it — now gets a tappable "Not in this plan" row with the
+  specific reason (dd-post-late / dd-window / deposit/debit/requirement-deadline / expiry; new copy in
+  `OPT_REVIEW_REASON_COPY`, `js/render-main-views.js`). TRUTHFUL by construction: an offer IN the final plan gets no
+  row; an offer that qualifies at ANY grid date (absent only for cash/ranking) gets no row — only genuine
+  every-date validator drops surface. The existing 09j tap-through + "Save & run" flow works unchanged (rows carry
+  a resolvable source offerId). `completeness`/`schedule-before-today` are excluded (drafts are surfaced by the
+  Offers needs-info chip, not this timing review). **ITEM 3 — riders:** removed the unused
+  `directDepositEffectiveDate` import in `js/reminders.js` (09l NIT); removed the unreachable legacy
+  `case 'timeline'` route in `js/render-shell-overview.js` after re-verifying by grep (`App.view` defaults to
+  `'overview'`, never hydrated from storage nor set to `'timeline'`; `goto-timeline` routes via
+  `App.setView('planner')` + `_planSegment='timeline'`) — dropped the now-orphaned `renderTimeline` import from the
+  shell (still used inside render-main-views.js). Both `docs/BACKLOG.md` entries moved to Recently-resolved.
+  **Champion pins UPDATED (per-pin, sanctioned):** *distinct axis winners* — 09k used tiny-gross secondaries
+  ($300/$500 vs $1000), exactly the degenerate case now rejected → lifted secondaries above the 85% floor with
+  material APY/day margins (3 cards). *Merged card* — 09k merged total+rate on one plan; merge now applies to
+  secondaries only → fixture is one plan winning rate+fastest → one merged card (two labels, one trade). *No
+  feasible → no champions* KEPT + extended (lone 0-offer plan never a champion; 0-offer excluded alongside a real
+  plan). *Engine-wires-winner-as-total* KEPT (single-offer run now yields exactly the headline card — secondaries
+  that resolve to the headline are skipped, no label absorption). *Deterministic across runs* KEPT + a shuffle-
+  invariance assert. **Pins ADDED:** gross-threshold boundary (≥85% qualifies / below excludes), rate
+  material-margin boundary (+2pp / +1.5pp), fastest material-margin boundary (7d / 6d), trade-delta arithmetic
+  (gross/apy/days), no-filler (degenerate tiny-gross plan → only headline), + 3 review-row pins (validator drop
+  surfaces its reason; included offer gets no row; cash-dropped-but-qualifying offer gets no row). **Optimizer
+  39 → 50** (all green; champion pins 5 → 11, +3 review). **Full battery green:** node --check all 19 modules +
+  inline entry module + sw.js; **fidelity 67/67**, parser **20/20**, p2b PASS, dd-matrix ALL PASS, **feasibility
+  5/5**, **optimizer 50/50** (~3.08s). **APP_VERSION → 2026.07.09m** (runtime-status.js + sw.js + 19 import-map
+  `?v=`; sw precache derives `yv-precache-2026.07.09m`; **0 strays** of 09l; 1 historical `09h` comment only).
+  **Preview E2E** (port 8765, ISOLATED headless preview — owner's real localStorage present: **treated strictly
+  read-only, App.save() NEVER called, 8 offers verified unchanged, transient `App.optimizerPlan` injected + restored
+  from snapshot**): drove the REAL render pipeline — headline "Best total return" (no trade line); a merged secondary
+  badged "Best rate of return · Fastest capital back" rendering **"+9.2% APY · capital back 159 days sooner · -$150
+  vs best"** on both the scenario card and (when focused) the proposal pane; a **no-qualifying-secondary** state
+  showing exactly **1 champion card, no filler**; a validator-excluded **tappable** review row reading
+  "Direct-deposit cadence/window can't be met" whose tap flipped `_optimizerEditReturn` and opened the modal with
+  the **"Save & run"** primary button (cancelled without saving); **380px zero horizontal overflow**; **zero
+  console errors/warnings**. **REVIEW-AFTER:** _pending — see below._ Owner-owned dirty paths
+  (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path
+  `git add` only. **Remaining (owner gate): device-check v2026.07.09m.** **Open:** cash-only exclusions (offers
+  that qualify but lose on cash/ranking) remain unsurfaced in the review — by design (ITEM 2 scope is validator
+  drops; surfacing a single "reason" for a cash-drop would be less truthful).
+
 
 - **R83 (v2026.07.09l — CORRECTNESS FIX: close the DD posting-date qualification gaps from the 2026-07-09 Codex deadline audit):**
   The engine's DD qualification compared `directDepositEffectiveDate` (weekend/holiday shift ONLY) against literal

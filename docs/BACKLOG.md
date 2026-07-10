@@ -6,6 +6,17 @@ chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
 ## Recently resolved
+- **Unreachable legacy `case 'timeline'` route** — shipped v2026.07.09m (R84):
+  removed from `renderActiveView` (js/render-shell-overview.js) after re-verifying
+  unreachability by grep — `App.view` defaults to `'overview'` and is never
+  hydrated from storage nor set to `'timeline'` (nav offers only overview/planner/
+  offers/settings; `goto-timeline` routes via `App.setView('planner')` + the
+  `_planSegment='timeline'` segment). The now-orphaned `renderTimeline` import was
+  dropped from the shell (still defined + used inside render-main-views.js's Plan
+  segment).
+- **Unused `directDepositEffectiveDate` import in `reminders.js`** — shipped
+  v2026.07.09m (R84): removed (kept `ddWindowEndDate`). Pre-existing 09l reviewer
+  NIT; the symbol had no reference in the module.
 - **DD posting-date qualification gaps** — shipped v2026.07.09l (R83): DD qualification
   now compares the ACH **post** date (`ddRoundTrip(dd,cfg).post` = initiate + inDays
   business days, using the engine's threaded cfg) against literal cutoffs — closing all
@@ -61,9 +72,6 @@ Priorities are owner-directed — nothing here self-dispatches.
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.
 
 ## Cleanup (fold into the next app-touching batch)
-- **Unreachable legacy `case 'timeline'` route** — `renderActiveView`
-  (js/render-shell-overview.js:180); `goto-timeline` now routes via
-  `App.setView('planner')` + segment. Pre-existing; re-verify then remove.
 - **`localRequirementDeadlineISO` → `requirementDeadlineISO` consolidation**
   [low] — engine re-implements the formula (optimizer-engine.js:92 vs
   requirements-templates.js:90); formula-faithful today, consolidate on next touch.

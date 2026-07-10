@@ -5,7 +5,7 @@ import { offerColorHex } from './migrations-catalogs.js';
 import { CHURN_HORIZON_DAYS, churnEligibleDate, churnSnoozeActive, offerIsActiveForProjection } from './offer-model.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { computeUpcomingActions, renderActionRow } from './reminders.js';
-import { renderChartsAfterMount, renderOffers, renderPlanner, renderSettings, renderTimeline } from './render-main-views.js';
+import { renderChartsAfterMount, renderOffers, renderPlanner, renderSettings } from './render-main-views.js';
 import { offerDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, ErrCode, logError, normalizeOfferStatus } from './runtime-status.js';
 import { renderSyncIndicator } from './sync-pwa.js';
@@ -177,7 +177,6 @@ function renderActiveView() {
   switch (App.view) {
     case 'overview': return renderOverview();
     case 'planner': return renderPlanner();
-    case 'timeline': return renderTimeline();
     case 'offers': return renderOffers();
     case 'settings': return renderSettings();
     default: return renderOverview();
