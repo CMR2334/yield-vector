@@ -162,6 +162,29 @@ function optimizerOfferName(topPlan, offerId) {
   return op === 'create' ? `Re-run: ${base}` : base;
 }
 
+// Resolve a candidate-review row's offerId to a display name. A review row can
+// carry EITHER a real source id (commitment-linked / churn-snoozed / needs-date)
+// OR the synthetic churn_<sourceId> id of a candidate whose date window was
+// empty. Never print the raw synthetic id: strip/resolve to the source offer's
+// "bank · name" and keep the churn/re-run context explicit.
+function optReviewName(topPlan, r) {
+  const offerId = r.offerId;
+  const isChurnReason = r.reason === 'churn-snoozed' || r.reason === 'missing-churn-anchor';
+  const cand = (topPlan.candidates || []).find(c => c.id === offerId);
+  let srcId = offerId;
+  let isChurn = isChurnReason;
+  if (cand) {
+    srcId = cand.sourceOfferId || offerId;
+    isChurn = isChurn || cand.op === 'create';
+  } else if (String(offerId || '').startsWith('churn_')) {
+    srcId = String(offerId).slice('churn_'.length);
+    isChurn = true;
+  }
+  const src = (App.state.offers || []).find(o => o.id === srcId);
+  const base = src ? (offerDisplayLabel(src, { separator: ' · ' }) || src.bankName || srcId) : (isChurn ? 'Re-run offer' : (srcId || 'offer'));
+  return isChurn && src ? `Re-run: ${base}` : base;
+}
+
 function renderOptPlanCard(focused, topPlan, idx, total) {
   const cc = focused.capitalCurveSummary || {};
   const obj = focused.objective || {};
@@ -179,12 +202,24 @@ function renderOptPlanCard(focused, topPlan, idx, total) {
         ${validBadge}
       </div>
       <div class="combo-meta">
-        <span><strong>${formatCurrency(cc.lowestAvailable)}</strong> low cash${cc.lowestDateISO ? ' · ' + formatDateMedium(parseDate(cc.lowestDateISO)) : ''}</span>
-        ${obj.blendedAnnReturn != null ? `<span><strong>${formatPercent(obj.blendedAnnReturn)}</strong> blended APY</span>` : ''}
-        ${cc.belowBufferDays > 0 ? `<span style="color:#b45309;">${cc.belowBufferDays}d below buffer</span>` : ''}
-        ${cc.shortfallDays > 0 ? `<span style="color:var(--danger);">${cc.shortfallDays}d shortfall</span>` : ''}
-        <span>${cc.horizonDays}d horizon</span>
-        ${obj.latestCompletionISO ? `<span>done ${formatDateMedium(parseDate(obj.latestCompletionISO))}</span>` : ''}
+        <span class="opt-metric">
+          <span class="opt-metric-val">${formatCurrency(cc.lowestAvailable)}</span>
+          <span class="opt-metric-lbl">low cash${cc.lowestDateISO ? ' · ' + formatDateMedium(parseDate(cc.lowestDateISO)) : ''}</span>
+        </span>
+        ${obj.blendedAnnReturn != null ? `<span class="opt-metric">
+          <span class="opt-metric-val">${formatPercent(obj.blendedAnnReturn)}</span>
+          <span class="opt-metric-lbl">blended APY</span>
+        </span>` : ''}
+        ${obj.latestCompletionISO ? `<span class="opt-metric">
+          <span class="opt-metric-val">${formatDateMedium(parseDate(obj.latestCompletionISO))}</span>
+          <span class="opt-metric-lbl">capital back</span>
+        </span>` : ''}
+        <span class="opt-metric">
+          <span class="opt-metric-val">${cc.horizonDays}d</span>
+          <span class="opt-metric-lbl">horizon</span>
+        </span>
+        ${cc.belowBufferDays > 0 ? `<span class="opt-meta-warn">${cc.belowBufferDays}d below buffer</span>` : ''}
+        ${cc.shortfallDays > 0 ? `<span class="opt-meta-danger">${cc.shortfallDays}d shortfall</span>` : ''}
       </div>
       ${!focused.valid && (focused.reasons || []).length ? `<div class="opt-invalid-note">${focused.reasons.map(r => OPT_PLAN_REASON_COPY[r] || r).join(' ')}</div>` : ''}
       <div class="opt-sequence">
@@ -289,10 +324,31 @@ function renderOptAltList(plans, idx) {
         ${plans.map((p, i) => {
           const n = (p.includedIds || []).length;
           const cc = p.capitalCurveSummary || {};
+          const obj = p.objective || {};
+          const apy = obj.blendedAnnReturn != null ? formatPercent(obj.blendedAnnReturn) : '—';
+          const back = obj.latestCompletionISO ? formatDateMedium(parseDate(obj.latestCompletionISO)) : '—';
           return `
-          <button class="opt-alt ${i === idx ? 'active' : ''}" data-action="select-optimizer-alt" data-alt-index="${i}">
-            <span class="opt-alt-bonus">${formatCurrency((p.objective || {}).grossBonus || 0)}</span>
-            <span class="opt-alt-meta">${n} offer${n === 1 ? '' : 's'} · ${formatCompactCurrency(cc.lowestAvailable || 0)} low${p.valid ? '' : ' · infeasible'}</span>
+          <button class="opt-alt ${i === idx ? 'active' : ''}${p.valid ? '' : ' infeasible'}" data-action="select-optimizer-alt" data-alt-index="${i}">
+            <span class="opt-alt-cell opt-alt-bonus">
+              <span class="opt-alt-val">${formatCurrency(obj.grossBonus || 0)}</span>
+              <span class="opt-alt-lbl">gross${p.valid ? '' : ' · infeasible'}</span>
+            </span>
+            <span class="opt-alt-cell">
+              <span class="opt-alt-val">${n}</span>
+              <span class="opt-alt-lbl">offer${n === 1 ? '' : 's'}</span>
+            </span>
+            <span class="opt-alt-cell">
+              <span class="opt-alt-val">${formatCurrency(cc.lowestAvailable || 0)}</span>
+              <span class="opt-alt-lbl">low cash</span>
+            </span>
+            <span class="opt-alt-cell">
+              <span class="opt-alt-val">${apy}</span>
+              <span class="opt-alt-lbl">blended APY</span>
+            </span>
+            <span class="opt-alt-cell">
+              <span class="opt-alt-val">${back}</span>
+              <span class="opt-alt-lbl">capital back</span>
+            </span>
           </button>`;
         }).join('')}
       </div>
@@ -307,8 +363,7 @@ function renderOptCandidateReview(review, topPlan) {
       <div class="card-header"><h2 style="font-size:15px;">Not in this plan</h2></div>
       <div class="opt-review-list">
         ${items.map(r => {
-          const src = (App.state.offers || []).find(o => o.id === r.offerId);
-          const name = src ? (offerDisplayLabel(src, { separator: ' · ' }) || src.bankName || r.offerId) : r.offerId;
+          const name = optReviewName(topPlan, r);
           const reason = OPT_REVIEW_REASON_COPY[r.reason] || r.reason;
           const cls = r.status === 'needs-date' ? 'needs-date' : 'excluded';
           return `<div class="opt-review-row ${cls}"><span class="opt-review-name">${escapeHtml(name)}</span><span class="opt-review-reason">${escapeHtml(reason)}</span></div>`;

@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09h",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09h",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09h",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09h",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09h",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09h",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09h",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.09h",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09h",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09h",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09h",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09h",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.09h",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09h",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09h",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09h",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09h",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09h",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09h"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.09i",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.09i",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.09i",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.09i",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.09i",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.09i",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.09i",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.09i",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.09i",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.09i",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.09i",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.09i",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.09i",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.09i",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.09i",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.09i",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.09i",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.09i",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.09i"
   }
 }
 </script>
@@ -2523,8 +2523,12 @@ table.data-table {
 /* Shared with the Optimize plan card's head/meta (renderOptimizeSegment). */
 .combo-rank { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.02em; }
 .combo-bonus { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--success); }
-.combo-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--space-3); display: flex; flex-wrap: wrap; gap: 12px; }
-.combo-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.combo-meta { margin-bottom: var(--space-3); display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: baseline; }
+.opt-metric { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opt-metric-val { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; font-feature-settings: 'tnum' 1; white-space: nowrap; }
+.opt-metric-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-tertiary); white-space: nowrap; }
+.opt-meta-warn { align-self: center; font-size: 12px; font-weight: 600; color: #b45309; }
+.opt-meta-danger { align-self: center; font-size: 12px; font-weight: 600; color: var(--danger); }
 
 /* ============================================================
    OPTIMIZE SEGMENT — engine proposal (Plan tab › Optimize)
@@ -2559,12 +2563,15 @@ table.data-table {
 .opt-empty-seq { font-size: 13px; color: var(--text-secondary); padding: var(--space-3); background: var(--bg); border-radius: var(--radius-md); }
 .opt-alts { margin-bottom: var(--space-4); }
 .opt-alts-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-tertiary); margin-bottom: var(--space-2); }
-.opt-alts-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.opt-alt { display: flex; flex-direction: column; gap: 2px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); cursor: pointer; font-family: inherit; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }
+.opt-alts-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.opt-alt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; width: 100%; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); cursor: pointer; font-family: inherit; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }
 .opt-alt:hover { border-color: var(--accent-mid); }
 .opt-alt.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.opt-alt-bonus { font-size: 15px; font-weight: 700; color: var(--success); }
-.opt-alt-meta { font-size: 11px; color: var(--text-tertiary); }
+.opt-alt.infeasible { opacity: 0.72; }
+.opt-alt-cell { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opt-alt-val { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; font-feature-settings: 'tnum' 1; white-space: nowrap; }
+.opt-alt-bonus .opt-alt-val { font-size: 15px; color: var(--success); }
+.opt-alt-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-tertiary); white-space: nowrap; }
 .opt-review { margin-bottom: var(--space-4); }
 .opt-review-list { display: flex; flex-direction: column; gap: 4px; }
 .opt-review-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); font-size: 13px; padding: 6px 10px; background: var(--bg); border-radius: 6px; }

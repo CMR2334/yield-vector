@@ -22,6 +22,15 @@ const HORIZON_CEILING_DAYS = 730;
 const DEFAULT_WINDOW_DAYS = 180;
 const ANN_EPSILON = 1e-9;
 
+// Alternatives de-duplication thresholds. Two alternative plans are treated as
+// the SAME scenario (one is folded into the earlier / better-ranked one) only
+// when they share an offer set AND differ immaterially: low cash within this
+// dollar noise band, completion within this many calendar days, and every
+// per-offer date within this many business days. See rankAlternatives.
+const ALT_LOW_CASH_NOISE = 500;
+const ALT_COMPLETION_NOISE_DAYS = 5;
+const ALT_NEAR_BIZ_DAYS = 3;
+
 const TEMPLATE_TERMS_KEYS = [
   'bankName', 'offerName', 'offerType',
   'signupBonusAmount', 'offerExpirationDate',
@@ -786,12 +795,115 @@ function assignmentKey(assignment) {
   return JSON.stringify(Object.keys(assignment).sort(byteCompare).map(id => [id, assignment[id]]));
 }
 
+// Are two ISO dates within n business days of each other? Blank matches blank; a
+// blank-vs-dated pair is a material difference (one plan schedules a date the
+// other omits). Drives the "immaterial schedule difference" test below.
+function withinBizDays(isoA, isoB, n) {
+  const a = isoA || '';
+  const b = isoB || '';
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const da = parseDate(a);
+  const db = parseDate(b);
+  if (!da || !db) return false;
+  const lo = da <= db ? da : db;
+  const hi = da <= db ? db : da;
+  const bound = addBusinessDays(lo, n);
+  return bound ? bound.getTime() >= hi.getTime() : false;
+}
+
+// Every per-offer signup / funding / DD date across two schedules within n
+// business days. Called only when the two plans already share an offer set, so
+// the id keys match; a missing counterpart schedule is a material difference.
+function schedulesNearIdentical(schedA, schedB, n) {
+  const a = schedA || {};
+  const b = schedB || {};
+  for (const id of Object.keys(a)) {
+    const sa = a[id] || {};
+    const sb = b[id];
+    if (!sb) return false;
+    if (!withinBizDays(sa.plannedSignupDate, sb.plannedSignupDate, n)) return false;
+    if (!withinBizDays(sa.optionalPlannedFundingDate, sb.optionalPlannedFundingDate, n)) return false;
+    const bDd = {};
+    for (const dd of (sb.directDeposits || [])) bDd[dd.id || ''] = dd.plannedDate || '';
+    for (const dd of (sa.directDeposits || [])) {
+      if (!withinBizDays(dd.plannedDate, bDd[dd.id || ''], n)) return false;
+    }
+  }
+  return true;
+}
+
+// Does plan `b` collapse into the already-kept representative `a`? True only for
+// an exact vector match OR the SAME offer set with materially identical outcomes
+// (same gross, low cash within noise, completion within a few days, same
+// feasibility) AND per-offer schedules within a few business days. Because the
+// caller only ever passes an `a` that is better-ranked than `b` (comparePlans
+// order, which tie-breaks on earlier cash release), the surviving representative
+// is always the earliest one — matching the owner's "return it sooner" reasoning.
+function alternativeCollapses(a, b) {
+  if (!a || !b || a === b) return false;
+  if (a.canonicalVector === b.canonicalVector) return true;
+  if (!!a.valid !== !!b.valid) return false;
+  if ((a.includedIds || []).join(',') !== (b.includedIds || []).join(',')) return false;
+  const ao = a.objective || {};
+  const bo = b.objective || {};
+  if (Math.round(ao.grossBonus || 0) !== Math.round(bo.grossBonus || 0)) return false;
+  const ac = a.capitalCurveSummary || {};
+  const bc = b.capitalCurveSummary || {};
+  if (Math.abs((ac.lowestAvailable || 0) - (bc.lowestAvailable || 0)) > ALT_LOW_CASH_NOISE) return false;
+  const acomp = ao.latestCompletionISO || '';
+  const bcomp = bo.latestCompletionISO || '';
+  if (!!acomp !== !!bcomp) return false;
+  if (acomp && bcomp) {
+    const da = parseDate(acomp);
+    const db = parseDate(bcomp);
+    if (da && db && Math.abs(daysBetween(da, db)) > ALT_COMPLETION_NOISE_DAYS) return false;
+  }
+  return schedulesNearIdentical(a.schedule, b.schedule, ALT_NEAR_BIZ_DAYS);
+}
+
+// Build the proposal's alternatives list: only GENUINELY DISTINCT scenarios, no
+// filler echoes of the winner. Three stages, all deterministic:
+//   1. Sort best-first (comparePlans is a total order that already prefers the
+//      earlier cash-release plan on a tie), so the first plan of any near-tie
+//      group is the earliest representative.
+//   2. Collapse exact duplicates AND same-set immaterial-schedule near-ties into
+//      that representative (alternativeCollapses).
+//   3. Re-rank the survivors to prefer a DIFFERENT offer composition first, then
+//      materially different schedules of an already-shown set. The winner stays
+//      at index 0.
 function rankAlternatives(plans, limit) {
-  const seen = new Set();
+  const sorted = plans.slice().sort(comparePlans);
+  // Collect distinct survivors, bounded so the beam's dense pool (n×W×G_eff plans)
+  // never turns the O(survivors) collapse scan quadratic: cap total survivors and
+  // cap variants kept per offer-composition. A composition that has already hit
+  // its cap short-circuits before the expensive schedule comparison, so the
+  // dominant winner-composition's thousands of near-schedules cost O(1) each while
+  // genuinely different compositions keep getting collected.
+  const perSetCap = Math.max(limit, 4);
+  const totalCap = Math.max(limit * 8, 48);
+  const survivors = [];
+  const perSet = new Map();
+  for (const p of sorted) {
+    if (survivors.length >= totalCap) break;
+    const key = (p.includedIds || []).join(',');
+    const kept = perSet.get(key) || 0;
+    if (kept >= perSetCap) continue;
+    if (survivors.some(s => alternativeCollapses(s, p))) continue;
+    survivors.push(p);
+    perSet.set(key, kept + 1);
+  }
   const out = [];
-  for (const p of plans.slice().sort(comparePlans)) {
-    if (seen.has(p.canonicalVector)) continue;
-    seen.add(p.canonicalVector);
+  const usedSets = new Set();
+  for (const p of survivors) {
+    const key = (p.includedIds || []).join(',');
+    if (usedSets.has(key)) continue;
+    usedSets.add(key);
+    out.push(p);
+    if (out.length >= limit) return out;
+  }
+  for (const p of survivors) {
+    if (out.indexOf(p) !== -1) continue;
     out.push(p);
     if (out.length >= limit) break;
   }
@@ -1240,6 +1352,40 @@ function testOptimizerPins() {
       options: { includeChurn: false, defaultWindowDays: 90 }
     }));
     check('beam path deterministic', plan.canonicalVector === again.canonicalVector);
+  }
+  {
+    // Alternatives diversity: a single held offer with plenty of liquid and a
+    // wide expiry window produces a dense cluster of near-identical schedules
+    // (same set, same gross/low-cash, sign-up dates a business day or two apart).
+    // These must collapse to ONE representative rather than filling the list
+    // with echoes, and the surviving list must be deterministic + earliest-first.
+    const a = _pinOffer({
+      id: 'off_near', signupBonusAmount: 500, requiredFundingAmount: 10000,
+      daysFundsMustRemain: 30, offerExpirationDate: '2026-09-30'
+    });
+    const near = _pinState({
+      settings: { projectionStartDate: '2026-07-09', minimumCashBuffer: 0, currentLiquidCapital: 100000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
+      offers: [a], candidateIds: ['off_near']
+    });
+    const pA = optimizePlanner(near);
+    const pB = optimizePlanner(near);
+    const alts = pA.alternatives || [];
+    let anyNearDup = false;
+    for (let i = 0; i < alts.length; i++) {
+      for (let j = i + 1; j < alts.length; j++) {
+        if (alternativeCollapses(alts[i], alts[j]) || alternativeCollapses(alts[j], alts[i])) anyNearDup = true;
+      }
+    }
+    check('same-set near-date variants collapse to one representative', alts.length >= 1 && !anyNearDup, `${alts.length} alts`);
+    const vA = alts.map(x => x.canonicalVector).join('|');
+    const vB = (pB.alternatives || []).map(x => x.canonicalVector).join('|');
+    check('alternatives list is deterministic', vA === vB);
+    const top = alts[0] || {};
+    const topSet = ((top.includedIds) || []).join(',');
+    const earliest = alts
+      .filter(x => ((x.includedIds) || []).join(',') === topSet)
+      .every(x => ((top.objective || {}).latestCompletionISO || '') <= ((x.objective || {}).latestCompletionISO || '9999-12-31'));
+    check('collapsed representative is the earliest cash-release variant', earliest);
   }
 
   const pass = results.filter(r => r.ok).length;
