@@ -336,6 +336,17 @@ function optimizerHorizonForState(state, horizonStart) {
   return Math.max(30, base, Math.min(OPTIMIZER_HORIZON_CEILING_DAYS, needed));
 }
 
+// ⚠️ CASH-FEASIBILITY ONLY — NOT a qualification engine. ⚠️
+// runOptimizer scores brute-force offer combinations purely on cash feasibility
+// (shortfallDays / belowBufferDays over the capital curve). It has NO
+// qualification layer: it does NOT validate deposit deadlines, DD posting dates
+// (ACH transit), user-requirement/expiry cutoffs, DD cadence, or horizon
+// overrun. A combination it marks `feasible: true` may still MISS a deadline and
+// fail to qualify in reality. It is unused by the UI (the live Optimize panel
+// runs the qualification-aware `optimizePlanner` in optimizer-engine.js) and is
+// kept ONLY for the C2/C3 combo-feasibility pins (testFeasibilityPins). DO NOT
+// wire this to any UI surface as a plan validator — use optimizePlanner, which
+// runs validateOfferQualification, instead.
 function runOptimizer(state) {
   const horizonStart = parseDate(state.settings.projectionStartDate) || TODAY;
   const optimizerHorizonDays = optimizerHorizonForState(state, horizonStart);

@@ -6,6 +6,23 @@ chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
 ## Recently resolved
+- **DD posting-date qualification gaps** — shipped v2026.07.09l (R83): DD qualification
+  now compares the ACH **post** date (`ddRoundTrip(dd,cfg).post` = initiate + inDays
+  business days, using the engine's threaded cfg) against literal cutoffs — closing all
+  four audited gaps. (1) count-mode cutoff, (2) frequency-mode bucket/window, and
+  (3) the frequency-mode user/expiry cutoffs (built but never enforced) all use post-date
+  semantics; a post-after-cutoff emits a distinct `dd-post-late` binding constraint
+  ("a direct deposit would post after the deadline — initiate it sooner"). (4)
+  `dd-core.js ddWindowEndDate` count mode → max post date (gained an optional `cfg` param
+  defaulting to the live provider like `ddRoundTrip`); this DELIBERATELY moves the feed's
+  "all DDs complete by" reminder later by the ACH in-days for count-mode DD offers (more
+  truthful — matches its own "must have posted" copy). Frequency-mode window formula
+  unchanged. Legacy `runOptimizer` (projection-optimizer.js) got a prominent
+  cash-feasibility-ONLY guard comment. Enhancement (per-DD earlier-nudge local repair)
+  DEFERRED — needs per-DD date freedom through the signup-keyed assignment + apply
+  materialization, not a clean drop-in. Pins: optimizer 35→39 (MLK repro + control +
+  frequency user-cutoff + post-window; no existing pin asserted the buggy semantics, so
+  none were updated). Context: R83 / Codex read-only deadline audit 2026-07-09.
 - **Inert "Optimizer max candidates" Settings input** — shipped v2026.07.09j:
   owner chose DELETE. Removed the user-facing knob — the Settings number input +
   hint (`render-main-views.js`), its 1–20 change-handler clamp
@@ -29,27 +46,6 @@ Priorities are owner-directed — nothing here self-dispatches.
 - **`.card-soft` dead CSS rule** — removed in optimizer step 3 rider after owner
   approval. Only the unused class rule was deleted; the `--card-soft` color
   variable and all live uses remain.
-
-## Bugs — QUEUED FIX (v2026.07.09l candidate, dispatch after the champions batch lands)
-- **DD posting-date qualification gaps** (Codex read-only audit 2026-07-09, owner-prompted;
-  full table in the audit log — key rows preserved here). The engine's DD qualification
-  compares `directDepositEffectiveDate` (weekend/holiday shift ONLY) against literal
-  cutoffs, ignoring ACH transit (`ddRoundTrip(dd,cfg).post` = initiate + inDays business
-  days). CONFIRMED by live probe: DD planned Fri 2026-01-16, user deadline Mon 2026-01-19
-  (MLK) → plan returns valid:true while the modeled post is Tue 2026-01-20. Four gaps:
-  (1) count-mode cutoff check, optimizer-engine.js:507 — use ACH post date;
-  (2) frequency-mode bucket/window check, :490 — same;
-  (3) frequency mode builds but NEVER APPLIES user/expiry cutoffs, :482;
-  (4) dd-core.js ddWindowEndDate count mode uses effective not post — DECISION NEEDED:
-  fixing it also changes reminders/feed deadlines (more conservative = more truthful,
-  but an intentional feed change — flag, don't sneak); alternatively fix engine-side
-  only and leave the display helper. Also: legacy runOptimizer (projection-optimizer.js:339)
-  has no qualification layer — unused by UI, document or guard. Fix must add pins for the
-  MLK repro + a frequency-cutoff fixture; note enhancement: local repair could pull an
-  individual DD's initiation earlier instead of rejecting the date wholesale (P1-3 group
-  shift doesn't move DDs independently today). SAFE side confirmed by the same audit:
-  deposit deadline (bizDay-effective vs literal, :524), suggestedFundingDate backward
-  walk, expiry, withdrawal/completion, horizon.
 
 ## Features
 - **Opt-in dark mode** — fresh implementation against the module structure. Idea

@@ -71,11 +71,22 @@ function directDepositEffectiveDate(dd) {
 }
 
 // The deadline the WHOLE DD set must be complete by. Frequency mode
-// ("N DDs, one every <period>") → signup + periods×period. Count mode →
-// the latest planned DD effective (posting) date. Returns an ISO string or
-// '' when it can't be derived (non-DD offer type, or no signup/DDs). Moved
-// verbatim from reminders.js so the engine and the feed share one formula.
-function ddWindowEndDate(offer) {
+// ("N DDs, one every <period>") → signup + periods×period (a LITERAL window
+// end, unchanged). Count mode → the latest DD's ACH POST date (the day the
+// last deposit actually lands at the bank), NOT the weekend/holiday-only
+// effective date. `cfg` is the ddTransfer model; omitted → live config (in-app,
+// via ddRoundTrip's provider) or the 1/1/1 default — exactly like ddRoundTrip.
+// Returns an ISO string or '' when it can't be derived (non-DD offer type, or
+// no signup/DDs). Moved verbatim from reminders.js so the engine and the feed
+// share one formula.
+//
+// DELIBERATE COUNT-MODE CHANGE (deadline-direction fix, 2026-07-09): the max
+// POST date is stricter and more truthful than the old max-effective date — it
+// accounts for ACH in-days transit. This also moves the feed's "all DDs
+// complete by" reminder later by the transit days, which matches that item's
+// own copy ("all qualifying direct deposits must have POSTED by this date").
+// The frequency branch keeps its literal formula on purpose.
+function ddWindowEndDate(offer, cfg = ddTransferConfig()) {
   if (offer.offerType !== 'direct-deposit' && offer.offerType !== 'held-and-dd') return '';
   const req = offer.ddRequirement;
   if (req && req.mode === 'frequency') {
@@ -89,12 +100,12 @@ function ddWindowEndDate(offer) {
     else d.setMonth(d.getMonth() + periods); // 'month' default
     return isoDate(d);
   }
-  // Count mode: the last DD must have POSTED — use the max effective date.
-  const effs = (offer.directDeposits || [])
-    .map(dd => directDepositEffectiveDate(dd))
+  // Count mode: the last DD must have actually POSTED — use the max ACH post date.
+  const posts = (offer.directDeposits || [])
+    .map(dd => { const rt = ddRoundTrip(dd, cfg); return rt ? isoDate(rt.post) : ''; })
     .filter(Boolean)
     .sort();
-  return effs.length ? effs[effs.length - 1] : '';
+  return posts.length ? posts[posts.length - 1] : '';
 }
 
 export { DEFAULT_DD_TRANSFER, normalizeDdTransfer, setDdTransferProvider, ddTransferConfig, ddRoundTrip, directDepositEffectiveDate, ddWindowEndDate };

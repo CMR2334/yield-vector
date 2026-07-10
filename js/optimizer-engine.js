@@ -466,7 +466,7 @@ function buildCandidateRecords(ctx) {
   return { records: records.filter(r => r.grid.length), review };
 }
 
-function validateDdCadence(offer, constraints) {
+function validateDdCadence(offer, constraints, ctx) {
   if (offer.offerType !== 'direct-deposit' && offer.offerType !== 'held-and-dd') return;
   const req = offer.ddRequirement || {};
   const dds = (offer.directDeposits || []).filter(dd => dd && dd.plannedDate);
@@ -479,6 +479,14 @@ function validateDdCadence(offer, constraints) {
     constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: offer.plannedSignupDate });
     return;
   }
+  // Qualification compares the ACH POST date (initiate + inDays business days —
+  // the day the DD actually lands and counts at the bank), NOT the weekend/
+  // holiday-only effective date. A late initiation whose money posts past a
+  // cutoff/window is therefore correctly rejected (deadline-direction fix,
+  // 2026-07-09). cfg is the SAME explicit ddTransfer the engine threads
+  // everywhere — never the live provider.
+  const cfg = ctx && ctx.ddTransfer;
+  const postISO = dd => { const rt = ddRoundTrip(dd, cfg); return rt ? isoDate(rt.post) : ''; };
   const cutoffCandidates = [];
   if (offer.offerExpirationDate) cutoffCandidates.push(offer.offerExpirationDate);
   for (const row of offer.requirements || []) {
@@ -489,17 +497,23 @@ function validateDdCadence(offer, constraints) {
 
   if (req.mode === 'frequency') {
     const periods = Math.max(1, Number(req.freqPeriods) || 1);
-    if (dds.length < periods) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: ddWindowEndDate(offer) });
-    const end = ddWindowEndDate(offer);
-    const effs = dds.map(dd => directDepositEffectiveDate(dd)).filter(Boolean).sort(byteCompare);
-    for (const eff of effs) {
-      if (eff < offer.plannedSignupDate || (end && eff > end)) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: eff });
+    if (dds.length < periods) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: ddWindowEndDate(offer, cfg) });
+    const end = ddWindowEndDate(offer, cfg); // literal frequency window end (formula unchanged)
+    const posts = dds.map(postISO).filter(Boolean).sort(byteCompare);
+    for (const post of posts) {
+      if (post < offer.plannedSignupDate || (end && post > end)) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: post });
     }
     for (let i = 0; i < periods; i++) {
       const pStart = isoDate(addPeriod(signup, req.freqEvery || 'month', i));
       const pEnd = i === periods - 1 ? end : isoDate(addPeriod(signup, req.freqEvery || 'month', i + 1));
-      const has = effs.some(eff => eff >= pStart && (!pEnd || (i === periods - 1 ? eff <= pEnd : eff < pEnd)));
+      const has = posts.some(post => post >= pStart && (!pEnd || (i === periods - 1 ? post <= pEnd : post < pEnd)));
       if (!has) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: pStart });
+    }
+    // Apply the user/expiry cutoffs in frequency mode too (previously built into
+    // cutoffCandidates but NEVER enforced here) — a DD posting past a user-
+    // requirement or offer-expiry deadline disqualifies exactly as in count mode.
+    if (cutoff) for (const post of posts) {
+      if (post > cutoff) constraints.push({ offerId: offer.id, kind: 'dd-post-late', dateISO: post });
     }
     return;
   }
@@ -507,9 +521,9 @@ function validateDdCadence(offer, constraints) {
   const needed = Math.max(1, Number(req.count) || 1);
   if (dds.length < needed) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: cutoff || offer.offerExpirationDate || '' });
   for (const dd of dds) {
-    const eff = directDepositEffectiveDate(dd);
-    if (!eff) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: '' });
-    if (eff && cutoff && eff > cutoff) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: eff });
+    const post = postISO(dd);
+    if (!post) constraints.push({ offerId: offer.id, kind: 'dd-window', dateISO: '' });
+    if (post && cutoff && post > cutoff) constraints.push({ offerId: offer.id, kind: 'dd-post-late', dateISO: post });
   }
 }
 
@@ -535,7 +549,7 @@ function validateOfferQualification(offer, ctx) {
     const dl = localRequirementDeadlineISO(offer, row);
     if (dl && dl < ctx.todayISO) constraints.push({ offerId: offer.id, kind: 'requirement-deadline', dateISO: dl });
   }
-  validateDdCadence(offer, constraints);
+  validateDdCadence(offer, constraints, ctx);
   if (!isOfferComplete(offer)) constraints.push({ offerId: offer.id, kind: 'completeness', dateISO: offer.plannedSignupDate || '' });
   return constraints;
 }
@@ -547,7 +561,7 @@ function horizonDatesForOffer(offer, ctx) {
   push(withdrawalEligibleDate(offer, ctx.ddTransfer));
   push(depositDeadline(offer));
   push(debitDeadlineISO(offer));
-  push(ddWindowEndDate(offer));
+  push(ddWindowEndDate(offer, ctx.ddTransfer));
   const win = expectedBonusWindow(offer, ctx.todayDate);
   if (win) push(win.endISO);
   for (const row of offer.requirements || []) push(localRequirementDeadlineISO(offer, row));
@@ -1441,6 +1455,80 @@ function testOptimizerPins() {
     });
     const plan = evaluateOptimizerPlan(_pinState({ offers: [dd], candidateIds: ['off_dd_freq_bad'] }), { off_dd_freq_bad: '2026-07-09' });
     check('DD frequency qualification rejects mis-cadenced DDs', !plan.valid && plan.bindingConstraints.some(c => c.kind === 'dd-window'));
+  }
+  {
+    // ── DD posting-date qualification (deadline-direction fix, 2026-07-09) ────
+    // The live MLK repro: a DD initiated Fri 2026-01-16 POSTS Tue 2026-01-20
+    // (Mon 01-19 is the MLK holiday, inDays=1). Against a user-requirement cutoff
+    // of 2026-01-19 (signup 2026-01-05 + deadline_days 14) the plan MUST be
+    // rejected with a 'dd-post-late' note — even though the DD's weekend/holiday-
+    // only effective date (01-16) is before the cutoff. Before the fix the
+    // validator compared the weak effective date and returned valid:true.
+    const janState = ddDate => _pinState({
+      today: '2026-01-05',
+      settings: { projectionStartDate: '2026-01-05', minimumCashBuffer: 0, currentLiquidCapital: 100000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
+      offers: [_pinOffer({
+        id: 'off_mlk', offerType: 'direct-deposit', signupBonusAmount: 400, requiredFundingAmount: 5000,
+        daysFundsMustRemain: null, plannedSignupDate: '2026-01-05', offerExpirationDate: '2026-12-31',
+        ddRequirement: { mode: 'count', count: 1 },
+        directDeposits: [{ id: 'dd1', plannedDate: ddDate, amount: 5000 }],
+        requirements: [{ source: 'user', done: false, deadline_days: 14, label: 'user deadline' }]
+      })],
+      candidateIds: ['off_mlk']
+    });
+    const reject = evaluateOptimizerPlan(janState('2026-01-16'), { off_mlk: '2026-01-05' });
+    check('DD count qualification rejects post-after-cutoff (MLK repro)',
+      !reject.valid && reject.bindingConstraints.some(c => c.kind === 'dd-post-late'),
+      (reject.bindingConstraints.find(c => c.kind === 'dd-post-late') || {}).dateISO || '—');
+    // Control: initiate two days earlier (Wed 2026-01-14 → posts Thu 01-15 ≤
+    // cutoff) and the same offer qualifies — the fix isn't blanket-rejecting DDs.
+    const accept = evaluateOptimizerPlan(janState('2026-01-14'), { off_mlk: '2026-01-05' });
+    check('DD count qualification accepts when post lands on/before cutoff',
+      accept.valid && !accept.bindingConstraints.some(c => c.kind === 'dd-post-late'));
+  }
+  {
+    // Frequency mode must APPLY the user/expiry cutoffs (built into
+    // cutoffCandidates but never enforced before the fix): 3 monthly DDs whose
+    // 3rd posts 2026-03-09 — past a user deadline of 2026-02-15 (signup
+    // 2026-01-05 + deadline_days 41) → rejected via 'dd-post-late'.
+    const freq = _pinOffer({
+      id: 'off_freq_cut', offerType: 'direct-deposit', signupBonusAmount: 400, requiredFundingAmount: 6000,
+      daysFundsMustRemain: null, plannedSignupDate: '2026-01-05', offerExpirationDate: '2026-12-31',
+      ddRequirement: { mode: 'frequency', freqPeriods: 3, freqEvery: 'month' },
+      directDeposits: [
+        { id: 'd1', plannedDate: '2026-01-06', amount: 2000 },
+        { id: 'd2', plannedDate: '2026-02-06', amount: 2000 },
+        { id: 'd3', plannedDate: '2026-03-06', amount: 2000 }
+      ],
+      requirements: [{ source: 'user', done: false, deadline_days: 41, label: 'user deadline' }]
+    });
+    const plan = evaluateOptimizerPlan(_pinState({
+      today: '2026-01-05',
+      settings: { projectionStartDate: '2026-01-05', minimumCashBuffer: 0, currentLiquidCapital: 100000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
+      offers: [freq], candidateIds: ['off_freq_cut']
+    }), { off_freq_cut: '2026-01-05' });
+    check('DD frequency mode enforces the user cutoff on the post date',
+      !plan.valid && plan.bindingConstraints.some(c => c.kind === 'dd-post-late'));
+  }
+  {
+    // Post-date window: a weekly DD whose EFFECTIVE date sits on the literal
+    // window end (2026-02-09) but whose POST date (2026-02-10) spills one
+    // business day past it is rejected ('dd-window'). Under the old effective-
+    // date semantics (effective 02-09 ≤ window-end 02-09) it would have qualified.
+    const win = _pinOffer({
+      id: 'off_post_win', offerType: 'direct-deposit', signupBonusAmount: 400, requiredFundingAmount: 5000,
+      daysFundsMustRemain: null, plannedSignupDate: '2026-02-02', offerExpirationDate: '2026-12-31',
+      ddRequirement: { mode: 'frequency', freqPeriods: 1, freqEvery: 'week' },
+      directDeposits: [{ id: 'd1', plannedDate: '2026-02-09', amount: 5000 }],
+      requirements: []
+    });
+    const plan = evaluateOptimizerPlan(_pinState({
+      today: '2026-01-05',
+      settings: { projectionStartDate: '2026-01-05', minimumCashBuffer: 0, currentLiquidCapital: 100000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
+      offers: [win], candidateIds: ['off_post_win']
+    }), { off_post_win: '2026-02-02' });
+    check('DD frequency window rejects a DD whose post spills past the window end',
+      !plan.valid && plan.bindingConstraints.some(c => c.kind === 'dd-window'));
   }
   {
     const tiered = _pinOffer({ id: 'off_tiered', tiers: [{ bonus: 100 }, { bonus: 200 }] });

@@ -17,7 +17,65 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 82)
+## Current state (as of 2026-07-09, Round 83)
+
+- **R83 (v2026.07.09l — CORRECTNESS FIX: close the DD posting-date qualification gaps from the 2026-07-09 Codex deadline audit):**
+  The engine's DD qualification compared `directDepositEffectiveDate` (weekend/holiday shift ONLY) against literal
+  cutoffs, ignoring ACH transit — so a DD initiated Fri 2026-01-16 with a Mon 2026-01-19 (MLK) deadline and
+  inDays=1 returned `valid:true` even though the modeled post is Tue 2026-01-20. Now every DD qualification check
+  compares the **ACH POST date** — `ddRoundTrip(dd, cfg).post` = initiate + inDays business days — using the SAME
+  explicit `ctx.ddTransfer` the engine already threads (never the live provider). **Fixes:** **(1) Count-mode
+  cutoff** (`validateDdCadence`, `js/optimizer-engine.js`): compares each DD's post date to the literal
+  user/expiry cutoff; a post-after-cutoff now emits a distinct **`dd-post-late`** binding constraint → the review
+  hint reads **"a direct deposit would post after the deadline — initiate it sooner"** (`BINDING_CONSTRAINT_COPY`,
+  `js/render-main-views.js`). **(2) Frequency-mode bucket/window** checks now compare post dates against the
+  literal window/period bounds (bounds stay literal). **(3) Frequency mode now APPLIES the user/expiry cutoffs**
+  it already built into `cutoffCandidates` but previously never enforced — same `dd-post-late` semantics as count
+  mode. `validateDdCadence` now takes `ctx` so it can read the threaded cfg. **(4) `ddWindowEndDate` count mode
+  (`js/dd-core.js`) → max ACH POST date** (was max effective date); gained an optional `cfg` param defaulting to
+  the live provider exactly like `ddRoundTrip` (in-app callers unchanged in mechanism; the engine passes explicit
+  cfg). Consumers enumerated first: engine (`validateDdCadence` freq-only + `horizonDatesForOffer`, both now pass
+  `ctx.ddTransfer`; horizon is dominated by the DD return date so no material change) and **`reminders.js:131`
+  (the feed's "all DDs complete by" item)**. **⚠️ DELIBERATE FEED CHANGE ⚠️:** this moves the feed's "all DDs
+  complete by" reminder LATER by the ACH in-days for count-mode DD offers — this is intentional and *more
+  truthful* (that item's own copy already says "all qualifying direct deposits must have POSTED by this date")
+  and stricter for qualification. The **frequency branch keeps its literal window formula** unchanged. **(5)
+  Legacy `runOptimizer` (`js/projection-optimizer.js`)** — added a prominent ⚠️ header comment stating it is
+  **cash-feasibility-ONLY** (no qualification layer: no deadline/DD-post/cutoff/cadence/horizon checks), unused by
+  the UI, kept only for the C2/C3 feasibility pins — DO NOT wire it to any UI as a validator (use
+  `optimizePlanner`). **(6) ENHANCEMENT DEFERRED (per-DD earlier-nudge local repair):** the search representation
+  keys entirely on ONE per-offer signup date (`assignment[record.id]=signupISO`); DD dates are deterministically
+  re-materialized from that signup (`applyDateGroup`/`materializeDirectDeposits`) and the apply path re-derives
+  them the same way, so moving a single DD independently needs per-DD date freedom threaded through the assignment
+  keyspace + `canonicalPlanVector` + apply materialization — a cross-module representational change, NOT a clean
+  drop-in. Deferred with rationale; no repair pin added. **(7) RIDER (owner-approved, planner-approved):** the
+  0-offer "do nothing" plan is now hidden from **"Other feasible plans"** (a $0 empty card is noise; doing
+  nothing is implicitly feasible) — one-line filter in `optimizerProposalModel` (`js/render-main-views.js`), shared
+  by the renderer AND Apply so indices stay in lockstep; the no-feasible-plan fallback is untouched. **Pins:
+  optimizer 35→39** (+4, all green): the MLK count-mode repro (Fri-before-holiday DD → REJECTED via `dd-post-late`),
+  a control (DD two days earlier → accepted), a frequency-mode user-cutoff fixture (3 monthly DDs, 3rd posts past a
+  user deadline → rejected), and a post-date window fixture (a weekly DD whose effective date sits ON the window end
+  but whose post spills one business day past it → rejected via `dd-window`). **No existing pin asserted the buggy
+  weak-date semantics, so ZERO pins were updated** (all 35 stayed green untouched). **Full battery green:** node
+  --check all modules + sw.js; **fidelity 67/67**, parser **20/20**, p2b PASS, dd-matrix ALL PASS, **feasibility
+  5/5**, **optimizer 39/39**. **Preview E2E** (port 8765, owner's real local state SNAPSHOTTED + restored
+  byte-identical — `App.save` never called, `localStorage` verified untouched, sync guard active): drove the
+  Labor-Day-2026 equivalent through the REAL modules + render pipeline — a DD initiated Fri 2026-09-04 posts Tue
+  2026-09-08 → plan card shows **"Not feasible"** + the binding hint **"…a direct deposit would post after the
+  deadline — initiate it sooner (Sep 8)"**; pulling the DD to Wed 2026-09-02 (posts Thu 09-03) → **"Feasible"**,
+  offer in the sequence, Apply button shown; **380px zero overflow**, **zero console errors**; live bundle reads
+  **2026.07.09l** (runtime + sw + 19 import-map, 0 strays). **APP_VERSION → 2026.07.09l** (2 consts + 19 import-map
+  `?v=`; sw precache derives `yv-precache-2026.07.09l`). **REVIEW-AFTER — Codex OUTAGE (out of credits):** per the
+  framework's outage rule, substituted an INDEPENDENT ADVERSARIAL CLAUDE REVIEW (fresh general-purpose subagent,
+  not self-review) over the combined diff `6013ab2..HEAD` (covers BOTH the un-reviewed v2026.07.09k champions batch
+  and these v2026.07.09l changes — 09k's Codex review was also blocked). Findings + dispositions: see the step
+  report / below. Owner-owned dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted
+  `.codex/hooks.json`) untouched — explicit-path `git add` only. **Remaining (owner gate): device-check
+  v2026.07.09l.** **Open:** a DD offer that qualifies in NO feasible plan due to `dd-post-late`/`dd-window` only
+  surfaces its reason via the plan-card binding hint when the infeasible include is the focused plan — when a valid
+  alternative (e.g. the empty plan) outranks it, the offer is dropped without a dedicated tappable "Not in this
+  plan" review row (pre-existing: `candidateReview` only captures BUILD-time exclusions). Surfacing
+  qualification-excluded candidates as tappable review rows is a candidate follow-up.
 
 - **R82 (v2026.07.09k — standalone owner batch: LABELED CHAMPION SCENARIO CARDS in Optimize; commit `94a557c`):**
   Owner-approved redesign of the Optimize runner-up list. The old "Other options" ranked runners-up on ONE

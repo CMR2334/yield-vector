@@ -56,6 +56,7 @@ const BINDING_CONSTRAINT_COPY = {
   'debit-deadline': 'debit requirement deadline has passed',
   'requirement-deadline': 'a requirement deadline has passed',
   'dd-window': "direct-deposit cadence/window can't be met",
+  'dd-post-late': 'a direct deposit would post after the deadline — initiate it sooner',
   'completeness': 'offer is missing required details',
   'buffer-floor': 'dips into your cash buffer',
   'horizon-exceeded': 'extends past the planning horizon'
@@ -169,7 +170,13 @@ function optimizerProposalModel(topPlan) {
   const championPlans = champions.map(c => c.plan);
   const championVectors = new Set(championPlans.map(p => p.canonicalVector));
   const remainder = ((topPlan && topPlan.alternatives) || []).filter(p => !championVectors.has(p.canonicalVector));
-  const others = championPlans.length ? remainder.filter(p => p.valid) : remainder;
+  // Hide the 0-offer "do nothing" plan from "Other feasible plans" — a $0 empty
+  // card is noise; doing nothing is implicitly always feasible (owner rider,
+  // 2026-07-09). Only filtered from the feasible-champions remainder; the
+  // no-feasible-plan fallback keeps whatever the engine returned.
+  const others = championPlans.length
+    ? remainder.filter(p => p.valid && (p.includedIds || []).length > 0)
+    : remainder;
   const list = championPlans.concat(others);
   return { champions, championPlans, others, list: list.length ? list : [topPlan] };
 }
