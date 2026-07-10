@@ -57,7 +57,7 @@ grows past ~8 entries, keeping the newest 3–4 live.
   green (the single-offer near-dup/determinism/earliest-representative alternatives pins unaffected — the filter only
   drops dominated same-outcome variants, headline always survives). **Full battery green:** node --check all 19
   modules + inline entry + sw.js; **fidelity 67/67, parser 20/20, p2b PASS, dd-matrix ALL PASS, feasibility 5/5,
-  optimizer 57/57 (~3.6s)**. **APP_VERSION → 2026.07.10a** (runtime-status.js + sw.js + 19 import-map `?v=`; sw
+  optimizer 58/58 (~3.7s)**. **APP_VERSION → 2026.07.10a** (runtime-status.js + sw.js + 19 import-map `?v=`; sw
   precache derives `yv-precache-2026.07.10a`; 0 strays of 09m; 2 remaining `09h` are historical comments).
   **Preview E2E** (port 8765, owner's real localStorage STRICTLY READ-ONLY — App.save() NEVER called, stored bytes
   10337→10337 identical, transient BofA injection reverted from an in-memory snapshot): dominance before/after on the
@@ -69,7 +69,13 @@ grows past ~8 entries, keeping the newest 3–4 live.
   validated; a transiently-injected BofA-class never-run prospect got **NO churn row, NO synthetic churn candidate,
   and was scheduled as a normal candidate**; `renderLifecycleInfo` returned "applies after this offer completes" for a
   never-run offer vs "needs account closed date" for a genuine one; **380px zero horizontal overflow**; zero console
-  errors/warnings. **REVIEW-AFTER:** pending (Codex-first per the credit-reset directive). Owner-owned dirty paths
+  errors/warnings. **REVIEW-AFTER — Codex (credits RESET, ran clean; `--scope branch --base 9d53d28`):** ONE **P2**
+  — the dominance dominator pool included INVALID (infeasible) alternatives, so an infeasible plan with superior
+  metrics could hide a valid displayed trade-off (the renderer drops invalid plans, so it would vanish silently).
+  **FIXED pre-final-push:** new `altIsDisplayable` (valid + ≥1 offer) gates BOTH the dominator pool and the
+  duplicate-representative set; an invalid/0-offer alternative is passed through untouched (renderer filters it) and
+  never dominates or dedups. Pin added (infeasible plan never hides a displayed feasible trade-off) → **optimizer
+  58/58**; re-verified live. Zero CRITICAL/HIGH. Owner-owned dirty paths
   (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path `git add`
   only. **Remaining (owner gate): device-check v2026.07.10a.** **Open:** `no-valid-date-window` review copy stays
   generic (not a single missing field); the Offers needs-info chip vs draft-banner co-occurrence dedupe still an owner

@@ -1206,6 +1206,14 @@ function altStrictlyBetterSomewhere(A, B) {
 // dominance is transitive, testing each plan against the FULL displayed pool is
 // order-independent and yields the Pareto frontier; the exact-tie (duplicate)
 // pass then keeps only the earliest representative, so the result is stable.
+// Only a DISPLAYED plan may dominate/dedup another: a valid plan with ≥1 offer.
+// The renderer hides invalid / 0-offer alternatives (optimizerProposalModel's
+// `remainder.filter(p => p.valid && includedIds.length)`), so an infeasible plan
+// must NEVER remove a displayed feasible trade-off (Codex P2, 2026-07-10).
+function altIsDisplayable(p) {
+  return !!p && !!p.valid && ((p.includedIds || []).length > 0);
+}
+
 function filterDominatedAlternatives(alternatives, champions) {
   const alts = (alternatives || []).slice();
   if (alts.length <= 1) return alts;
@@ -1214,20 +1222,26 @@ function filterDominatedAlternatives(alternatives, champions) {
   );
   const headlineVector = alts[0] && alts[0].canonicalVector;
   const isExempt = p => !!p && (p.canonicalVector === headlineVector || championVectors.has(p.canonicalVector));
-  // Displayed dominator pool: every champion plan (some may not appear in `alts`)
-  // plus every alternative.
-  const dominators = (champions || []).map(c => c && c.plan).filter(Boolean).concat(alts);
+  // Displayed dominator pool: every champion plan (valid + non-empty by
+  // construction; some may not appear in `alts`) plus every DISPLAYABLE
+  // alternative. Invalid / 0-offer plans are excluded — they are never shown, so
+  // they cannot hide a shown plan.
+  const dominators = (champions || []).map(c => c && c.plan).filter(Boolean)
+    .concat(alts.filter(altIsDisplayable));
   const kept = [];
   const out = [];
   for (const B of alts) {
     if (isExempt(B)) { out.push(B); kept.push(B); continue; }
+    // An invalid / 0-offer alternative isn't displayed anyway — pass it through
+    // untouched (the renderer drops it) and never let it dominate or dedup.
+    if (!altIsDisplayable(B)) { out.push(B); continue; }
     let hidden = dominators.some(A => A
       && A.canonicalVector !== B.canonicalVector
       && altWeaklyDominates(A, B) && altStrictlyBetterSomewhere(A, B));
     if (!hidden) {
-      // Cross-set duplicate: ties an already-kept plan on all four metrics → hide
-      // the later one (the earlier representative is already kept).
-      hidden = kept.some(A => A.canonicalVector !== B.canonicalVector
+      // Cross-set duplicate: ties an already-kept DISPLAYED plan on all four
+      // metrics → hide the later one (the earlier representative is already kept).
+      hidden = kept.some(A => altIsDisplayable(A) && A.canonicalVector !== B.canonicalVector
         && altWeaklyDominates(A, B) && altWeaklyDominates(B, A));
     }
     if (hidden) continue;
@@ -2101,6 +2115,16 @@ function testOptimizerPins() {
     const run1 = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]).map(p => p.canonicalVector).join(',');
     const run2 = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]).map(p => p.canonicalVector).join(',');
     check('dominance: filter is deterministic across runs', run1 === run2, run1);
+    // [Codex P2] An INVALID (infeasible) plan with superior metrics must NOT hide
+    // a valid, displayed trade-off — the renderer never shows the invalid plan, so
+    // it cannot dominate. Here vInvalid beats vValid on every axis but is invalid;
+    // vValid must survive (only the headline + vValid remain).
+    const invHead = domPlan('v_ih', 2000, 5000, 0.15, BACK);       // headline: best gross, thin cushion
+    const vInvalid = Object.assign(domPlan('v_inv', 1900, 45000, 0.25, '2026-09-01'), { valid: false });
+    const vValid = domPlan('v_val', 900, 42000, 0.05, '2026-12-01'); // high-cushion trade-off; beaten ONLY by the invalid plan
+    const survivors = filterDominatedAlternatives([invHead, vInvalid, vValid], [{ plan: invHead }]).map(p => p.canonicalVector);
+    check('dominance: an infeasible plan never hides a displayed feasible trade-off',
+      survivors.includes('v_val'), survivors.join(','));
   }
 
   const pass = results.filter(r => r.ok).length;
