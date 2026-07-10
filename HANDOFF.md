@@ -68,8 +68,15 @@ grows past ~8 entries, keeping the newest 3–4 live.
   `?v=`; sw precache derives `yv-precache-2026.07.09l`). **REVIEW-AFTER — Codex OUTAGE (out of credits):** per the
   framework's outage rule, substituted an INDEPENDENT ADVERSARIAL CLAUDE REVIEW (fresh general-purpose subagent,
   not self-review) over the combined diff `6013ab2..HEAD` (covers BOTH the un-reviewed v2026.07.09k champions batch
-  and these v2026.07.09l changes — 09k's Codex review was also blocked). Findings + dispositions: see the step
-  report / below. Owner-owned dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted
+  and these v2026.07.09l changes — 09k's Codex review was also blocked). **Reviewer verdict: SHIP** — zero
+  CRITICAL/HIGH/MEDIUM; it independently re-ran the pins (39/39) + node --check and confirmed the fix is
+  boundary-safe (a DD posting exactly ON the cutoff qualifies), config-threaded per C1/C4, and the 0-offer
+  render filter is shared by renderer + Apply (no desync). One **LOW** actioned (commit `399629a`): `validateDdCadence`
+  read `ctx && ctx.ddTransfer`, which could silently fall back to the live provider if a future caller passed a
+  ctx without ddTransfer → changed to read `ctx.ddTransfer` directly so a missing cfg fails LOUD (C1/C4). NITs
+  noted, not actioned: freq per-period bucketing now uses post dates (documented intent of gap 2, not triggered
+  by engine-materialized DDs); a lone 0-offer "do nothing" plan can still surface as a champion card (Apply
+  safe-no-ops); pre-existing unused `directDepositEffectiveDate` import in `reminders.js` (out of scope). Owner-owned dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted
   `.codex/hooks.json`) untouched — explicit-path `git add` only. **Remaining (owner gate): device-check
   v2026.07.09l.** **Open:** a DD offer that qualifies in NO feasible plan due to `dd-post-late`/`dd-window` only
   surfaces its reason via the plan-card binding hint when the infeasible include is the focused plan — when a valid
