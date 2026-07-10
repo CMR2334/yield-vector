@@ -484,8 +484,11 @@ function validateDdCadence(offer, constraints, ctx) {
   // holiday-only effective date. A late initiation whose money posts past a
   // cutoff/window is therefore correctly rejected (deadline-direction fix,
   // 2026-07-09). cfg is the SAME explicit ddTransfer the engine threads
-  // everywhere — never the live provider.
-  const cfg = ctx && ctx.ddTransfer;
+  // everywhere — never the live provider. Read ctx.ddTransfer DIRECTLY (ctx is
+  // always the normalized engine context on this path, so ddTransfer is always
+  // present): a missing cfg must fail LOUD rather than let ddRoundTrip silently
+  // fall back to the live provider / 1-1-1 default and defeat the fix (C1/C4).
+  const cfg = ctx.ddTransfer;
   const postISO = dd => { const rt = ddRoundTrip(dd, cfg); return rt ? isoDate(rt.post) : ''; };
   const cutoffCandidates = [];
   if (offer.offerExpirationDate) cutoffCandidates.push(offer.offerExpirationDate);
