@@ -58,6 +58,55 @@ Priorities are owner-directed — nothing here self-dispatches.
   approval. Only the unused class rule was deleted; the `--card-soft` color
   variable and all live uses remain.
 
+## Proposed — 2026-07-09 night review (owner-requested ideation; awaiting owner picks, nothing self-dispatches)
+Timeline+chart review and project-wide review both by Codex read-only passes (logs were
+/tmp/yv-timeline-review.log, /tmp/yv-project-review.log; key content preserved here).
+
+**Timeline — bugs found (fix-worthy regardless of picks):**
+- "Today" label on the Timeline is rendered but SUPPRESSED by CSS (index.html:1873 hides it
+  on all .timeline-row-track descendants incl. the axis row).
+- Dead empty-shell state: rows.length > 0 but validRows.length === 0 renders a bare axis/table
+  shell instead of an empty state.
+- Hero chart: code comment promises a quick-tap (<200ms) tooltip but the code never calls
+  handleHover() on tap — long-press works, tap does nothing.
+
+**Timeline — option menu (planner-curated from the 12-option review):**
+- Tier 1 (recommended first batch, S/M): milestone glyphs on bars (fund-by, DD posts, window
+  end, expected bonus window, safe-to-close — locked colors exactly); tappable bars → offer
+  modal (tap-vs-pan discrimination); sticky top axis + fixed Today label; offer-identity color
+  rail in the label column; distinguished empty/sparse states.
+- Tier 2: Month/Quarter/All range controls (display-window only, don't mutate projection
+  settings); collapsed vs expanded row modes; long-press scrub/crosshair reusing the hero
+  chart's 200ms gesture model.
+- Deferred/skip: capital-curve strip above bars (duplicates Home chart, heavy); "optimize from
+  here" bridge (implies date-constrained optimization the engine doesn't perform); pinch-zoom
+  (iOS scroll conflicts — buttons first).
+
+**Historical tracking — recommended path (1→2→3→5, ledger later):**
+1. Realization fields on offers: actual_bonus_amount, fees_paid, closed_reason (M) — realized
+   vs projected truth per completed offer.
+2. Churn lineage: series_id, parent_offer_id, run_number, source_template_id (S/M; migration
+   seeds each existing offer as its own series) — lineage stops living in notes.
+3. History/Archive view over closed+completed offers with annual totals, lifetime gross/net,
+   realized APY (M).
+5. Focused CSV exports: active offers, completed runs, events/P&L (S) — the low-risk bridge
+   to any external tool.
+- Full append-only offer_ledger[] (L, payload growth + merge semantics) — decide only after
+  1–3 prove out. Pre-req if pursued: schema-validation harness + payload-size guardrails.
+
+**External connections (owner seeded Airtable, said don't over-prioritize it):**
+- Best architectural fits first: CSV exports (S) → Google Sheets one-way mirror (M) or a
+  SANITIZED read-only dashboard page (M; never put the private Gist token in client JS).
+- Airtable one-way mirror (M/L): fine if CRM-style database views are wanted; third-party
+  privacy exposure + schema drift are the costs. Two-way sync with ANY external tool is
+  rejected — it fights the CAS sync model, migrations, and the local-origin guard.
+- iOS Shortcuts/widget summary feed (M): a second machine feed with current-active/
+  next-release/annual totals; high phone-native value, builds on the existing _feed.
+
+**Other gaps surfaced (not previously tracked):** schema-validation harness for import/
+migrations/templates; pre-migration "download state bundle" safety snapshot; a small pure
+analytics layer so History/exports/dashboard share one totals implementation.
+
 ## Features
 - **Opt-in dark mode** — fresh implementation against the module structure. Idea
   preserved from closed PR #2 (2026-07-02 audit branch; its diff targeted the
