@@ -17,7 +17,52 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-09, Round 79)
+## Current state (as of 2026-07-09, Round 80)
+
+- **R80 (v2026.07.09i — make Optimize "Other options" meaningfully distinct + informative; commit `0f5ae10`):**
+  Standalone owner batch (phone screenshots: 8 alternative cards all read "$2,550 · 4 offers · $12K low",
+  indistinguishable; raw synthetic id shown in "Not in this plan"). **(1) Alternatives diversity —
+  `rankAlternatives` (`js/optimizer-engine.js`):** replaced exact-`canonicalVector` dedup with a two-stage
+  pass. **Collapse:** `alternativeCollapses(a,b)` folds a plan into an already-kept representative only when
+  same offer SET + materially identical outcomes (same rounded gross, low cash within **$500** noise,
+  completion within **5** calendar days) + every per-offer signup/funding/DD date within **≤3 business days**
+  (`withinBizDays` via `addBusinessDays`); same-validity required so a feasible plan never hides an infeasible
+  near-twin. Because the pool is pre-sorted best-first (`comparePlans` tie-breaks on earliest
+  `latestCompletionISO` = earliest cash release), the survivor is always the **earliest representative** —
+  matches the owner's "return it sooner" reasoning. **Re-rank:** survivors ordered to prefer a DIFFERENT offer
+  composition first (one best-of-each-set pass), then materially different schedules of an already-shown set;
+  winner stays index 0. **Perf guard:** per-composition cap (`max(limit,4)`) + total survivor cap
+  (`max(limit*8,48)`) short-circuit the dominant winner-composition's thousands of near-schedules so the
+  O(survivors) collapse scan never goes quadratic on the beam pool (perf pin back to ~1.5s, was 1.49s;
+  a naive unbounded version hit 2.5s > budget). **(2) Alt cards (`renderOptAltList`):** now full-width
+  single-column comparison rows — **gross · offer count · low cash · blended APY · capital-back date** — using
+  **full comma dollars** (`formatCurrency`, dropped the compact-K `formatCompactCurrency` per the owner's
+  formatting rule), filling the horizontal space (no more cramped 2-col grid). **(3) Copy:** "done <date>"
+  → **"capital back <date>"** on the plan card AND alt cards (label = last cash release); restyled the plan
+  info pane's low-cash/APY/**capital back**/horizon into labeled `.opt-metric` cells (below-buffer/shortfall
+  stay as inline warn chips) so it reads as designed, not appended. **(4) Churn name bug:** "Not in this plan"
+  resolved a raw `churn_<sourceId>` synthetic id for the `no-valid-date-window` review row (grid-empty churn
+  candidate is filtered out of `plan.candidates`, so the old `state.offers` lookup missed). New `optReviewName`
+  strips/resolves to the SOURCE offer's **bank · name** with a **"Re-run:"** prefix for churn context; sequence
+  rows + binding hints already routed through `optimizerOfferName` (unchanged). **New pins (+3 → optimizer
+  25/25):** same-set near-date variants collapse to one representative, alternatives list deterministic,
+  representative is the earliest cash-release variant. **APP_VERSION → 2026.07.09i** (2 constants +
+  19 import-map `?v=`; sw precache `yv-precache-2026.07.09i`; 0 strays — 2 remaining `…09h` are historical
+  comments). **Full battery green:** node --check all modules; **fidelity 67/67**, parser **20/20**, p2b PASS,
+  dd-matrix ALL PASS, feasibility **5/5**, optimizer **25/25** (11,806 evals / ~1.5s). **Preview E2E** (port
+  8765, owner's real state snapshotted + restored **byte-identical**, `localStorage` never written during the
+  run): seeded 2 held prospects (near-tie cluster) + 1 churnable-completed offer with past expiry (forces the
+  synthetic-id review path); real run pipeline → **8 alternatives, ZERO echoes**, ordered distinct-composition-
+  first ({A+B} $1,200 → {B} $700 → {A} $500 → none $0, then materially-different {A+B} schedules varying low
+  cash 145k/160k + capital-back Sep/Oct/Nov); each card shows all 5 comparison metrics in full comma dollars;
+  **"capital back" ×9, no "done"**; "Not in this plan" renders **"Re-run: Chase · Sapphire Checking"** (no raw
+  `churn_off_…`); **380px zero overflow**; clean reload, zero console errors. **Codex review-after**
+  (`--scope branch --base origin/main`): **no actionable bugs** (de-dup, review-name, formatting, version/cache
+  all internally consistent) — nothing critical/high to fix. Owner-owned dirty paths (`.claude/settings.json`,
+  `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path `git add` only.
+  **Remaining (owner gate): device-check v2026.07.09i.** **Open (carried from R79):** inert Settings
+  "Optimizer max candidates" input (owner deciding its fate — NOT touched, per directive); legacy
+  `case 'timeline'` route candidate cleanup.
 
 - **R79 (v2026.07.09h — RETIRE the Plan tab's Planner segment; commits `08ab968` removal + release commit):**
   Owner decision (2026-07-09, post-optimizer): the manual offer-toggle + brute-force **combo-feasibility
