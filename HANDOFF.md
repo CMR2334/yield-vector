@@ -17,7 +17,67 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-11, Round 86)
+## Current state (as of 2026-07-11, Round 87)
+
+- **R87 (v2026.07.11b — owner-directed FEATURE: EITHER/OR qualification paths):**
+  Owner ask (verbatim): a Brex-style bank offer met by "either a direct deposit, or a card spend
+  minimum, but not needing to do both" had no way to be modeled on the card, and neither the DoC
+  importer nor the text parser accounted for it. **DESIGN GATE first (`docs/assessments/2026-07-11-
+  either-or-requirements.md`) + Codex critique (RUNG 1, `gpt-5.5`, ran clean; 6 P1 / 5 P2 / 3 P3,
+  ALL folded) BEFORE implementing.** **SCHEMA (minimal, absent-safe):** two new offer fields —
+  `requirementLogic: 'all' | 'any'` (a TERM; absent ≡ `'all'` = today's conjunctive semantics, so
+  EXISTING OFFERS/PAYLOADS ARE UNTOUCHED) and `plannedPath: 'dd' | 'debit' | null` (PERSONAL; which
+  path the owner intends). Rejected a general OR-group system (documented: only the binary DD-vs-debit
+  case exists; the offer already carries `ddRequirement` + `debitRequirement`). **THE LINCHPIN — one
+  pure helper `pathState(offer)` (`js/offer-model.js`, exported):** returns `{logic, path, ddActive,
+  debitActive, needsPath}`; for `logic='all'` it reduces EXACTLY to the raw `offerType`/`debitRequirement.required`
+  tests every existing site already used, so routing every capital/qualification/reminder consumer
+  through it is a structural no-op for all existing offers (battery proves it). **Consumers routed
+  (all no-op for 'all'):** DD capital legs (`projection-optimizer.js`), `withdrawalEligibleDate`/
+  `lockStartDate`/`ddCapitalTime`/`isOfferComplete`/`offerIssues` (`offer-model.js` — DD branch gated
+  on `ddActive` [Codex P1: else a debit-path offer keeps a phantom DD hold]; funding required only
+  when DD-active or a held type [Codex P1: a pure debit-path DD offer with no held lump can complete]),
+  `deriveRequirementsFromLegacy` (`requirements-templates.js` — emits only the active path's rows,
+  inline to avoid the import cycle [Codex P1]), the optimizer validator + `validateDdCadence` + debit
+  + a new `needs-path` binding, `horizonDatesForOffer`/`scheduleForOffer`/`canonicalPlanVector`
+  (`optimizer-engine.js` [Codex P1]), and DD/debit reminder emission (`reminders.js`). **SEMANTICS
+  (P2-3 precedent — never auto-pick):** `plannedPath='dd'` → DDs modeled/validated, debit suppressed;
+  `'debit'` → debit honored, NO DD capital/cadence/reminders; `null` → NOT silently modeled — a
+  needs-info "Choose path" chip (shown on committed offers too, before the hypothetical gate [Codex
+  P1]) + a specific optimizer `needs-path` review row + tap-through to the `#f-planned-path` selector.
+  **UI:** modal "How is this bonus met?" (All / Either way) + "Which will you do?" (Direct deposit /
+  Card spend / Decide later, default null); card `eitherOrChip` ("via DD"/"via card spend") + path-gated
+  DD rows/method/debit chip. **PARSER (`js/doc-parser.js` `docDetectEitherOr`):** additive, corpus-safe
+  detection — fires `requirementLogic:'any'` ONLY on a bonus-qualification DD-or-spend disjunction
+  (rejects fee-waiver + conjunctive prose), NEVER touches a scored field. **IMPORTER
+  (`js/doc-import-templates.js`):** a `requirementLogic` field-map row flips the form to Either way,
+  ensures both blocks (DD-family type + debit=Yes), reveals the path picker left at "Decide later"
+  (never auto-picked). **Churn/template round-trip:** `requirementLogic` added to BOTH
+  `TEMPLATE_TERMS_KEYS` (`requirements-templates.js` + `optimizer-engine.js`) [Codex P2]; `plannedPath`
+  reset to null (re-run re-prompts). **Pins +5:** optimizer 61→**65** (dd path modeled, debit path
+  ties up no DD capital, unchosen→needs-path review row, determinism); feasibility 5→**6** (Ceo:
+  debit path lowestAvailable=$50,000 vs dd path $10,000 — path-aware capital proven). **Full battery
+  green:** node --check all modules + sw.js; **fidelity 67/67, regressions 20/20, p2b PASS, dd-matrix
+  PASS, feasibility 6/6, optimizer 65/65.** **CORPUS: 82.4%** (fresh re-hydrated posts) — but this is
+  DoC POST-CONTENT DRIFT since the 2026-07-07 84.9% capture, NOT my change: an A/B control (baseline
+  parser `bcb8b62` scored on the SAME fresh posts) gives the IDENTICAL 82.4% (182/39/42/40), proving
+  the either/or detector is **regression-neutral** (byte-identical scored fields; `requirementLogic`
+  is gold-silent). **APP_VERSION → 2026.07.11b** ×3 (index.html ×19 import-map, runtime-status.js,
+  sw.js; sw precache derives `yv-precache-2026.07.11b`; 0 strays of 11a). **Preview E2E** (port 8765,
+  owner's real localStorage STRICTLY READ-ONLY — App.save NEVER called, stored bytes byte-identical
+  before/after; synthetic Brex either/or offer injected in-memory + restored): card showed **CHOOSE
+  PATH** chip + only Fund-account requirement when unchosen; **Either · via card spend** + "5 debit
+  txns" + `req-debit` (no DD rows) on the debit path; **Either · via DD** + DD rows + `req-ddreq`/
+  `req-dd` (no debit chip) on the dd path; the modal rendered the two controls with working show/hide;
+  the DoC paste of an either/or post surfaced the **"Qualify either way"** preview row and Apply flipped
+  the form to Either way + both blocks + the path selector at "Decide later"; **380px zero horizontal
+  overflow** across all three path states; **zero console errors**. Owner-owned dirty paths
+  (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched —
+  explicit-path `git add` only. **Remaining (owner gate): device-check v2026.07.11b.** **Open:** the
+  corpus 84.9% baseline in `verification-log.md` is now stale (DoC content drift) — a separate refresh
+  task; the parser fills `spendAmount` (a user row) for the card-spend path but not `debitRequirement`,
+  so the importer sets debit=Yes and the dollar rides the spend row (a first-class spend-dollar path
+  is a documented future enhancement).
 
 - **R86 (v2026.07.11a — owner-directed phone-review batch: sequence-card copy/identity/bonus + alternative edge annotations + verify-value fallback clarity + two color changes):**
   Six items from the owner's phone review. **ITEM 1 — sequence-card copy (`js/render-main-views.js` `renderOptSequenceRow`):**
