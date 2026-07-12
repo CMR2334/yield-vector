@@ -71,7 +71,15 @@ grows past ~8 entries, keeping the newest 3–4 live.
   `req-dd` (no debit chip) on the dd path; the modal rendered the two controls with working show/hide;
   the DoC paste of an either/or post surfaced the **"Qualify either way"** preview row and Apply flipped
   the form to Either way + both blocks + the path selector at "Decide later"; **380px zero horizontal
-  overflow** across all three path states; **zero console errors**. Owner-owned dirty paths
+  overflow** across all three path states; **zero console errors**. **REVIEW-AFTER — Codex (RUNG 1,
+  `gpt-5.5`, ran clean):** inspected `bcb8b62..HEAD` — reported **SHIP** on back-compat (`logic='all'`
+  structurally intact across model/projection/optimizer/reminder gates), parser additivity
+  (`docDetectEitherOr` writes only `requirementLogic`), and optimizer determinism; **3 P2 display-only
+  gaps folded** (all in `render-main-views.js`, all now gated through `pathState`): (1)
+  `offerNeedsInfoReason` no longer shows "Needs DD date" for a debit-path offer, (2) the hero chart no
+  longer renders DD event markers for a debit-path offer, (3) the hero chart no longer shows a "DD
+  deadline" marker for a debit-path direct-deposit offer. Battery re-green after the fixes (optimizer
+  65/65, fidelity 67/67). Owner-owned dirty paths
   (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched —
   explicit-path `git add` only. **Remaining (owner gate): device-check v2026.07.11b.** **Open:** the
   corpus 84.9% baseline in `verification-log.md` is now stale (DoC content drift) — a separate refresh

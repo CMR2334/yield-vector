@@ -797,7 +797,9 @@ function offerNeedsInfoReason(o) {
   // COMMITTED (open account) too — the owner must still choose how to qualify.
   if (pathState(o).needsPath) return 'needs-path';
   if (!HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return null;
-  const isDD = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  // EITHER/OR [review-after P2]: only demand DD dates when the DD path is active
+  // (a debit-path offer needs no DDs). For logic='all' this is the DD-family test.
+  const isDD = pathState(o).ddActive;
   if (isDD) {
     const datedDds = Array.isArray(o.directDeposits) && o.directDeposits.some(dd => dd && dd.plannedDate && parseDate(dd.plannedDate));
     if (!datedDds) return 'needs-dd-date';
@@ -1956,10 +1958,12 @@ function renderHeroChart(svg) {
     if (!offerIsActiveForProjection(o)) continue;
     const name = displayName(o);
     const offerColor = offerColorHex(o);  // '' if none — falls back to white stroke
+    const psO = pathState(o);   // EITHER/OR: only the active path's markers render
     const withd = parseDate(withdrawalEligibleDate(o));
     const ddl = parseDate(depositDeadline(o));
-    // Per-DD markers (teal) for both DD types.
-    if ((o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && Array.isArray(o.directDeposits)) {
+    // Per-DD markers (teal) for both DD types — only when the DD path is active
+    // (a debit-path offer ties up no capital, so no DD markers) [review-after P2].
+    if ((o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && psO.ddActive && Array.isArray(o.directDeposits)) {
       o.directDeposits.forEach((dd, idx) => {
         const effISO = directDepositEffectiveDate(dd);
         const eff = effISO ? parseDate(effISO) : null;
@@ -1988,7 +1992,10 @@ function renderHeroChart(svg) {
     // it's the lump-sum deposit deadline. Shown for all types that have
     // a deadline set, except held-and-dd where the held funding deadline
     // is the same date and would double up.
-    if (ddl && o.offerType !== 'held-and-dd') {
+    // EITHER/OR [review-after P2]: a direct-deposit offer's deadline is a DD-window
+    // deadline — suppress it on the debit path (no DD to complete). A new-funds-held
+    // funding deadline always applies (not a direct-deposit type).
+    if (ddl && o.offerType !== 'held-and-dd' && (o.offerType !== 'direct-deposit' || psO.ddActive)) {
       const i = Math.round((ddl - start) / 86400000);
       const label = o.offerType === 'direct-deposit' ? `DD deadline: ${name}` : `Deposit deadline: ${name}`;
       if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label, name, bankName: o.bankName, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
