@@ -55,10 +55,11 @@ grows past ~8 entries, keeping the newest 3–4 live.
   (never auto-picked). **Churn/template round-trip:** `requirementLogic` added to BOTH
   `TEMPLATE_TERMS_KEYS` (`requirements-templates.js` + `optimizer-engine.js`) [Codex P2]; `plannedPath`
   reset to null (re-run re-prompts). **Pins +5:** optimizer 61→**65** (dd path modeled, debit path
-  ties up no DD capital, unchosen→needs-path review row, determinism); feasibility 5→**6** (Ceo:
-  debit path lowestAvailable=$50,000 vs dd path $10,000 — path-aware capital proven). **Full battery
-  green:** node --check all modules + sw.js; **fidelity 67/67, regressions 20/20, p2b PASS, dd-matrix
-  PASS, feasibility 6/6, optimizer 65/65.** **CORPUS: 82.4%** (fresh re-hydrated posts) — but this is
+  ties up no DD capital, unchosen→needs-path review row, determinism); feasibility 5→**7** (Ceo:
+  debit path lowestAvailable=$50,000 vs dd path $10,000 — path-aware capital proven; Ctpl: the
+  `requirementLogic`/`plannedPath` template round-trip — term carried, personal reset, legacy defaults
+  'all'). **Full battery green:** node --check all modules + sw.js; **fidelity 67/67, regressions
+  20/20, p2b PASS, dd-matrix PASS, feasibility 7/7, optimizer 65/65.** **CORPUS: 82.4%** (fresh re-hydrated posts) — but this is
   DoC POST-CONTENT DRIFT since the 2026-07-07 84.9% capture, NOT my change: an A/B control (baseline
   parser `bcb8b62` scored on the SAME fresh posts) gives the IDENTICAL 82.4% (182/39/42/40), proving
   the either/or detector is **regression-neutral** (byte-identical scored fields; `requirementLogic`

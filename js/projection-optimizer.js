@@ -601,6 +601,16 @@ function testFeasibilityPins() {
     check('Ctpl open-date anchor preserved through round-trip', 'open date', rt.lockStartsFrom);
     const legacy = templateToOffer({ bankName: 'Legacy', offerType: 'new-funds-held', daysFundsMustRemain: 90 });
     check('Ctpl legacy template (no key) still defaults funded date', 'funded date', legacy.lockStartsFrom);
+    // EITHER/OR: requirementLogic (a TERM) survives the template round-trip;
+    // plannedPath (PERSONAL) resets to null so a churn re-run re-prompts; a legacy
+    // template with no key defaults to 'all' (backward-compatible).
+    const eoTpl = offerToTemplate(_fpOffer({ requirementLogic: 'any', plannedPath: 'debit',
+      debitRequirement: { required: true, count: 5, withinDays: 30, byDate: '', byDateLegacy: '' } }));
+    const eoRt = templateToOffer(eoTpl);
+    check('Ctpl either/or requirementLogic + plannedPath round-trip', true,
+      eoTpl.requirementLogic === 'any' && eoTpl.plannedPath === undefined
+      && eoRt.requirementLogic === 'any' && eoRt.plannedPath === null
+      && templateToOffer({ bankName: 'L', offerType: 'new-funds-held' }).requirementLogic === 'all');
   }
 
   // ---- Ceo: EITHER/OR — the projection follows the CHOSEN path. The same
