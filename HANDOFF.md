@@ -71,7 +71,11 @@ grows past ~8 entries, keeping the newest 3–4 live.
   and scrolled-to + flash-highlighted the **DoC URL field** (`yv-field-flash` box-shadow ring confirmed); the review-row
   reason rendered **`rgb(139,58,70)` = #8b3a46**; the color picker showed **16 swatches** with `magenta`→#7b243c "Burgundy"
   + `fuchsia`→#14532d "Pine" and **zero** #ec4899/#c026d3; **380px zero horizontal overflow** (bonus never overlaps the
-  wrapped dates; edge lines unclipped); **zero console errors**. **REVIEW-AFTER — <RUNG> (recorded below).** Owner-owned
+  wrapped dates; edge lines unclipped); **zero console errors**. **REVIEW-AFTER — Codex (RUNG 1, `codex-companion.mjs review --scope branch --base origin/main
+  -m gpt-5.5`, ran clean):** inspected the full diff — edge-annotation math vs the dominance helpers, the churn-verify
+  fallback branches + `focusOfferField`, `optimizerOfferBankName`/`sourceOfferId` resolution, `scheduleForOffer` bonus,
+  `formatCurrency`, the palette + version bump — and reported **no actionable regressions** (SHIP). Zero CRITICAL/HIGH.
+  Owner-owned
   dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path
   `git add` only. **Remaining (owner gate): device-check v2026.07.11a.** **Open:** the `no-worker` fallback can't be
   end-to-end exercised on this origin (no Worker configured) — the branch decision is unit-proven but the successful
