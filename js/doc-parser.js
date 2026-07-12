@@ -1251,6 +1251,14 @@ function parseDocPost(raw) {
   const churn = docScanChurn(text);
   if (churn) { for (const k in churn) fields[k] = churn[k]; }
 
+  // ---- EITHER/OR qualification paths (2026-07-11) ----------------------------
+  // Emit requirementLogic:'any' when the post says the bonus is met by EITHER a
+  // direct deposit OR a card spend. PURELY ADDITIVE + CONSERVATIVE: it only sets
+  // the new (gold-silent) requirementLogic field — it never touches a scored
+  // field — so the gold corpus cannot regress. The importer's path picker turns
+  // it into an offer.requirementLogic + populates both requirement blocks.
+  docDetectEitherOr(text, put);
+
   // ---- Leftovers ("Not auto-filled") ----------------------------------------
   // Glance rows whose label we didn't map become manual-reference leftovers, so
   // the user can eyeball state-eligibility, ChexSystems, hard-pull, etc.
@@ -1267,4 +1275,31 @@ function parseDocPost(raw) {
   return out;
 }
 
-export { parseDocPost, docNormalizeInput, docExtractGlanceRows, docParseBonusValue, docFirstDollar, docDollarToNumber, docDaysFrom, docLatestDate, docDateSegments };
+// EITHER/OR detector (2026-07-11). Fires requirementLogic:'any' ONLY on a
+// high-confidence disjunction that bridges a direct-deposit term and a
+// spend/debit term with an "either / or / one of the following" connective, in a
+// bonus-QUALIFICATION context and NOT a fee-waiver context. Conservative by
+// design: the bridge requires both terms in proximity to the connective, so
+// conjunctive SUB prose (the entire gold corpus) never matches. PURE; only calls
+// `put('requirementLogic', …)` — no scored field is read or written.
+function docDetectEitherOr(text, put) {
+  if (!text || typeof put !== 'function') return;
+  const T = String(text);
+  const bridge = new RegExp(
+    'direct\\s+deposit[\\s\\S]{0,120}?(?:\\bor\\b|either|one of the following)[\\s\\S]{0,60}?(?:spend|debit|purchase)'
+    + '|(?:spend|debit|purchase)[\\s\\S]{0,120}?(?:\\bor\\b|either|one of the following)[\\s\\S]{0,60}?direct\\s+deposit'
+    + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?direct\\s+deposit[\\s\\S]{0,160}?(?:spend|debit|purchase)'
+    + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?(?:spend|debit|purchase)[\\s\\S]{0,160}?direct\\s+deposit',
+    'i');
+  const m = T.match(bridge);
+  if (!m) return;
+  // Reject fee-waiver prose ("avoid the monthly fee with a DD or debit purchase")
+  // — that names a fee-avoidance path, not a bonus qualification path.
+  if (/waiv|avoid[\s\S]{0,40}?fee|monthly (?:maintenance )?fee/i.test(T)) return;
+  // Require a bonus-qualification context so the disjunction is about EARNING the
+  // bonus, not some unrelated "or".
+  if (!/qualif|to earn|to receive|to get|\bbonus\b|requirement|meet the/i.test(T)) return;
+  put('requirementLogic', 'any', 'high', m[0].slice(0, 160));
+}
+
+export { parseDocPost, docNormalizeInput, docExtractGlanceRows, docParseBonusValue, docFirstDollar, docDollarToNumber, docDaysFrom, docLatestDate, docDateSegments, docDetectEitherOr };

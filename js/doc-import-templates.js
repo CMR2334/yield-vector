@@ -167,6 +167,23 @@ const DOC_FIELD_MAP = [
   // Row-only requirement types (no legacy field): land in #f-user-reqs.
   { key: 'spendAmount', label: 'Spend requirement', format: v => formatDollarInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
   { key: 'transactionsCount', label: 'Transactions requirement', format: v => v + '×', current: () => '', apply: v => _docAddUserReq('transactions', { count: v, label: 'Transactions' }) },
+  // EITHER/OR (2026-07-11): the bonus is met by a direct deposit OR a card spend.
+  // Applying flips the form to "Either way", ensures BOTH requirement blocks exist
+  // (DD-family offer type + debit=Yes), and reveals the path selector — which the
+  // user picks at review time (left at "Decide later" = null; never auto-picked).
+  { key: 'requirementLogic', label: 'Qualify either way (DD or card spend)',
+    format: v => v === 'any' ? 'Yes — choose DD or card spend' : 'No',
+    current: () => { const r = _docEl('[name="requirementLogic"]:checked'); return r ? (r.value === 'any' ? 'Either way' : 'All required') : ''; },
+    apply: v => {
+      if (v !== 'any') return;
+      const any = _docEl('#reqlogic-any'); if (any) { any.checked = true; any.dispatchEvent(new Event('change', { bubbles: true })); }
+      // The DD path needs a DD-family offer type; leave an explicit Held+DD alone.
+      const cur = (_docEl('[name="offerType"]:checked') || {}).value;
+      if (cur === 'new-funds-held') { const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }
+      // The card-spend path needs the debit block present.
+      const dy = _docEl('#debit-yes'); if (dy && !dy.checked) { dy.checked = true; dy.dispatchEvent(new Event('change', { bubbles: true })); }
+      // plannedPath deliberately left at "Decide later" (null) — P2-3 no auto-pick.
+    } },
   // Notes-only (points bonus, quirk 1): appended to the Notes textarea.
   { key: 'bonusPointsNote', label: 'Points bonus (→ notes)', format: v => v, current: () => '',
     apply: v => _docAppendNote('Bonus: ' + v) },

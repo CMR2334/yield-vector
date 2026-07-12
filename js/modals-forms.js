@@ -211,6 +211,28 @@ function showOfferModal(offerId = null, seed = null) {
             </div>
             <span class="field-hint">Some SUBs require N qualifying debit-card purchases within a set number of days of signing up. Counts toward "Actions required" on the Overview.</span>
           </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>How is this bonus met?</label>
+            <div class="radio-group" style="max-width:520px;flex-wrap:wrap;">
+              <input type="radio" id="reqlogic-all" name="requirementLogic" value="all" ${o.requirementLogic === 'any' ? '' : 'checked'} />
+              <label for="reqlogic-all">All requirements</label>
+              <input type="radio" id="reqlogic-any" name="requirementLogic" value="any" ${o.requirementLogic === 'any' ? 'checked' : ''} />
+              <label for="reqlogic-any">Either way (DD or card spend)</label>
+            </div>
+            <span class="field-hint">Pick "Either way" for offers (e.g. Brex) where a direct deposit <strong>OR</strong> a card-spend minimum qualifies — you only do one. Fill in <strong>both</strong> the direct-deposit and the debit sections above, then choose which one you plan to do.</span>
+            <div id="planned-path-wrap" style="margin-top:8px;${o.requirementLogic === 'any' ? '' : 'display:none;'}">
+              <label>Which will you do? *</label>
+              <div class="radio-group" id="f-planned-path" style="max-width:440px;flex-wrap:wrap;">
+                <input type="radio" id="path-dd" name="plannedPath" value="dd" ${o.plannedPath === 'dd' ? 'checked' : ''} />
+                <label for="path-dd">Direct deposit</label>
+                <input type="radio" id="path-debit" name="plannedPath" value="debit" ${o.plannedPath === 'debit' ? 'checked' : ''} />
+                <label for="path-debit">Card spend</label>
+                <input type="radio" id="path-none" name="plannedPath" value="" ${(o.plannedPath !== 'dd' && o.plannedPath !== 'debit') ? 'checked' : ''} />
+                <label for="path-none">Decide later</label>
+              </div>
+              <span class="field-hint">Only the chosen path is scheduled, modeled, and reminded — the other is ignored. "Decide later" leaves the offer un-modeled until you pick (the optimizer never chooses the path for you).</span>
+            </div>
+          </div>
           <div class="field">
             <div class="field-box">
               <label for="f-funding">Required funding *</label>
@@ -598,6 +620,11 @@ function showOfferModal(offerId = null, seed = null) {
         const wrap = form.querySelector('#debit-fields-wrap');
         if (wrap) wrap.style.display = ev.target.value === 'yes' ? '' : 'none';
       }
+      // EITHER/OR: show the planned-path selector only when "Either way" is on.
+      if (ev.target.name === 'requirementLogic') {
+        const wrap = form.querySelector('#planned-path-wrap');
+        if (wrap) wrap.style.display = ev.target.value === 'any' ? '' : 'none';
+      }
       // Auto-populate the DD rows when the requirement count/frequency
       // changes, so the right number of dated rows appears without an
       // extra click. (The explicit "Generate dates" button stays too.)
@@ -631,6 +658,7 @@ function showOfferModal(offerId = null, seed = null) {
           ev.target.id === 'ddreq-freq-periods' || ev.target.id === 'ddreq-freq-every' ||
           ev.target.name === 'offerType' || ev.target.name === 'ddReqMode' ||
           ev.target.name === 'debitRequired' ||
+          ev.target.name === 'requirementLogic' || ev.target.name === 'plannedPath' ||
           (ev.target.dataset && (ev.target.dataset.ddField === 'amount' || ev.target.dataset.ddField === 'plannedDate'))) {
         refreshRequirementsSection();
       }
@@ -917,9 +945,16 @@ function buildLiveRequirementsOffer() {
   const offerType = (form.querySelector('[name="offerType"]:checked') || {}).value || 'new-funds-held';
   const debitRequired = (form.querySelector('[name="debitRequired"]:checked') || {}).value === 'yes';
   const ddReqMode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value === 'frequency' ? 'frequency' : 'count';
+  // EITHER/OR: carry the live requirementLogic/plannedPath so the derived
+  // requirement rows reflect the active path (deriveRequirementsFromLegacy gates
+  // DD/debit rows on them). Absent → 'all'/null (unchanged derivation).
+  const reqLogic = (form.querySelector('[name="requirementLogic"]:checked') || {}).value === 'any' ? 'any' : 'all';
+  const plannedPathVal = (form.querySelector('[name="plannedPath"]:checked') || {}).value;
   const numOrNull = (v) => (v === '' || v == null) ? null : Number(v);
   const offer = {
     offerType,
+    requirementLogic: reqLogic,
+    plannedPath: (reqLogic === 'any' && (plannedPathVal === 'dd' || plannedPathVal === 'debit')) ? plannedPathVal : null,
     plannedSignupDate: parseDateInput(qv('#f-signup')) || '',
     requiredFundingAmount: parseMoneyInput(qv('#f-funding')),
     daysAfterSignupAllowedBeforeDeposit: numOrNull(qv('#f-days-deposit')),
@@ -1266,6 +1301,12 @@ function readOfferForm(idArg, isEdit) {
     offerType,
     ddRequirement,
     debitRequirement,
+    // EITHER/OR (2026-07-11): requirementLogic is 'all' (conjunctive, default)
+    // unless the user picks "Either way". plannedPath is only meaningful under
+    // 'any' — a blank/absent selection ("Decide later") stores null so the offer
+    // is not silently modeled (the optimizer never picks the path — P2-3).
+    requirementLogic: data.requirementLogic === 'any' ? 'any' : 'all',
+    plannedPath: (data.requirementLogic === 'any' && (data.plannedPath === 'dd' || data.plannedPath === 'debit')) ? data.plannedPath : null,
     color: data.color || '',
     directDeposits: readDdRowsFromForm()
       .filter(dd => dd.plannedDate || (dd.amount != null && dd.amount > 0)),

@@ -3,7 +3,7 @@ import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrenc
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, pathState, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
@@ -73,7 +73,10 @@ const OPT_REVIEW_REASON_COPY = {
   'deposit-deadline': 'Funding would miss the deposit deadline',
   'debit-deadline': 'Debit requirement deadline has passed',
   'requirement-deadline': 'A requirement deadline has passed',
-  'expiry': 'Offer expires before it can start'
+  'expiry': 'Offer expires before it can start',
+  // EITHER/OR: this offer can be met by a direct deposit OR a card spend, but no
+  // path is chosen — the optimizer never picks for you (P2-3). Tap to choose.
+  'needs-path': 'Choose how to qualify — direct deposit or card spend'
 };
 const OPT_PLAN_REASON_COPY = {
   'cash-infeasible': 'Dips below your cash buffer.',
@@ -112,6 +115,7 @@ function optReviewFocusField(r) {
     case 'dd-window':
     case 'dd-post-late': return 'dd-entries';
     case 'deposit-deadline': return 'f-funded';
+    case 'needs-path': return 'f-planned-path';   // EITHER/OR path selector
     default: return '';
   }
 }
@@ -787,7 +791,12 @@ function renderLifecycleSuggest(o) {
 // A dateless CLOSED prospect is intentionally NOT flagged: it's a valid
 // candidate the optimizer schedules a date for, so it isn't "excluded".
 function offerNeedsInfoReason(o) {
-  if (!o || !HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return null;
+  if (!o) return null;
+  // EITHER/OR: a "met either way" offer with no chosen path needs one. This is
+  // checked BEFORE the hypothetical gate because a needs-path offer can be
+  // COMMITTED (open account) too — the owner must still choose how to qualify.
+  if (pathState(o).needsPath) return 'needs-path';
+  if (!HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return null;
   const isDD = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
   if (isDD) {
     const datedDds = Array.isArray(o.directDeposits) && o.directDeposits.some(dd => dd && dd.plannedDate && parseDate(dd.plannedDate));
@@ -804,13 +813,25 @@ const OFFER_NEEDS_INFO_COPY = {
   'needs-dd-date':     { label: 'Needs DD date',   title: 'This direct-deposit offer has no dated direct deposits — the optimizer skips it until at least one DD has a date.' },
   'needs-fund-date':   { label: 'Needs fund date', title: 'This held + DD offer has no funding date — the optimizer skips it until the held lump sum is dated.' },
   'needs-signup-date': { label: 'Needs date',      title: 'This open account has no planned sign-up date — add one so the plan can include it.' },
-  'needs-churn-date':  { label: 'Needs re-run date', title: 'Churnable, but its re-run anchor date is not set yet — add it to schedule the next cycle.' }
+  'needs-churn-date':  { label: 'Needs re-run date', title: 'Churnable, but its re-run anchor date is not set yet — add it to schedule the next cycle.' },
+  'needs-path':        { label: 'Choose path', title: 'This bonus can be met by EITHER a direct deposit OR a card spend — choose which one you plan to do so it can be modeled (the optimizer never picks for you).' }
 };
 function offerNeedsInfoChip(o) {
   const reason = offerNeedsInfoReason(o);
   if (!reason) return '';
   const c = OFFER_NEEDS_INFO_COPY[reason];
   return `<span class="chip chip-warn" title="${escapeAttr(c.title)}">${escapeHtml(c.label)}</span>`;
+}
+
+// EITHER/OR: a compact chip stating this bonus is met either way and WHICH path
+// the owner chose. Only shown for requirementLogic:'any'; the unchosen state is
+// carried by the "Choose path" needs-info chip instead (so no duplicate cue).
+function eitherOrChip(o) {
+  if (!o || o.requirementLogic !== 'any') return '';
+  const ps = pathState(o);
+  if (ps.path === 'dd') return `<span class="chip chip-muted" title="Met by EITHER a direct deposit OR a card spend — you chose the direct-deposit path.">Either · via DD</span>`;
+  if (ps.path === 'debit') return `<span class="chip chip-muted" title="Met by EITHER a direct deposit OR a card spend — you chose the card-spend path.">Either · via card spend</span>`;
+  return '';
 }
 
 // Expiration/freshness chip for an offer card (display only — the offer-expires
@@ -935,7 +956,7 @@ function renderOfferCard(o) {
         ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
         ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
       </div>
-      ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && Array.isArray(o.directDeposits) && o.directDeposits.length > 0 ? `
+      ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && pathState(o).ddActive && Array.isArray(o.directDeposits) && o.directDeposits.length > 0 ? `
         <div class="offer-dds">
           ${o.directDeposits.map((dd, i) => {
             const planned = dd.plannedDate ? parseDate(dd.plannedDate) : null;
@@ -950,7 +971,7 @@ function renderOfferCard(o) {
           }).join('')}
         </div>
       ` : ''}
-      ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') ? renderDdMethodPanel(o) : ''}
+      ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && pathState(o).ddActive ? renderDdMethodPanel(o) : ''}
       ${renderRequirementChecklist(o)}
       ${renderPipelineStrip(o)}
       ${renderLifecycleSuggest(o)}
@@ -966,12 +987,13 @@ function renderOfferCard(o) {
           'Held'
         }</span>
         <span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || o.subStatus || '—'}</span>
+        ${eitherOrChip(o)}
         ${offerNeedsInfoChip(o)}
         ${offerExpirationChip(o)}
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
-        ${o.debitRequirement && o.debitRequirement.required && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
+        ${pathState(o).debitActive && o.debitRequirement && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
       ${(() => {
         // R70 [6]: the DoC source link now STACKS BELOW the Updated stamp
