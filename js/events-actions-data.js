@@ -515,18 +515,36 @@ function optimizationInputSig(o) {
   });
 }
 
+// Specific "why the one-tap verify fell back to the editor" copy, keyed by
+// reason (item 5, owner-directed 2026-07-11). Each names the SPECIFIC cause and
+// the exact next step — replacing the old generic "use Import from URL … then
+// Save" bubble, which never said why the fast path was unavailable.
+const CHURN_RECHECK_REASON_COPY = {
+  'no-url': 'No source URL stored — paste the DoC link below, then Save to enable one-tap verify',
+  'no-worker': 'No document fetcher set up — verify the terms and Save',
+  'tiered': 'This offer has a tier ladder — Import from URL, then confirm the tier and Save',
+  'structural-dd': 'Direct-deposit terms changed — Import from URL to update, then Save',
+  'structural-requirements': 'New requirements found — Import from URL to update, then Save'
+};
+
 // Prompt-gated churn re-check (P2-2). Opens the source offer's edit modal so
 // the user can pull the latest terms via the existing DoC "Import from URL"
 // Worker path (or verify manually), then Save. The save-gate above re-runs the
-// optimizer iff an optimization input actually changed.
-function recheckChurnCandidate(sourceId) {
+// optimizer iff an optimization input actually changed. `opts.reason` (from a
+// one-tap verify fallback) selects a SPECIFIC bubble stating why the fast path
+// was unavailable; `opts.focusField` scrolls-to + flash-highlights that modal
+// field (e.g. the DoC URL input when no URL is stored) — reusing the 10a flash
+// idiom so the fix is obvious.
+function recheckChurnCandidate(sourceId, opts = {}) {
   const src = (App.state.offers || []).find(o => o && o.id === sourceId);
   if (!src) return;
   App._optimizerRecheck = { sourceId, before: optimizationInputSig(src), hadPlan: !!App.optimizerPlan };
   showOfferModal(sourceId);
-  toast(src.docUrl
+  const specific = opts.reason && CHURN_RECHECK_REASON_COPY[opts.reason];
+  toast(specific || (src.docUrl
     ? 'Re-check: use "Import from URL" to pull the latest terms, then Save'
-    : 'Re-check: verify the terms and Save');
+    : 'Re-check: verify the terms and Save'));
+  if (opts.focusField) setTimeout(() => focusOfferField(opts.focusField), 130);
 }
 
 // Tap-through from the Optimize "Not in this plan" review (item 1): open the
@@ -640,11 +658,22 @@ async function verifyChurnValue(sourceId, btn) {
   const src = (App.state.offers || []).find(o => o && o.id === sourceId);
   if (!src) return;
   if (App._churnVerifyInFlight) return;   // ignore double-taps while one is running
-  // No usable source URL or no Worker configured → modal fallback.
-  const hasUrl = src.docUrl && /^https?:\/\//i.test(src.docUrl);
-  if (!hasUrl || !Sync.getDocWorkerUrl()) {
-    toast(hasUrl ? 'No Worker configured — opening the editor to verify' : 'No source URL — opening the editor to verify');
-    recheckChurnCandidate(sourceId);
+  // Resolve a usable fetch URL. A stored URL missing ONLY its scheme is still the
+  // URL the owner provided — normalize it (https://) so one-tap verify works
+  // instead of wrongly falling back as "no URL" (item 5a bug: a scheme-less
+  // stored URL used to hit the modal with a confusing generic bubble). Anything
+  // without a dotted host is treated as no URL → modal with the specific reason
+  // + the DoC URL field flash-highlighted so the owner knows to paste the link.
+  const rawUrl = String(src.docUrl || '').trim();
+  let fetchUrl = '';
+  if (/^https?:\/\//i.test(rawUrl)) fetchUrl = rawUrl;
+  else if (/^[^\s/]+\.[^\s/]+/.test(rawUrl)) fetchUrl = 'https://' + rawUrl.replace(/^\/+/, '');
+  if (!fetchUrl) {
+    recheckChurnCandidate(sourceId, { reason: 'no-url', focusField: 'f-doc' });
+    return;
+  }
+  if (!Sync.getDocWorkerUrl()) {
+    recheckChurnCandidate(sourceId, { reason: 'no-worker' });
     return;
   }
 
@@ -655,7 +684,7 @@ async function verifyChurnValue(sourceId, btn) {
 
   let result;
   try {
-    result = await docWorkerFetchParse(src.docUrl);
+    result = await docWorkerFetchParse(fetchUrl);
   } catch (e) {
     if (typeof logError === 'function') logError(ErrCode.SYNC_PULL, e, 'verifyChurnValue');
     App._churnVerifyInFlight = null;
@@ -672,8 +701,7 @@ async function verifyChurnValue(sourceId, btn) {
   const tieredContext = _docHasTiers(result) || (Array.isArray(src.tiers) && src.tiers.length >= 2);
   if (tieredContext) {
     restoreBtn();
-    toast('Tiered offer — opening the editor to choose a tier');
-    recheckChurnCandidate(sourceId);
+    recheckChurnCandidate(sourceId, { reason: 'tiered' });
     return;
   }
 
@@ -682,10 +710,7 @@ async function verifyChurnValue(sourceId, btn) {
   const structural = churnVerifyStructuralChange(result, src);
   if (structural) {
     restoreBtn();
-    toast(structural === 'direct-deposit'
-      ? 'Direct-deposit terms changed — opening the editor to update'
-      : 'New requirements found — opening the editor to update');
-    recheckChurnCandidate(sourceId);
+    recheckChurnCandidate(sourceId, { reason: structural === 'direct-deposit' ? 'structural-dd' : 'structural-requirements' });
     return;
   }
 

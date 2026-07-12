@@ -236,6 +236,18 @@ function optimizerOfferName(topPlan, offerId) {
   return op === 'create' ? `Re-run: ${base}` : base;
 }
 
+// Bank name ONLY, for the compact proposed-plan sequence rows (owner-directed
+// 2026-07-11): those rows carry the op badge ("New · churn" / "Reschedule") and
+// dates, so the full "Bank · Offer name" is redundant there — the modal and
+// everywhere else keep the full label via optimizerOfferName. Resolves a churn
+// candidate id back to its source offer, same as optimizerOfferName.
+function optimizerOfferBankName(topPlan, offerId) {
+  const cand = (topPlan.candidates || []).find(c => c.id === offerId);
+  const srcId = cand ? cand.sourceOfferId : offerId;
+  const src = (App.state.offers || []).find(o => o.id === srcId);
+  return src ? (src.bankName || 'offer') : (offerId || 'offer');
+}
+
 // Resolve a candidate-review row's offerId to a display name. A review row can
 // carry EITHER a real source id (commitment-linked / churn-snoozed / needs-date)
 // OR the synthetic churn_<sourceId> id of a candidate whose date window was
@@ -346,7 +358,9 @@ function renderOptSequenceRow(focused, topPlan, id) {
   const s = (focused.schedule && focused.schedule[id]) || {};
   const badges = (focused.badges && focused.badges[id]) || [];
   const isCreate = s.op === 'create';
-  const name = optimizerOfferName(topPlan, id);
+  // Bank name only on the sequence row (item 2) — the op badge + dates already
+  // give the rest; the full "Bank · Offer name" stays in the modal/elsewhere.
+  const name = optimizerOfferBankName(topPlan, id);
   const dds = (s.directDeposits || []).filter(d => d && d.plannedDate);
   const derived = s.derived || {};
   // Churn rows carry an unverified stored value — offer a one-tap Worker verify
@@ -370,7 +384,7 @@ function renderOptSequenceRow(focused, topPlan, id) {
         ${s.plannedSignupDate ? `<span>Sign up <strong>${formatDateMedium(parseDate(s.plannedSignupDate))}</strong></span>` : ''}
         ${s.optionalPlannedFundingDate ? `<span>Fund <strong>${formatDateMedium(parseDate(s.optionalPlannedFundingDate))}</strong></span>` : ''}
         ${dds.length ? `<span>${dds.length} DD${dds.length === 1 ? '' : 's'} from <strong>${formatDateMedium(parseDate(dds[0].plannedDate))}</strong></span>` : ''}
-        ${derived.withdrawalEligible ? `<span>Free <strong>${formatDateMedium(parseDate(derived.withdrawalEligible))}</strong></span>` : ''}
+        ${derived.withdrawalEligible ? `<span>Capital back <strong>${formatDateMedium(parseDate(derived.withdrawalEligible))}</strong></span>` : ''}
       </div>
       ${shownBadges.length || (hasUnverified && srcId) || verifiedToday ? `<div class="opt-seq-badges">
         ${shownBadges.map(renderOptBadge).join('')}
@@ -378,6 +392,7 @@ function renderOptSequenceRow(focused, topPlan, id) {
           ? `<span class="opt-badge ok" title="Re-checked against the source today — the stored value is current">Verified today</span>`
           : (hasUnverified && srcId ? `<button class="opt-recheck" data-action="verify-churn-value" data-id="${escapeAttr(srcId)}">Verify value</button>` : '')}
       </div>` : ''}
+      ${s.bonus ? `<span class="opt-seq-bonus" title="Sign-up bonus">${formatCurrency(s.bonus)}</span>` : ''}
     </div>`;
 }
 
@@ -450,6 +465,26 @@ function formatChampionTrade(trade, axes) {
   return parts.join(' · ');
 }
 
+// Format a surviving alternative's PURE edgeVsHeadline (from the engine's
+// dominance filter) into a compact one-line "why it survived next to the best
+// plan": the axis(es) on which it beats the headline, with deltas. The 10a
+// Pareto filter guarantees a displayed alternative beats the headline on ≥1 of
+// these axes, and this reads the SAME comparison, so the label can never
+// disagree with the dominance that kept the card. Axis names match the card
+// cells (blended APY / low cash / gross / capital back); full comma dollars per
+// the owner rule. Order mirrors the owner's example (APY, cushion, …). Empty
+// only in the pathological no-edge case (e.g. an invalid headline) → no line.
+function formatAltEdge(edge) {
+  if (!edge) return '';
+  const parts = [];
+  if (edge.apyDelta > 0) parts.push(`+${formatPercent(edge.apyDelta)} APY`);
+  if (edge.lowCashDelta > 0) parts.push(`+${formatCurrency(edge.lowCashDelta)} low cash`);
+  if (edge.grossDelta > 0) parts.push(`+${formatCurrency(edge.grossDelta)} gross`);
+  if (edge.daysSooner > 0) parts.push(`capital back ${edge.daysSooner} day${edge.daysSooner === 1 ? '' : 's'} sooner`);
+  if (!parts.length) return '';
+  return parts.join(' · ') + ' vs best';
+}
+
 // One comparison-row scenario card (gross · offers · low cash · APY · capital
 // back). When labels are present it renders as a champion: the axis label(s)
 // sit in a full-width badge above the metrics row, and a secondary champion's
@@ -465,10 +500,14 @@ function renderOptScenarioCard(p, listIdx, active, labels, trade, axes) {
     ? `<span class="opt-alt-badge">${labels.map(escapeHtml).join(' · ')}</span>`
     : '';
   const tradeLine = formatChampionTrade(trade, axes);
+  // Non-champion ("Other feasible plans") cards get the edge annotation (item 4)
+  // — why this plan survived next to the best plan. Champions keep their labels.
+  const edgeLine = isChampion ? '' : formatAltEdge(p.edgeVsHeadline);
   return `
     <button class="opt-alt${isChampion ? ' champion' : ''}${active ? ' active' : ''}${p.valid ? '' : ' infeasible'}" data-action="select-optimizer-alt" data-alt-index="${listIdx}">
       ${badge}
       ${tradeLine ? `<span class="opt-alt-trade">${escapeHtml(tradeLine)}</span>` : ''}
+      ${edgeLine ? `<span class="opt-alt-edge">${escapeHtml(edgeLine)}</span>` : ''}
       <span class="opt-alt-cell opt-alt-bonus">
         <span class="opt-alt-val">${formatCurrency(obj.grossBonus || 0)}</span>
         <span class="opt-alt-lbl">gross${p.valid ? '' : ' · infeasible'}</span>

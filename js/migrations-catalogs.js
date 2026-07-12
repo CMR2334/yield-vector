@@ -153,14 +153,22 @@ const OFFER_COLOR_PALETTE = [
   { name: 'violet',  hex: '#8b5cf6', label: 'Violet' },
   { name: 'brown',   hex: '#3f3f46', label: 'Graphite' },
   { name: 'slate',   hex: '#475569', label: 'Slate' },
-  // R69: 4 more well-separated hues (owner: "more colors"). No brown, no
-  // near-duplicates — green fills the lime→emerald gap; purple/fuchsia/pink
-  // fill the wide violet→rose void. Keys are new+stable (note 'pink' was
-  // already taken by Cobalt, so hot-pink uses the 'magenta' key).
+  // R69: 4 more well-separated hues (owner: "more colors"). Green fills the
+  // lime→emerald gap; the last two keys ('fuchsia', 'magenta') originally held a
+  // bright fuchsia + a hot-pink filling the violet→rose void.
+  // R86 (owner-directed 2026-07-11): the owner asked to drop "the pink" (the
+  // swatch labeled Pink = key 'magenta') and the darker/right-most of the purple
+  // options (the right-most purple-family swatch in picker order = key
+  // 'fuchsia'). Per the back-compat rule above, the KEYS stay stable — only hex
+  // + label are retuned — so a stored color:'magenta' now re-skins to Burgundy
+  // and color:'fuchsia' to Pine automatically. The two replacements are dark,
+  // well-separated jewel tones (a deep wine-red + a dark pine-green): distinct
+  // from each other, from the 14 other swatches, and from the deadline-red
+  // family (#e87171) so an offer's identity never reads as "danger".
   { name: 'green',   hex: '#16a34a', label: 'Green' },
   { name: 'purple',  hex: '#9333ea', label: 'Purple' },
-  { name: 'fuchsia', hex: '#c026d3', label: 'Fuchsia' },
-  { name: 'magenta', hex: '#ec4899', label: 'Pink' }
+  { name: 'fuchsia', hex: '#14532d', label: 'Pine' },
+  { name: 'magenta', hex: '#7b243c', label: 'Burgundy' }
 ];
 const OFFER_COLOR_BY_NAME = Object.fromEntries(OFFER_COLOR_PALETTE.map(c => [c.name, c.hex]));
 

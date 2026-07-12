@@ -661,6 +661,10 @@ function scheduleForOffer(offer, op, cfg) {
     op,
     plannedSignupDate: offer.plannedSignupDate || '',
     optionalPlannedFundingDate: offer.optionalPlannedFundingDate || '',
+    // Per-offer sign-up bonus the optimizer actually scored for this offer (the
+    // materialized candidate's value — for a churn re-run this is the synthesized
+    // offer, not the stored source). Rendered on the sequence card (lower-right).
+    bonus: Math.round(Number(offer.signupBonusAmount) || 0),
     directDeposits: (offer.directDeposits || []).map(dd => ({ id: dd.id || '', plannedDate: dd.plannedDate || '' }))
       .sort((a, b) => byteCompare(a.id, b.id)),
     derived: {
@@ -1191,6 +1195,30 @@ function altWeaklyDominates(A, B) {
     && byteCompare(altMetricBack(A), altMetricBack(B)) <= 0;
 }
 
+// PURE edge annotation (ISSUE 4, owner-directed 2026-07-11): by how much does a
+// surviving alternative B beat the HEADLINE (alternatives[0]) on each axis?
+// Derived from the SAME altMetric* comparison + APY epsilon the dominance filter
+// uses, so the rendered "why this survived" can never disagree with the math that
+// kept it. Positive = B beats the headline on that axis; a sub-epsilon APY gain
+// or a non-winning axis is 0 (renderer omits it). `daysSooner` counts only when
+// BOTH plans carry a real capital-back date (never the 9999 sentinel). The
+// renderer (formatAltEdge) turns this into the one-line label. Deterministic:
+// integer/ISO metric differences only.
+function altEdgeVsHeadline(headline, B) {
+  if (!headline || !B || headline === B) return null;
+  const grossDelta = altMetricGross(B) - altMetricGross(headline);
+  const lowCashDelta = altMetricLowCash(B) - altMetricLowCash(headline);
+  const apyRaw = altMetricApy(B) - altMetricApy(headline);
+  const apyDelta = (Number.isFinite(apyRaw) && apyRaw > ALT_DOMINANCE_APY_EPSILON) ? apyRaw : 0;
+  const hBack = altMetricBack(headline), bBack = altMetricBack(B);
+  let daysSooner = 0;
+  if (bBack !== '9999-12-31' && hBack !== '9999-12-31' && byteCompare(bBack, hBack) < 0) {
+    const bd = parseDate(bBack), hd = parseDate(hBack);
+    daysSooner = (bd && hd) ? Math.max(0, daysBetween(bd, hd)) : 0;
+  }
+  return { grossDelta, lowCashDelta, apyDelta, daysSooner };
+}
+
 // A is strictly better than B on at least one axis (the "strictly worse on at
 // least one", read from the dominator's side).
 function altStrictlyBetterSomewhere(A, B) {
@@ -1247,6 +1275,14 @@ function filterDominatedAlternatives(alternatives, champions) {
     if (hidden) continue;
     out.push(B);
     kept.push(B);
+  }
+  // ISSUE 4: annotate every surviving non-headline plan with the axes/deltas on
+  // which it beats the headline (alts[0]) — the renderer shows this on the
+  // unlabeled "Other feasible plans" cards. Computed AFTER survival so a hidden
+  // plan is never annotated; uses alts[0] as the "best"/headline reference.
+  const headline = alts[0];
+  for (const p of out) {
+    if (p && p !== headline) p.edgeVsHeadline = altEdgeVsHeadline(headline, p);
   }
   return out;
 }
@@ -2125,6 +2161,49 @@ function testOptimizerPins() {
     const survivors = filterDominatedAlternatives([invHead, vInvalid, vValid], [{ plan: invHead }]).map(p => p.canonicalVector);
     check('dominance: an infeasible plan never hides a displayed feasible trade-off',
       survivors.includes('v_val'), survivors.join(','));
+
+    // ── Edge annotation for surviving alternatives (ISSUE 4, owner-directed
+    // 2026-07-11) ───────────────────────────────────────────────────────────────
+    // Every surviving non-headline plan must carry an edgeVsHeadline whose
+    // POSITIVE axes are EXACTLY the axes on which it strictly beats the headline
+    // (same altMetric* comparison the filter uses), and it must be non-empty
+    // (survival guarantees ≥1 edge). Reuse the owner-numbers survivors: headline
+    // pA=v_2150 (gross 2150, low 11945, apy 0.145), survivors v_1950 / v_1550.
+    const edgeAxes = (p) => {
+      const e = (p && p.edgeVsHeadline) || {};
+      const s = [];
+      if (e.apyDelta > 0) s.push('apy');
+      if (e.lowCashDelta > 0) s.push('lowCash');
+      if (e.grossDelta > 0) s.push('gross');
+      if (e.daysSooner > 0) s.push('sooner');
+      return s.sort();
+    };
+    const strictAxes = (p) => {
+      const s = [];
+      if (altMetricApy(p) > altMetricApy(pA) + ALT_DOMINANCE_APY_EPSILON) s.push('apy');
+      if (altMetricLowCash(p) > altMetricLowCash(pA)) s.push('lowCash');
+      if (altMetricGross(p) > altMetricGross(pA)) s.push('gross');
+      if (altMetricBack(p) !== '9999-12-31' && altMetricBack(pA) !== '9999-12-31'
+        && byteCompare(altMetricBack(p), altMetricBack(pA)) < 0) s.push('sooner');
+      return s.sort();
+    };
+    const nonHead = kept.filter(p => p.canonicalVector !== 'v_2150');
+    check('edge: every survivor edge matches its strict-beat axes vs headline (never empty)',
+      nonHead.every(p => {
+        const a = edgeAxes(p).join(','), b = strictAxes(p).join(',');
+        return a === b && a.length > 0;
+      }),
+      nonHead.map(p => p.canonicalVector + '=' + edgeAxes(p).join('+')).join(' | '));
+    // Deltas are the exact metric differences (low-cash cushion vs the headline).
+    check('edge: survivor deltas equal the exact metric differences',
+      pB.edgeVsHeadline.lowCashDelta === (32945 - 11945)
+      && pE.edgeVsHeadline.lowCashDelta === (36945 - 11945)
+      && pB.edgeVsHeadline.grossDelta === (1950 - 2150),
+      `${pB.edgeVsHeadline.lowCashDelta}/${pE.edgeVsHeadline.lowCashDelta}/${pB.edgeVsHeadline.grossDelta}`);
+    // Determinism: the annotation is byte-stable across repeated runs.
+    const edgeSig = (alts) => filterDominatedAlternatives(alts, [{ plan: pA }])
+      .map(p => p.canonicalVector + ':' + edgeAxes(p).join('+')).join(',');
+    check('edge: annotation is deterministic across runs', edgeSig(ownerAlts) === edgeSig(ownerAlts), edgeSig(ownerAlts));
   }
 
   const pass = results.filter(r => r.ok).length;

@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.10a",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.10a",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.10a",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.10a",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.10a",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.10a",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.10a",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.10a",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.10a",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.10a",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.10a",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.10a",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.10a",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.10a",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.10a",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.10a",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.10a",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.10a",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.10a"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.11a",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.11a",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.11a",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.11a",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.11a",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.11a",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.11a",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.11a",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.11a",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.11a",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.11a",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.11a",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.11a",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.11a",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.11a",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.11a",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.11a",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.11a",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.11a"
   }
 }
 </script>
@@ -82,6 +82,11 @@
      every red in the UI reads as the same softer shade. */
   --danger: #e87171;
   --danger-soft: #fee5e5;
+  /* Muted maroon for de-emphasized negative text (e.g. the Optimize "Not in
+     this plan" reasons). Deliberately NOT the vibrant --danger #e87171 family —
+     it reads as a quiet "didn't make the cut", not an alarm. AA-legible on the
+     light card background. */
+  --danger-deep: #8b3a46;
   --success: #10b981;
   --success-soft: #d6f5e7;
 
@@ -2553,14 +2558,18 @@ table.data-table {
 .opt-valid.bad { color: #c95555; background: var(--danger-soft); }
 .opt-invalid-note { font-size: 13px; color: #c95555; margin-bottom: var(--space-3); }
 .opt-sequence { display: flex; flex-direction: column; gap: var(--space-2); }
-.opt-seq-row { padding: var(--space-3); background: var(--bg); border-radius: var(--radius-md); }
+.opt-seq-row { padding: var(--space-3); background: var(--bg); border-radius: var(--radius-md); position: relative; }
 .opt-seq-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: 4px; }
 .opt-seq-name { font-size: 14px; font-weight: 600; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+/* Sign-up bonus pinned to the lower-right corner (item 3). Full comma dollars,
+   green like every other bonus figure. The dates/badges rows reserve a
+   right-edge gutter so wrapped content can never slide under it. */
+.opt-seq-bonus { position: absolute; right: var(--space-3); bottom: var(--space-3); font-size: 13px; font-weight: 700; color: var(--success); font-feature-settings: 'tnum' 1; white-space: nowrap; letter-spacing: -0.01em; }
 .opt-op-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-strong); white-space: nowrap; flex-shrink: 0; }
 .opt-op-badge.create { background: var(--success-soft); color: #0f8a5f; }
-.opt-seq-dates { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-secondary); }
+.opt-seq-dates { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-secondary); padding-right: 68px; }
 .opt-seq-dates strong { color: var(--text); font-weight: 600; font-feature-settings: 'tnum' 1; }
-.opt-seq-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.opt-seq-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; padding-right: 68px; }
 .opt-badge { font-size: 11px; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--card-soft); border: 1px solid var(--border); color: var(--text-secondary); }
 .opt-badge.warn { background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); color: #92400e; }
 .opt-badge.ok { background: var(--success-soft); border-color: rgba(16, 185, 129, 0.3); color: #047857; }
@@ -2587,6 +2596,11 @@ table.data-table {
 .opt-alts-title-sub { margin-top: var(--space-2); }
 .opt-alt-badge { flex: 0 0 100%; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); margin-bottom: 2px; }
 .opt-alt-trade { flex: 0 0 100%; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; letter-spacing: 0.01em; font-feature-settings: 'tnum' 1; }
+/* "Other feasible plans" edge annotation (item 4): why this card survived next
+   to the best plan — the axis(es) where it beats the headline. Full-width line
+   above the metric cells, mirroring .opt-alt-trade; a touch of the success tone
+   to read as an advantage, not a warning. */
+.opt-alt-edge { flex: 0 0 100%; font-size: 11px; font-weight: 600; color: #0f8a5f; margin-bottom: 4px; letter-spacing: 0.01em; font-feature-settings: 'tnum' 1; text-align: left; }
 .opt-plan-trade { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin: 2px 0; letter-spacing: 0.01em; font-feature-settings: 'tnum' 1; }
 .opt-alt.champion { border-color: var(--accent-mid); }
 .opt-alt.champion.active { border-color: var(--accent); }
@@ -2600,7 +2614,7 @@ button.opt-review-row.tappable { width: 100%; border: 1px solid transparent; fon
 button.opt-review-row.tappable:hover { border-color: var(--accent-mid); }
 button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 .opt-review-name { color: var(--text); font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
-.opt-review-reason { color: var(--text-tertiary); font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.opt-review-reason { color: var(--danger-deep); font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
 .opt-apply-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-soft); }
 .opt-apply-note { font-size: 12px; color: var(--text-tertiary); }
 .opt-applied { font-size: 14px; font-weight: 600; color: var(--success); }

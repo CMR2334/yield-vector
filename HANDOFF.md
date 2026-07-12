@@ -17,7 +17,65 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-10, Round 85)
+## Current state (as of 2026-07-11, Round 86)
+
+- **R86 (v2026.07.11a — owner-directed phone-review batch: sequence-card copy/identity/bonus + alternative edge annotations + verify-value fallback clarity + two color changes):**
+  Six items from the owner's phone review. **ITEM 1 — sequence-card copy (`js/render-main-views.js` `renderOptSequenceRow`):**
+  the proposed-plan offer rows read "Free <date>"; VERIFIED that `derived.withdrawalEligible` = `withdrawalEligibleDate(offer)`
+  = for DD offers the LATEST round-trip return across ALL DDs, for held/other offers the hold release (bizDayISO(anchor +
+  daysFundsMustRemain)) — i.e. the full capital release for THAT offer. Relabeled **"Free <date>" → "Capital back <date>"**
+  to match the plan-level metric. **ITEM 2 — sequence-card identity (same fn; new PURE `optimizerOfferBankName`):** the rows
+  now show ONLY the bank name (the op badge "New · churn"/"Reschedule" + dates carry the rest); the full "Bank · Offer name"
+  stays in the modal + the "Not in this plan" review rows (`optimizerOfferName`/`optReviewName` untouched). **ITEM 3 —
+  sequence-card bonus (`js/optimizer-engine.js` `scheduleForOffer` now emits per-offer `bonus = Math.round(signupBonusAmount)`
+  — the MATERIALIZED candidate's value, so a churn re-run shows its synthesized bonus, not the stored source; renderer +
+  new `.opt-seq-bonus` CSS):** the offer's bonus renders in the LOWER-RIGHT corner (absolute, full comma dollars, green;
+  `.opt-seq-dates`/`.opt-seq-badges` reserve a 68px right-gutter so wrapped content never slides under it). **ITEM 4 —
+  edge annotations on "Other feasible plans" (`js/optimizer-engine.js` new PURE `altEdgeVsHeadline` wired into
+  `filterDominatedAlternatives`; renderer new `formatAltEdge` + `.opt-alt-edge` CSS):** every surviving non-champion card
+  renders a one-line WHY — the axis(es) where it beats the headline (alts[0]/"best"), with deltas, e.g. "+$8,000 low cash
+  vs best" / "+7.9% APY · capital back 318 days sooner vs best" / "+8.8% APY · +$20,000 low cash · capital back 367 days
+  sooner vs best" (full comma dollars; card axis names — APY/low cash/gross/capital back; owner example order). DERIVED FROM
+  THE SAME altMetric* comparison + APY epsilon the 10a Pareto filter uses (computed AFTER survival, vs alts[0]), so the
+  label can NEVER disagree with the dominance that kept the card; the filter guarantees a displayed alt beats the headline
+  on ≥1 axis so it's non-empty (empty only in the pathological invalid-headline case → no line). Champions keep their
+  labels (edge suppressed when `isChampion`). Deterministic (integer/ISO metric diffs). **ITEM 5 — verify-value fallback
+  clarity (`js/events-actions-data.js` `verifyChurnValue` + `recheckChurnCandidate`):** ROOT CAUSE (reproduced READ-ONLY on
+  the preview origin's stale state): the genuine churnable US Bank source has NO stored docUrl AND no DoC Worker is
+  configured on that origin → a "Verify value" tap fell back to the modal with a GENERIC "use Import from URL … then Save"
+  bubble that never said why. **FIX (a):** a stored URL missing only its scheme is now normalized (https://) so one-tap
+  verify works instead of wrongly falling back as "no URL" (the 5a bug — a scheme-less stored URL used to hit the modal).
+  **FIX (b):** every fallback now states the SPECIFIC reason via `CHURN_RECHECK_REASON_COPY` (no-url / no-worker / tiered /
+  structural-dd / structural-requirements), and when the reason is a missing URL the modal opens with the **DoC URL field
+  (`#f-doc`) scrolled-to + flash-highlighted** (reuses the 10a `focusOfferField`/`yv-field-flash` idiom, auto-expands
+  Advanced). **ITEM 6a — reason-text color (`index.html`):** the "Not in this plan" reason text is now a muted maroon via a
+  new token **`--danger-deep: #8b3a46`** (deliberately NOT the vibrant `--danger #e87171` family; reads as "didn't make the
+  cut", AA-legible on the light card). **ITEM 6b — offer palette reskin (`js/migrations-catalogs.js` OFFER_COLOR_PALETTE):**
+  the owner wanted rid of "the pink" (VERIFIED = swatch labeled Pink = key `magenta` #ec4899) and the darker/right-most
+  purple (VERIFIED against the rendered picker order = key `fuchsia` #c026d3, the right-most purple-family swatch before
+  Pink). KEYS stay stable (stored values, back-compat) — only hex+label retuned so existing offers re-skin automatically:
+  **`magenta` → #7b243c "Burgundy"** (deep wine) and **`fuchsia` → #14532d "Pine"** (dark forest) — two dark, well-separated
+  jewel tones, distinct from each other, from the 14 other swatches, and from the deadline-red family so identity never
+  reads as "danger" (comment block + labels updated). **Pins +3 → optimizer 61/61:** ITEM 4 — every survivor's edge axes
+  EXACTLY equal its strict-beat axes vs the headline (never empty), deltas equal the exact metric differences, annotation
+  deterministic across runs. **Full battery green:** node --check all 19 modules + inline entry + sw.js; **fidelity 67/67,
+  parser 20/20, p2b PASS, dd-matrix ALL PASS, feasibility 5/5, optimizer 61/61 (~3.1s)**. **APP_VERSION → 2026.07.11a**
+  (runtime-status.js + sw.js + 19 import-map `?v=`; sw precache derives `yv-precache-2026.07.11a`; **0 strays** of 10a).
+  **Preview E2E** (port 8765, owner's real localStorage STRICTLY READ-ONLY — App.save NEVER called, stored bytes
+  4967→4967 + backup 5301 identical; a transient in-memory `bonus_received_date` set on the US Bank offer to force a
+  scheduled churn candidate was restored to null): drove the REAL render pipeline — sequence rows showed **bank-name only**,
+  **"Capital back <date>"**, and the **bonus lower-right** ($2,500/$1,500/$1,000/$600/$400 + the churn candidate's $450);
+  the "Other feasible plans" cards each rendered a green edge line matching the dominance math (headline low cash $22,000 vs
+  a card's $30,000 → **"+$8,000 low cash vs best"**); tapping **Verify value** on the (no-URL) US Bank churn candidate
+  toasted **"No source URL stored — paste the DoC link below, then Save to enable one-tap verify"**, auto-expanded Advanced,
+  and scrolled-to + flash-highlighted the **DoC URL field** (`yv-field-flash` box-shadow ring confirmed); the review-row
+  reason rendered **`rgb(139,58,70)` = #8b3a46**; the color picker showed **16 swatches** with `magenta`→#7b243c "Burgundy"
+  + `fuchsia`→#14532d "Pine" and **zero** #ec4899/#c026d3; **380px zero horizontal overflow** (bonus never overlaps the
+  wrapped dates; edge lines unclipped); **zero console errors**. **REVIEW-AFTER — <RUNG> (recorded below).** Owner-owned
+  dirty paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted `.codex/hooks.json`) untouched — explicit-path
+  `git add` only. **Remaining (owner gate): device-check v2026.07.11a.** **Open:** the `no-worker` fallback can't be
+  end-to-end exercised on this origin (no Worker configured) — the branch decision is unit-proven but the successful
+  headless re-fetch of a scheme-normalized URL is only reachable once a Worker is set.
 
 - **R85 (v2026.07.10a — owner-directed fix batch: PARETO-DOMINANCE alternatives filter + NEVER-RUN-PROSPECT churn fix + reason specificity + tap-through focus):**
   Two owner issues, both grounded in phone screenshots. **ISSUE 1 — dominated plans cluttered "Other feasible
