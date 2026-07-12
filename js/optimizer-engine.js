@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, withdrawalEligibleDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, withdrawalEligibleDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -40,6 +40,7 @@ const TEMPLATE_TERMS_KEYS = [
   'early_termination_fee', 'etf_window_days',
   'bonus_post_min_days', 'bonus_post_max_days',
   'churnable', 'churn_wait_months', 'churn_anchor',
+  'requirementLogic',
   'color', 'docUrl'
 ];
 
@@ -162,6 +163,11 @@ function synthesizeChurnCandidate(source) {
     churn_wait_months: source.churn_wait_months == null ? null : source.churn_wait_months,
     churn_anchor: source.churn_anchor || 'bonus_received',
     churn_notes: '',
+    // EITHER/OR: requirementLogic (a TERM) is copied from source by the
+    // TEMPLATE_TERMS_KEYS loop below; plannedPath (personal) is deliberately
+    // reset so a churn re-run of an either/or offer re-prompts for the path.
+    requirementLogic: 'all',
+    plannedPath: null,
     color: source.color || '',
     docUrl: source.docUrl || '',
     plannedSignupDate: '',
@@ -477,7 +483,10 @@ function buildCandidateRecords(ctx) {
 }
 
 function validateDdCadence(offer, constraints, ctx) {
-  if (offer.offerType !== 'direct-deposit' && offer.offerType !== 'held-and-dd') return;
+  // EITHER/OR: only validate DD cadence when the DD path is active. For
+  // logic='all' `ddActive` reduces to the DD-family test, so behavior is
+  // unchanged; when the debit path is chosen, DD cadence is not a constraint.
+  if (!pathState(offer).ddActive) return;
   const req = offer.ddRequirement || {};
   const dds = (offer.directDeposits || []).filter(dd => dd && dd.plannedDate);
   const signup = parseDate(offer.plannedSignupDate);
@@ -542,6 +551,14 @@ function validateDdCadence(offer, constraints, ctx) {
 
 function validateOfferQualification(offer, ctx) {
   const constraints = [];
+  const ps = pathState(offer);
+  // EITHER/OR: an offer that can be met either way but has no chosen path is
+  // NOT silently modeled — it always binds with a 'needs-path' constraint (never
+  // valid) and surfaces a specific review row (P2-3: the optimizer never picks
+  // the path). No-op for logic='all' (needsPath is false).
+  if (ps.needsPath) {
+    constraints.push({ offerId: offer.id, kind: 'needs-path', dateISO: '' });
+  }
   if (!offer.plannedSignupDate || offer.plannedSignupDate < ctx.todayISO) {
     constraints.push({ offerId: offer.id, kind: 'schedule-before-today', dateISO: offer.plannedSignupDate || '' });
   }
@@ -553,7 +570,9 @@ function validateOfferQualification(offer, ctx) {
     const funding = bizDayISO(offer.optionalPlannedFundingDate || offer.plannedSignupDate);
     if (deadline && funding && funding > deadline) constraints.push({ offerId: offer.id, kind: 'deposit-deadline', dateISO: deadline });
   }
-  if (offer.debitRequirement && offer.debitRequirement.required) {
+  // EITHER/OR: the debit deadline binds only when the debit path is active
+  // (logic='all' → debitActive === debitRequirement.required, unchanged).
+  if (ps.debitActive) {
     const dd = debitDeadlineISO(offer);
     if (!dd || dd < ctx.todayISO) constraints.push({ offerId: offer.id, kind: 'debit-deadline', dateISO: dd || '' });
   }
@@ -574,7 +593,8 @@ function validateOfferQualification(offer, ctx) {
 // today` are intentionally excluded: a draft/incomplete offer is surfaced by the
 // Offers "needs info" chip + draft banner, not this timing review.
 const VALIDATOR_REVIEW_KINDS = new Set([
-  'dd-post-late', 'dd-window', 'deposit-deadline', 'debit-deadline', 'requirement-deadline', 'expiry'
+  'dd-post-late', 'dd-window', 'deposit-deadline', 'debit-deadline', 'requirement-deadline', 'expiry',
+  'needs-path'
 ]);
 
 // PURE. For each candidate record NOT in the FINAL plan, decide whether it is
@@ -614,15 +634,19 @@ function captureValidatorExclusions(ctx, records, plan) {
 function horizonDatesForOffer(offer, ctx) {
   const dates = [];
   const push = iso => { if (iso && parseDate(iso)) dates.push(iso); };
-  push(lockStartDate(offer));
-  push(withdrawalEligibleDate(offer, ctx.ddTransfer));
+  // EITHER/OR: only the active path's dates extend the horizon (else a debit-path
+  // candidate is horizon-extended/exceeded on inactive DDs — Codex P1). For
+  // logic='all' `ddActive`/`debitActive` reduce to today's tests, so unchanged.
+  const ps = pathState(offer);
+  push(lockStartDate(offer));                          // already '' for a debit-path DD offer
+  push(withdrawalEligibleDate(offer, ctx.ddTransfer)); // idem
   push(depositDeadline(offer));
-  push(debitDeadlineISO(offer));
-  push(ddWindowEndDate(offer, ctx.ddTransfer));
+  if (ps.debitActive) push(debitDeadlineISO(offer));
+  if (ps.ddActive) push(ddWindowEndDate(offer, ctx.ddTransfer));
   const win = expectedBonusWindow(offer, ctx.todayDate);
   if (win) push(win.endISO);
   for (const row of offer.requirements || []) push(localRequirementDeadlineISO(offer, row));
-  for (const dd of offer.directDeposits || []) {
+  if (ps.ddActive) for (const dd of offer.directDeposits || []) {
     const rt = ddRoundTrip(dd, ctx.ddTransfer);
     if (rt) push(isoDate(rt.returnDate));
     push(directDepositEffectiveDate(dd));
@@ -665,7 +689,10 @@ function scheduleForOffer(offer, op, cfg) {
     // materialized candidate's value — for a churn re-run this is the synthesized
     // offer, not the stored source). Rendered on the sequence card (lower-right).
     bonus: Math.round(Number(offer.signupBonusAmount) || 0),
-    directDeposits: (offer.directDeposits || []).map(dd => ({ id: dd.id || '', plannedDate: dd.plannedDate || '' }))
+    // EITHER/OR: a debit-path offer schedules no DDs (its stored rows are kept
+    // for reference but are not part of the plan identity — canonical vector).
+    directDeposits: (pathState(offer).ddActive ? (offer.directDeposits || []) : [])
+      .map(dd => ({ id: dd.id || '', plannedDate: dd.plannedDate || '' }))
       .sort((a, b) => byteCompare(a.id, b.id)),
     derived: {
       lockStart: lockStartDate(offer) || '',
@@ -2100,6 +2127,62 @@ function testOptimizerPins() {
       cplan.valid && cplan.includedIds.includes('off_big1') && !cplan.includedIds.includes('off_big2')
       && !(cplan.candidateReview || []).some(r => r.offerId === 'off_big2'),
       JSON.stringify(cplan.includedIds));
+  }
+  {
+    // ── EITHER/OR qualification paths (2026-07-11, owner-directed) ─────────────
+    // An offer met by EITHER a direct-deposit OR a card-spend (debit) path, via
+    // requirementLogic:'any' + plannedPath. The capital model + qualification
+    // follow ONLY the chosen path; an UNCHOSEN path is a needs-path review row,
+    // never a silent model (P2-3: the optimizer never picks the path).
+    const eoBase = {
+      id: 'off_eo', offerType: 'direct-deposit', signupBonusAmount: 600,
+      requiredFundingAmount: 5000, daysFundsMustRemain: null,
+      ddRequirement: { mode: 'count', count: 1 },
+      directDeposits: [{ id: 'dd1', plannedDate: '2026-07-20', amount: 5000 }],
+      debitRequirement: { required: true, count: 3, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirementLogic: 'any', offerExpirationDate: '2026-12-31'
+    };
+    // (1) DD path chosen → the DDs are modeled + validated and the offer is
+    // included in a feasible plan (schedule carries its DD leg).
+    const ddPlan = optimizePlanner(_pinState({
+      offers: [_pinOffer(Object.assign({}, eoBase, { plannedPath: 'dd' }))],
+      candidateIds: ['off_eo']
+    }));
+    check('either/or: dd path modeled + validated (DDs scheduled, offer included)',
+      ddPlan.valid && ddPlan.includedIds.includes('off_eo')
+      && ddPlan.schedule && ddPlan.schedule['off_eo']
+      && ddPlan.schedule['off_eo'].directDeposits.length === 1,
+      JSON.stringify(ddPlan.includedIds));
+    // (2) Debit path chosen → NO DD capital events: the schedule carries no DD
+    // legs and the curve never dips below full liquid capital; still valid.
+    const debitPlan = optimizePlanner(_pinState({
+      offers: [_pinOffer(Object.assign({}, eoBase, { plannedPath: 'debit' }))],
+      candidateIds: ['off_eo']
+    }));
+    check('either/or: debit path ties up no DD capital (no DD legs, full liquid capital)',
+      debitPlan.valid && debitPlan.includedIds.includes('off_eo')
+      && debitPlan.schedule['off_eo'].directDeposits.length === 0
+      && debitPlan.capitalCurveSummary.lowestAvailable === 50000,
+      `low=${debitPlan.capitalCurveSummary && debitPlan.capitalCurveSummary.lowestAvailable}`);
+    // (3) No path chosen (plannedPath:null) → EXCLUDED with a needs-path review
+    // row; a clean alternative wins (the optimizer never auto-picks the path).
+    const eoClean = _pinOffer({ id: 'off_ok', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30 });
+    const nullPlan = optimizePlanner(_pinState({
+      offers: [_pinOffer(Object.assign({}, eoBase, { plannedPath: null })), eoClean],
+      candidateIds: ['off_eo', 'off_ok']
+    }));
+    const eoRow = (nullPlan.candidateReview || []).find(r => r.offerId === 'off_eo');
+    check('either/or: unchosen path excluded with a needs-path review row (never auto-picked)',
+      nullPlan.valid && !nullPlan.includedIds.includes('off_eo')
+      && !!eoRow && eoRow.reason === 'needs-path',
+      eoRow ? eoRow.reason : 'no row');
+    // (4) Determinism: identical inputs → byte-identical either/or plan.
+    const runEo = () => optimizePlanner(_pinState({
+      offers: [_pinOffer(Object.assign({}, eoBase, { plannedPath: 'dd' }))],
+      candidateIds: ['off_eo']
+    }));
+    check('either/or: plan is deterministic across runs',
+      JSON.stringify(runEo().schedule) === JSON.stringify(runEo().schedule));
   }
   {
     // ── Pareto-dominance filter for "Other feasible plans" (ISSUE 1, owner-

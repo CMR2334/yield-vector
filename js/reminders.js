@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, formatCompactCurrency, formatCurrency, formatDateDisplay, isoDate, nextEventInstance, parseDate, relativeDays } from './date-format-core.js';
 import { ddWindowEndDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, pathState, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
 import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel, requirementSummary } from './requirements-templates.js';
 import { ErrCode, WORKING_SUB_STATUSES, logError } from './runtime-status.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
@@ -110,7 +110,9 @@ function buildReminderItems(state) {
     // dd-initiate (WORK) — one per planned DD with a future plannedDate.
     // Uses the persisted per-DD id (dd.id) minted at DD-row creation so
     // completion state stays glued to the right DD across insert/reorder.
-    if (committed && (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd')) {
+    // EITHER/OR: emit DD reminders only when the DD path is active (logic='all'
+    // DD-family → ddActive, unchanged; debit-path offer → no DD nag).
+    if (committed && pathState(o).ddActive) {
       for (const dep of (o.directDeposits || [])) {
         if (!dep || !dep.id || !dep.plannedDate) continue;
         const due = isoDateOnly(dep.plannedDate);
@@ -146,7 +148,9 @@ function buildReminderItems(state) {
     // Counts as debitRequirement.count work items. The deadline is now
     // DERIVED from sign-up + debitRequirement.withinDays (debitDeadlineISO),
     // so it emits nothing until a sign-up date AND a day-count both exist.
-    const debitDue = committed ? debitDeadlineISO(o) : '';
+    // EITHER/OR: emit the debit reminder only when the debit path is active
+    // (logic='all' → debitActive === debitRequirement.required, unchanged).
+    const debitDue = (committed && pathState(o).debitActive) ? debitDeadlineISO(o) : '';
     if (debitDue) {
       const due = isoDateOnly(debitDue);
       if (due) {

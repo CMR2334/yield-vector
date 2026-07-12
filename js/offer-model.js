@@ -46,6 +46,37 @@ function debitDeadlineISO(offer) {
   return isoDate(addDays(signup, days));
 }
 
+// EITHER/OR qualification paths (2026-07-11). THE single source of truth for
+// "which requirement path is active on this offer". Every capital / qualification
+// / reminder consumer routes through this so the backward-compat rail is
+// structural, not scattered. PURE; absent-safe.
+//   requirementLogic 'all' (default/absent) → today's conjunctive semantics:
+//     ddActive = the offer is a DD-family type, debitActive = debit is required.
+//     This reduces EXACTLY to the raw offerType/debitRequirement.required tests
+//     every existing site already used, so 'all' offers behave identically.
+//   requirementLogic 'any' → the bonus is met by EITHER path; plannedPath picks
+//     which one is modeled. A chosen path activates only itself (and is guarded
+//     so an impossible path — e.g. 'dd' with no DD obligation — activates
+//     nothing rather than lying). plannedPath null → needsPath (not modeled).
+// Design: docs/assessments/2026-07-11-either-or-requirements.md.
+function pathState(offer) {
+  const o = offer || {};
+  const hasDdPath = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  const hasDebitPath = !!(o.debitRequirement && o.debitRequirement.required);
+  const logic = o.requirementLogic === 'any' ? 'any' : 'all';
+  if (logic === 'all') {
+    return { logic, path: null, ddActive: hasDdPath, debitActive: hasDebitPath, needsPath: false };
+  }
+  const path = (o.plannedPath === 'dd' || o.plannedPath === 'debit') ? o.plannedPath : null;
+  return {
+    logic,
+    path,
+    ddActive: path === 'dd' && hasDdPath,
+    debitActive: path === 'debit' && hasDebitPath,
+    needsPath: path === null
+  };
+}
+
 function withdrawalEligibleDate(offer, cfg) {
   // STANDARD direct deposit: no bank-imposed hold. Each DD just needs to
   // hit the account; the money is "tied up" only for its transfer round
@@ -53,6 +84,9 @@ function withdrawalEligibleDate(offer, cfg) {
   // return across all DDs. `cfg` is the ddTransfer model (optional — omitted
   // → live config via ddRoundTrip's default; the engine passes it explicitly).
   if (offer.offerType === 'direct-deposit') {
+    // EITHER/OR: if the debit path is chosen, the DDs are not the way this bonus
+    // is being met, so they tie up no capital → no hold (capital-back immediate).
+    if (!pathState(offer).ddActive) return '';
     const rets = (offer.directDeposits || [])
       .map(dd => ddRoundTrip(dd, cfg))
       .filter(Boolean)
@@ -82,6 +116,8 @@ function lockStartDate(offer) {
   // of the overall tied-up window for display (card "Fund date",
   // timeline bar start).
   if (offer.offerType === 'direct-deposit') {
+    // EITHER/OR: debit path chosen → DDs don't tie up capital, no start date.
+    if (!pathState(offer).ddActive) return '';
     const starts = (offer.directDeposits || [])
       .map(dd => parseDate(dd.plannedDate))
       .filter(Boolean)
@@ -436,8 +472,17 @@ function simpleReturn(offer) {
 // amount is held from when it lands until the shared withdrawal-eligible
 // date. Returns { dollarDays, weightedDays, totalAmount } or null.
 function ddCapitalTime(offer, cfg) {
-  const dds = (offer.directDeposits || []).filter(dd => dd && dd.plannedDate && Number(dd.amount) > 0);
-  if (dds.length === 0) return null;
+  // EITHER/OR: when the DD path isn't the active one, its deposits tie up no
+  // capital-time. For logic='all' `ddActive` reduces to the DD-family test, so
+  // `dds` is byte-identical to the old filter and behavior is unchanged.
+  const ddActive = pathState(offer).ddActive;
+  const dds = ddActive
+    ? (offer.directDeposits || []).filter(dd => dd && dd.plannedDate && Number(dd.amount) > 0)
+    : [];
+  if (dds.length === 0) {
+    // With no active DDs, only a held-and-dd's held lump can still tie up capital.
+    if (!(offer.offerType === 'held-and-dd' && Number(offer.requiredFundingAmount) > 0)) return null;
+  }
   let dollarDays = 0, totalAmount = 0;
   if (offer.offerType === 'direct-deposit') {
     for (const dd of dds) {
@@ -508,6 +553,14 @@ function isOfferComplete(offer) {
   // Standard direct deposit has NO bank-imposed hold, so it does not
   // require daysFundsMustRemain. Every other type does.
   const isStandardDD = offer.offerType === 'direct-deposit';
+  const ps = pathState(offer);
+  // EITHER/OR: a held lump (requiredFundingAmount) is only required when the DD
+  // path is active or the type has an inherent held lump. A pure debit-path DD
+  // offer (Brex "spend OR direct-deposit", debit chosen) has no held lump, so
+  // requiredFundingAmount need not be > 0. For logic='all' `ddActive` reduces to
+  // the DD-family test, so DD/held offers still require funding exactly as before.
+  const needsFunding = ps.ddActive
+    || offer.offerType === 'new-funds-held' || offer.offerType === 'held-and-dd';
   // Planned sign-up date is REQUIRED only once the account is OPEN (a
   // committed offer must be dated). A prospect/applied offer (account
   // closed) is a full non-draft offer WITHOUT a sign-up date — it simply
@@ -518,38 +571,42 @@ function isOfferComplete(offer) {
     || Boolean(offer.plannedSignupDate && parseDate(offer.plannedSignupDate));
   const baseOk = Boolean(
     offer.bankName &&
-    offer.requiredFundingAmount > 0 &&
+    (!needsFunding || offer.requiredFundingAmount > 0) &&
     offer.signupBonusAmount >= 0 &&
     signupDateOk &&
     (isStandardDD || (offer.daysFundsMustRemain != null && offer.daysFundsMustRemain >= 0))
   );
   if (!baseOk) return false;
-  if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
+  // EITHER/OR: require the scheduled DDs only when the DD path is active (a
+  // debit-path offer keeps its DD rows for reference but need not have any).
+  if (ps.ddActive) {
     const ddsOk = Array.isArray(offer.directDeposits)
       && offer.directDeposits.length > 0
       && offer.directDeposits.every(dd =>
         dd && dd.plannedDate && parseDate(dd.plannedDate) && Number(dd.amount) > 0);
     if (!ddsOk) return false;
-    // Held + DD: the held lump sum needs a funding date (it drives the
-    // chart + hold window). Standard direct-deposit has no held lump sum.
-    if (offer.offerType === 'held-and-dd'
-      && !(offer.optionalPlannedFundingDate && parseDate(offer.optionalPlannedFundingDate))) return false;
-    return true;
   }
+  // Held + DD: the held lump sum needs a funding date (it drives the chart +
+  // hold window) regardless of the chosen path. Standard DD has no held lump.
+  if (offer.offerType === 'held-and-dd'
+    && !(offer.optionalPlannedFundingDate && parseDate(offer.optionalPlannedFundingDate))) return false;
   return true;
 }
 
 function offerIssues(offer) {
   const issues = [];
   const isStandardDD = offer.offerType === 'direct-deposit';
+  const ps = pathState(offer);
+  const needsFunding = ps.ddActive
+    || offer.offerType === 'new-funds-held' || offer.offerType === 'held-and-dd';
   if (!offer.bankName) issues.push('Bank name is required');
-  if (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0) issues.push('Required funding amount must be > 0');
+  if (needsFunding && (!offer.requiredFundingAmount || offer.requiredFundingAmount <= 0)) issues.push('Required funding amount must be > 0');
   if (offer.signupBonusAmount == null || offer.signupBonusAmount < 0) issues.push('Bonus amount required');
   // Sign up date only required when the account is open (committed offers
   // must be dated); prospects/applied may be full offers without a date.
   if (offer.accountStatus === 'open' && (!offer.plannedSignupDate || !parseDate(offer.plannedSignupDate))) issues.push('Sign up date required');
   if (!isStandardDD && (offer.daysFundsMustRemain == null || offer.daysFundsMustRemain < 0)) issues.push('Hold-through day is required');
-  if (offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd') {
+  if (ps.ddActive) {
     if (!Array.isArray(offer.directDeposits) || offer.directDeposits.length === 0) {
       issues.push('At least one direct deposit is required');
     } else if (!offer.directDeposits.every(dd => dd && dd.plannedDate && parseDate(dd.plannedDate) && Number(dd.amount) > 0)) {
@@ -572,4 +629,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

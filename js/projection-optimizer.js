@@ -1,7 +1,7 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
-import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
+import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
 import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
@@ -155,11 +155,17 @@ function generateProjection(state, options = {}) {
     if (!offerIsActiveForProjection(o, includedOverride)) continue;
     if (offerIdsWithCommitments.has(o.id)) continue; // suppressed by explicit commitment
     const kind = CONFIRMED_OFFER_STATUSES.has(o.status) ? 'confirmed' : 'hypothetical';
+    // EITHER/OR: which requirement path this offer is being met by. For
+    // logic='all' `ddActive` reduces to the DD-family test, so the capital model
+    // is byte-identical to before. When the debit path is chosen, the DD legs
+    // are not applied (card spend ties up no capital), and a pure direct-deposit
+    // offer then contributes nothing (lockStart/withdrawalEligible return '').
+    const ps = pathState(o);
     // STANDARD direct deposit: each DD ties up its own amount only for
     // its transfer round trip (initiation → return to origin). No shared
     // hold — money is out of the origin account exactly while in transit
     // + seasoning. DDs initiated before weekends/holidays tie up longer.
-    if (o.offerType === 'direct-deposit' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
+    if (o.offerType === 'direct-deposit' && ps.ddActive && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
       for (const dd of o.directDeposits) {
         const rt = ddRoundTrip(dd, cfg);
         const amt = Number(dd.amount) || 0;
@@ -180,7 +186,9 @@ function generateProjection(state, options = {}) {
       const fundStart = parseDate(lockStartDate(o));
       const fundAmt = Number(o.requiredFundingAmount) || 0;
       if (fundStart && fundAmt > 0 && fundStart < we) applyCommitment(fundAmt, fundStart, we, kind);
-      for (const dd of o.directDeposits) {
+      // The held lump above always applies; the per-DD legs only when the DD
+      // path is active (a held-and-dd on the debit path keeps only its lump).
+      if (ps.ddActive) for (const dd of o.directDeposits) {
         const eff = parseDate(directDepositEffectiveDate(dd));
         const amt = Number(dd.amount) || 0;
         if (!eff || amt <= 0 || eff >= we) continue;
@@ -593,6 +601,33 @@ function testFeasibilityPins() {
     check('Ctpl open-date anchor preserved through round-trip', 'open date', rt.lockStartsFrom);
     const legacy = templateToOffer({ bankName: 'Legacy', offerType: 'new-funds-held', daysFundsMustRemain: 90 });
     check('Ctpl legacy template (no key) still defaults funded date', 'funded date', legacy.lockStartsFrom);
+  }
+
+  // ---- Ceo: EITHER/OR — the projection follows the CHOSEN path. The same
+  // requirementLogic:'any' offer ties up its 40k DD on the 'dd' path but ZERO
+  // capital on the 'debit' path (card spend ties up nothing). Both feasible;
+  // only the dd path dips the curve below full liquid capital (2026-07-11).
+  {
+    const eo = (path) => _fpOffer({
+      id: 'off_eo_feas', offerType: 'direct-deposit', includeInScenario: true,
+      requiredFundingAmount: 40000, daysFundsMustRemain: null,
+      ddRequirement: { mode: 'count', count: 1 },
+      directDeposits: [{ id: 'dd1', plannedDate: _fpIso(start, 20), amount: 40000 }],
+      debitRequirement: { required: true, count: 3, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirementLogic: 'any', plannedPath: path,
+      plannedSignupDate: _fpIso(start, 10)
+    });
+    const low = (path) => {
+      const o = eo(path);
+      const st = _fpState({ offers: [o] });
+      const proj = generateProjection(st, { includedOfferIds: [o.id], horizonDays: 120 });
+      const s = summarizeProjection(proj, st.settings);
+      return s.lowest ? s.lowest.availableCapital : null;
+    };
+    const ddLow = low('dd');
+    const debitLow = low('debit');
+    check('Ceo either/or debit path ties up no capital; dd path ties up its DD',
+      true, debitLow === 50000 && ddLow != null && ddLow < 50000, `dd=${ddLow} debit=${debitLow}`);
   }
 
   const pass = results.filter(r => r.ok).length;

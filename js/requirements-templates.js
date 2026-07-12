@@ -130,6 +130,14 @@ function deriveRequirementsFromLegacy(offer) {
   const rows = [];
   if (!offer) return rows;
 
+  // EITHER/OR (2026-07-11): when requirementLogic is 'any', only the CHOSEN
+  // path's obligation rows are derived (else the card checklist would show a
+  // suppressed path — Codex P1). Computed inline (no offer-model import — that
+  // would cycle). 'all' (default/absent) keeps every row exactly as before.
+  const eoLogic = offer.requirementLogic === 'any' ? 'any' : 'all';
+  const ddRowsActive = eoLogic === 'all' || offer.plannedPath === 'dd';
+  const debitRowActive = eoLogic === 'all' || offer.plannedPath === 'debit';
+
   // requiredFundingAmount → a single `deposit` obligation. deadline_days is
   // the funding window (daysAfterSignupAllowedBeforeDeposit); hold_days is the
   // post-funding lock (daysFundsMustRemain). Both may be null.
@@ -159,7 +167,7 @@ function deriveRequirementsFromLegacy(offer) {
   // to be one of them before deriving the row. (Per-DD rows below are naturally
   // gated — a non-DD offer has no directDeposits[] entries.)
   const isDdFamily = offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd';
-  const ddReq = isDdFamily ? offer.ddRequirement : null;
+  const ddReq = (isDdFamily && ddRowsActive) ? offer.ddRequirement : null;
   if (ddReq) {
     if (ddReq.mode === 'frequency') {
       const periods = Number(ddReq.freqPeriods) || null;
@@ -187,7 +195,7 @@ function deriveRequirementsFromLegacy(offer) {
   // id reusing the DD's own persisted id (minted by migrateDdIds) so it stays
   // stable across reorders. deadline_days derived from the DD's plannedDate vs
   // the sign-up date when both exist.
-  if (Array.isArray(offer.directDeposits)) {
+  if (ddRowsActive && Array.isArray(offer.directDeposits)) {
     const signup = parseDate(offer.plannedSignupDate);
     for (const dd of offer.directDeposits) {
       if (!dd || !dd.id) continue; // ids are guaranteed by migrateDdIds on load
@@ -207,7 +215,7 @@ function deriveRequirementsFromLegacy(offer) {
   // is the relative withinDays (migrateDebitRequirement already converted any
   // legacy absolute byDate to withinDays).
   const dr = offer.debitRequirement;
-  if (dr && dr.required) {
+  if (dr && dr.required && debitRowActive) {
     rows.push(makeRequirementRow({
       id: 'req-debit', type: 'debit_txns', source: 'derived',
       label: 'Debit transactions',
@@ -291,6 +299,16 @@ function schemaV2Defaults() {
                                    // section/feed for this offer. Personal state;
                                    // deliberately NOT in TEMPLATE_TERMS_KEYS.
 
+    // EITHER/OR qualification paths (2026-07-11). requirementLogic is a TERM
+    // (how the bonus can be met): 'all' = today's conjunctive semantics (DD AND
+    // debit both apply); 'any' = satisfy EITHER the DD path OR the debit path.
+    // Absent ≡ 'all', so existing offers/payloads are untouched. plannedPath is
+    // PERSONAL (which path the owner intends this run): 'dd' | 'debit' | null;
+    // null while logic='any' → the offer is not silently modeled (needs-info).
+    // Design: docs/assessments/2026-07-11-either-or-requirements.md.
+    requirementLogic: 'all',       // 'all' | 'any' — TERM (travels in templates)
+    plannedPath: null,             // 'dd' | 'debit' | null — PERSONAL (never in a template)
+
     bonus_received_date: null,     // ISO | null (anchor date; new — no legacy equiv)
     closed_date: null,             // ISO | null (anchor date; new — no legacy equiv)
     monthly_fee: null,             // Number | null
@@ -333,6 +351,7 @@ const TEMPLATE_TERMS_KEYS = [
   'early_termination_fee', 'etf_window_days',
   'bonus_post_min_days', 'bonus_post_max_days',
   'churnable', 'churn_wait_months', 'churn_anchor',
+  'requirementLogic',
   'color', 'docUrl'
 ];
 
@@ -448,6 +467,10 @@ function templateToOffer(tpl) {
     churn_wait_months: (t.churn_wait_months == null ? null : t.churn_wait_months),
     churn_anchor: t.churn_anchor || 'bonus_received',
     churn_notes: '',
+    // requirementLogic is a TERM → travels with the template (absent ≡ 'all').
+    // plannedPath is PERSONAL → reset to null so a re-run re-prompts for the path.
+    requirementLogic: (t.requirementLogic === 'any' ? 'any' : 'all'),
+    plannedPath: null,
     // Cosmetic / provenance travel with the template.
     color: t.color || '',
     docUrl: t.docUrl || '',
