@@ -17,6 +17,13 @@ Significant changes to this project, in reverse chronological order.
 
 ---
 
+## 2026-07-13 — Airtable mirror: daily GitHub Actions sync of applied-or-beyond offers
+**Commit:** `8c47225`
+**Files:** `.github/workflows/airtable-sync.yml` (new), `scripts/airtable-sync.mjs` (new)
+**What changed:** A one-way mirror from the app's canonical state to an external Airtable base (`appMLmO9xhrBBUv5A` under `collinrekowski1@gmail.com`) to serve as a long-term, queryable hub. A scheduled GitHub Action (`0 13 * * *`, daily; `workflow_dispatch` for manual runs) runs a dependency-free Node 20 script that pulls app state from the sync Gist (`GIST_TOKEN`/`GIST_ID`), filters to every offer that is **applied or beyond** (`subStatus ∈ {applied, approved, denied, on-track, met-waiting, earned, didnt-track, archived}`, or legacy `status ∈ {applied, funded, completed}` — i.e. not a bare prospect), and upserts into two tables: **Offers** (keyed on `Offer ID`, flat fields + churn reference dates incl. a computed `Churn Eligible Date` = anchor + `churn_wait_months`) and **Requirements** (linked child, keyed on `Req ID` = `offerId:reqId`). Rows that leave the mirror set (offer reverts to prospect / is deleted) are pruned. `directDeposits[]` is stored as JSON on the offer. Reads the app only through the Gist, so nothing in the app or PWA changed. Requires three GitHub Actions secrets: `AIRTABLE_TOKEN`, `GIST_TOKEN`, `GIST_ID`.
+**Verification:** Ran `scripts/airtable-sync.mjs` locally against live data → `Synced 5 offers, 14 requirement rows`; Airtable read-back confirmed 5 offers (0 blanks), 14 requirements all linked to their offer, churn-eligible date computed for the churnable offer.
+**Revert:** `git rm .github/workflows/airtable-sync.yml scripts/airtable-sync.mjs`. Data-safe: no app/PWA code touched; the Airtable base is a downstream copy. Disabling the Action alone (Actions tab → disable) stops syncing without removing code.
+
 ## 2026-07-09 — Optimizer Plan-tab UI: 4-tab nav merge + Optimize panel + applyOptimizerPlan + P0 offer-save fix (v2026.07.09f)
 **Commit:** `c8bd429`…`ed7d0f5` (9 commits — run `2026-07-08-planner-optimizer` step 4; full record in `.claude/orchestrator/runs/2026-07-08-planner-optimizer.md`)
 **Files:** `index.html`, `js/render-main-views.js`, `js/render-shell-overview.js`, `js/events-actions-data.js`, `js/modals-forms.js`, `js/app-state.js`, `js/runtime-status.js`, `sw.js`, `HANDOFF.md`
