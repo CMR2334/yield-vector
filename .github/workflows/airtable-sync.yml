@@ -1,0 +1,20 @@
+name: Airtable sync
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # daily ~08:00 CT (13:00 UTC)
+  workflow_dispatch: {}     # manual "Run workflow" button for testing
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/airtable-sync.mjs
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
