@@ -17,7 +17,69 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-11, Round 87)
+## Current state (as of 2026-07-13, Round 88)
+
+- **R88 (v2026.07.11c — owner-directed RULE: two omission clauses for displayed non-headline plans):**
+  Two clauses the owner added on top of the 10a Pareto filter, both engine-side in the same stage family
+  (`js/optimizer-engine.js`), pure + deterministic; edge annotations still compute on the final survivor set.
+  **CLAUSE A — same-date offer-count parity (verbatim):** *"in order to display a card that has a lower gross
+  because of having better low cash and/or blended APY, if it's the same date for capital back as the best
+  total return, it can be no more than 1 less offer in its plan otherwise it's omitted."* → a displayed
+  NON-HEADLINE plan whose capital-back date EQUALS the headline's (Best total return = `alternatives[0]`) must
+  satisfy `offerCount >= headlineOfferCount − 1`, else omit (planner-confirmed vs the owner's screenshot —
+  headline $2,650/4/Oct 13; $2,150/3, $1,900/3, $1,850/3 kept; $1,400/2, $1,350/2 omitted). **CLAUSE B — late
+  materially-weighted tail (verbatim):** *"if capital back date (with that date representing at least 33% of the
+  weighted money held in that plan span) is later than the best total return then it also omits."* → omit a plan
+  whose capital-back date is LATER than the headline's WHEN its final-date tranche carries ≥ `LATE_TAIL_OMIT_FRACTION`
+  (**0.33**, named const) of the plan's **dollar-days** (money × time held); a later capital-back whose tail is a
+  sliver (<33%) survives. **⚠️ INTERPRETATION NOTE:** *"weighted money held in that plan span"* was read as
+  **DOLLAR-DAYS** (money × time), NOT share-of-dollars-at-the-final-date — flag for owner correction if he meant the
+  simpler reading. An EARLIER capital-back is exempt from both clauses (genuine timing trade-off). Applied
+  **UNIFORMLY** to secondary champions AND "Other feasible plans." **IMPLEMENTATION:** new `altOfferCount(p)`,
+  `altTailFraction(p)`, const `LATE_TAIL_OMIT_FRACTION`; PURE `ownerDisplayRuleKeeps(plan, headline)` (both clauses;
+  headline + earlier-date + no-real-headline-date all exempt); PURE `filterChampionsByDisplayRule(champions, headline)`
+  (prunes secondary champions idx≥1, keeps headline champ, **no filler**). `objectiveForOffers` now emits
+  `objective.tailWeightFraction` (dollar-day share released on the final date) via a new `offerReleaseWeights(offer, cfg)`
+  helper that splits each offer's dollar-days by RETURN date; `invalidPlan` carries `tailWeightFraction:0`. The
+  alternatives-side rule runs INSIDE `filterDominatedAlternatives`; `optimizePlanner` prunes champions FIRST
+  (`parityHeadline = alternatives[0]`). **Codex review-after (RUNG 1, `gpt-5.5`, ran clean, 3 rounds) — THREE P2s FIXED
+  pre-push:** (1) an owner-rule-omitted plan was still in the dominator pool and could hide a valid trade-off before
+  being removed itself (a same-date 2-offer parity-omitted plan weakly-dominating a valid 3-offer plan) → a plan is now
+  a dominator only if `isShown` (displayable AND passes the owner rule), mirroring the R85 "only displayed plans
+  dominate" invariant; (2) the first tail computation attributed a multi-DD standard `direct-deposit` offer's WHOLE
+  aggregate dollar-days to its final withdrawal date (tailFraction≈1 even when the last DD is a sliver), which could
+  wrongly omit later alternatives under Clause B → `offerReleaseWeights` now splits standard-DD weight per
+  `ddRoundTrip().returnDate` (a $50k-early + $500-late DD offer → tailFraction ≈ 0.01, not 1.0); `held-and-dd` + held/other
+  correctly release all capital at the single withdrawal date; (3) the owner rule ran AFTER `rankAlternatives` had
+  already capped the list to `alternativeLimit` (8), so omitted plans in the top-8 consumed display slots and hid valid
+  lower-ranked trade-offs → `rankAlternatives` now returns the UNCAPPED ranked-diverse pool (new `capOutput=false`),
+  and `optimizePlanner` caps to `alternativeLimit` only AFTER the dominance + owner-rule pruning; **its follow-up** —
+  even uncapped, `rankAlternatives` stops collecting survivors at `totalCap` (=64) DURING the scan, so >64 higher-ranked
+  omitted plans could still starve valid ones → the owner-rule predicate (`keepFn=ownerDisplayRuleKeeps`) is now threaded
+  INTO the survivor loop so an omitted plan is skipped and never occupies a survivor slot, and the scan continues to
+  lower-ranked valid trade-offs. `filterChampionsByDisplayRule` + `rankAlternatives` exported for pins. **Pins +17 →
+  optimizer 65→82:** Clause A ×6 (owner-screenshot mirror w/ mutually non-dominating profile so ONLY the rule prunes,
+  N−1/N−2 boundary, earlier-date exemption, champion no-filler, champion uniformity, determinism) + Codex-P2#1 (omitted
+  plan never dominates a valid trade-off) + Codex-P2#3 (valid trade-offs survive when omitted plans are ranked ahead —
+  position independence) + survivor-cap starvation (with-skip 5/5 valid reached vs control without-skip 5/5 starved) +
+  Clause B ×7 (later ≥33% tail omitted, later <33% kept, 0.33/0.32 boundary, champion late-tail dropped, determinism,
+  real-pipeline single-offer=1 / split-plan∈(0,1), and Codex-P2#2 multi-DD per-return-date split ≈0.01<0.33). **All
+  prior 65 stay green untouched** — every existing dominance fixture uses `includedIds:[cv]` (offer count 1, threshold
+  0) at a single capital-back date, so both clauses are a structural NO-OP. **Full battery green:** node --check all
+  modules + sw.js; **fidelity 67/67, parser 20/20, p2b PASS, dd-matrix ALL PASS, feasibility 7/7, optimizer 82/82
+  (~3.7s).** **APP_VERSION → 2026.07.11c** ×3 (index.html ×19 import-map `?v=`,
+  runtime-status.js, sw.js; sw precache derives `yv-precache-2026.07.11c`; **0 strays** of 11b). **Preview E2E** (port
+  8765, 380px, owner localStorage untouched — App.save NEVER called): drove the REAL in-browser modules (cache-busted,
+  loaded via the `?v=2026.07.11c` import map) — `filterChampionsByDisplayRule` + `filterDominatedAlternatives` + the
+  renderer's `optimizerProposalModel` — on a combined near-tie (headline 4/Oct13/tail1.0 + same-date 3-offer + same-date
+  2-offer + earlier-date 2-offer + later-date heavy-tail 0.50 + later-date sliver 0.20 + two violating secondary
+  champions): display = **headline + same-date 3-offer + earlier-date + later-sliver**; same-date 2-offer OMITTED (A),
+  later heavy-tail OMITTED (B), earlier + later-sliver KEPT, **both** violating secondary champions DROPPED (only the
+  headline champion remains — no filler); **380px zero horizontal overflow**; **zero console errors**; live bundle
+  reports **2026.07.11c**. Owner-owned paths (`.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, deleted
+  `.codex/hooks.json`) + the origin Airtable-mirror workflow (`.github/`) untouched — explicit-path `git add` only.
+  **Remaining (owner gate): device-check v2026.07.11c.** **Open:** the dollar-days reading of Clause B (see note) is an
+  owner-correctable interpretation.
 
 - **R87 (v2026.07.11b — owner-directed FEATURE: EITHER/OR qualification paths):**
   Owner ask (verbatim): a Brex-style bank offer met by "either a direct deposit, or a card spend

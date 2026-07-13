@@ -702,12 +702,67 @@ function scheduleForOffer(offer, op, cfg) {
   };
 }
 
+// Per-offer capital-release contributions for the owner Clause-B tail test:
+// [{ releaseISO, dollarDays }] — the dollar-days (money × time held) each tranche
+// ties up, attributed to the date that tranche's capital RETURNS. Mirrors
+// ddCapitalTime's math but SPLIT by release date so the tail reflects only the
+// capital still held until the plan's final date (Codex 2026-07-13 P2): a standard
+// multi-DD offer's earlier DDs round-trip back earlier, so only the LAST DD's leg
+// lands on the offer's withdrawal-eligible (final) date — the aggregate must NOT
+// all be attributed to it. held-and-dd + held/other release ALL their capital at
+// the single withdrawal-eligible date (their capital stays put until then), so a
+// single contribution is correct. Path-aware exactly like ddCapitalTime (a
+// debit-path offer's DDs tie up no capital-time).
+function offerReleaseWeights(offer, cfg) {
+  const out = [];
+  const ddActive = pathState(offer).ddActive;
+  if (offer.offerType === 'direct-deposit') {
+    if (!ddActive) return out;
+    for (const dd of (offer.directDeposits || [])) {
+      if (!dd || !dd.plannedDate || !(Number(dd.amount) > 0)) continue;
+      const rt = ddRoundTrip(dd, cfg);
+      if (!rt || rt.heldDays <= 0) continue;
+      out.push({ releaseISO: isoDate(rt.returnDate), dollarDays: Number(dd.amount) * rt.heldDays });
+    }
+    return out;
+  }
+  const weISO = withdrawalEligibleDate(offer, cfg);
+  const we = parseDate(weISO);
+  if (!we) return out;
+  if (offer.offerType === 'held-and-dd') {
+    const fundStart = parseDate(lockStartDate(offer));
+    const fundAmt = Number(offer.requiredFundingAmount) || 0;
+    if (fundStart && fundAmt > 0) {
+      const heldDays = daysBetween(fundStart, we);
+      if (heldDays > 0) out.push({ releaseISO: weISO, dollarDays: fundAmt * heldDays });
+    }
+    if (ddActive) for (const dd of (offer.directDeposits || [])) {
+      if (!dd || !dd.plannedDate || !(Number(dd.amount) > 0)) continue;
+      const eff = parseDate(directDepositEffectiveDate(dd));
+      if (!eff) continue;
+      const held = daysBetween(eff, we);
+      if (held > 0) out.push({ releaseISO: weISO, dollarDays: Number(dd.amount) * held });
+    }
+    return out;
+  }
+  // new-funds-held / other: single held lump released at the withdrawal date.
+  const ls = parseDate(lockStartDate(offer));
+  const days = ls ? Math.max(0, daysBetween(ls, we)) : Number(offer.daysFundsMustRemain || 0);
+  const amt = Number(offer.requiredFundingAmount || 0);
+  if (amt > 0 && days > 0) out.push({ releaseISO: weISO, dollarDays: amt * days });
+  return out;
+}
+
 function objectiveForOffers(offers, cfg) {
   let grossBonus = 0;
   let annNum = 0;
   let annDen = 0;
   let latestCompletionISO = '';
   const churnNextEligible = [];
+  // Per-tranche (release date, dollar-day) contributions — the raw material for
+  // the owner Clause-B "late materially-weighted tail" test (split by release
+  // date via offerReleaseWeights, NOT the offer-level aggregate).
+  const releaseWeights = [];
   for (const offer of offers || []) {
     grossBonus += Number(offer.signupBonusAmount) || 0;
     const nextChurn = churnNextEligibleAfterPlan(offer, cfg);
@@ -727,13 +782,26 @@ function objectiveForOffers(offers, cfg) {
       annNum += ar * weight;
       annDen += weight;
     }
+    for (const c of offerReleaseWeights(offer, cfg)) releaseWeights.push(c);
     const we = withdrawalEligibleDate(offer, cfg);
     if (we && (!latestCompletionISO || we > latestCompletionISO)) latestCompletionISO = we;
+  }
+  // Dollar-day share of the plan's capital that releases ON the final
+  // (capital-back) date. totalWeight over ALL tranches' dollar-days; tailWeight
+  // over the tranche(s) whose release date equals latestCompletionISO.
+  let totalWeight = 0;
+  let tailWeight = 0;
+  for (const rw of releaseWeights) {
+    totalWeight += rw.dollarDays;
+    if (rw.releaseISO && rw.releaseISO === latestCompletionISO) tailWeight += rw.dollarDays;
   }
   return {
     grossBonus: Math.round(grossBonus),
     blendedAnnReturn: annDen > 0 ? annNum / annDen : null,
     latestCompletionISO,
+    // Owner Clause-B input (2026-07-13): fraction of plan dollar-days released on
+    // the final capital-back date. 0 when the plan holds no dollar-day weight.
+    tailWeightFraction: totalWeight > 0 ? tailWeight / totalWeight : 0,
     // Sorted vector of next churn-eligibility dates for the churn-flagged
     // included offers — the deterministic key the throughput tie-breaker reads
     // (comparePlans). Empty when no included offer is churnable (neutral).
@@ -770,7 +838,7 @@ function invalidPlan(ctx, reason, bindingConstraints = [], extra = {}) {
       horizonDays: 0
     },
     bindingConstraints,
-    objective: { grossBonus: 0, blendedAnnReturn: null, latestCompletionISO: '' },
+    objective: { grossBonus: 0, blendedAnnReturn: null, latestCompletionISO: '', tailWeightFraction: 0 },
     badges: {},
     alternatives: [],
     champions: [],
@@ -1147,8 +1215,21 @@ function alternativeCollapses(a, b) {
 //   3. Re-rank the survivors to prefer a DIFFERENT offer composition first, then
 //      materially different schedules of an already-shown set. The winner stays
 //      at index 0.
-function rankAlternatives(plans, limit) {
+// `capOutput=false` returns the FULL diversity-ranked survivor pool (still bounded
+// by totalCap) instead of the first `limit` — so the dominance + owner-display-rule
+// filters downstream run on the whole ranked pool and the final `limit` is applied
+// only AFTER pruning. Without this, owner-omitted plans in the top `limit` would
+// consume display slots and hide valid lower-ranked trade-offs (Codex 2026-07-13 P2).
+// `keepFn(plan, headline)` (optional) is the owner-display-rule predicate: an
+// omitted plan is SKIPPED during survivor collection so it never consumes a survivor
+// slot (which the totalCap bounds) and starve valid lower-ranked trade-offs — the
+// scan continues past it (Codex 2026-07-13 P2 follow-up: the cap runs during
+// collection, so the prune must run inside it). The headline (sorted[0]) is always
+// kept (keepFn is headline-exempt by construction).
+function rankAlternatives(plans, limit, capOutput = true, keepFn = null) {
   const sorted = plans.slice().sort(comparePlans);
+  const headline = sorted[0];
+  const keep = typeof keepFn === 'function' ? keepFn : null;
   // Collect distinct survivors, bounded so the beam's dense pool (n×W×G_eff plans)
   // never turns the O(survivors) collapse scan quadratic: cap total survivors and
   // cap variants kept per offer-composition. A composition that has already hit
@@ -1161,6 +1242,10 @@ function rankAlternatives(plans, limit) {
   const perSet = new Map();
   for (const p of sorted) {
     if (survivors.length >= totalCap) break;
+    // Owner-rule-omitted plans never occupy a survivor slot (they aren't displayed),
+    // so the totalCap counts only displayable trade-offs and the scan continues to
+    // lower-ranked valid plans instead of stopping on omitted ones.
+    if (keep && p !== headline && !keep(p, headline)) continue;
     const key = (p.includedIds || []).join(',');
     const kept = perSet.get(key) || 0;
     if (kept >= perSetCap) continue;
@@ -1175,12 +1260,12 @@ function rankAlternatives(plans, limit) {
     if (usedSets.has(key)) continue;
     usedSets.add(key);
     out.push(p);
-    if (out.length >= limit) return out;
+    if (capOutput && out.length >= limit) return out;
   }
   for (const p of survivors) {
     if (out.indexOf(p) !== -1) continue;
     out.push(p);
-    if (out.length >= limit) break;
+    if (capOutput && out.length >= limit) break;
   }
   return out;
 }
@@ -1212,6 +1297,9 @@ function altMetricApy(p) {
   return (r == null) ? -Infinity : r;
 }
 function altMetricBack(p) { return ((p && p.objective) || {}).latestCompletionISO || '9999-12-31'; }
+// Offer count of a plan (the "offers in its plan" the owner's rule counts). The
+// canonical set is `includedIds` (same key the display/Apply index on).
+function altOfferCount(p) { return (((p && p.includedIds) || []).length); }
 
 // Does A beat-or-tie B on EVERY axis? APY carries an FP epsilon so a floating tie
 // isn't misread as a loss; capital-back compares ISO lexically (earlier = better).
@@ -1269,20 +1357,94 @@ function altIsDisplayable(p) {
   return !!p && !!p.valid && ((p.includedIds || []).length > 0);
 }
 
+// ── Owner display rule for non-headline plans (owner-directed 2026-07-13) ──────
+// Two omission clauses the owner added on top of the 10a Pareto filter. A
+// displayed NON-HEADLINE plan (secondary champion OR "Other feasible plans"
+// card) must clear BOTH; the headline (Best total return = alternatives[0]) is
+// always exempt. Pure + deterministic (integer offer counts, ISO date compares,
+// a stored dollar-day tail fraction).
+//
+// CLAUSE A — same-date offer-count parity. Owner (verbatim): "in order to display
+// a card that has a lower gross because of having better low cash and/or blended
+// APY, if it's the same date for capital back as the best total return, it can be
+// no more than 1 less offer in its plan otherwise it's omitted." → a plan whose
+// capital-back date EQUALS the headline's must satisfy
+//   offerCount >= headlineOfferCount - 1, else omit.
+// (Planner-confirmed against the owner's screenshot — headline $2,650 / 4 offers /
+// Oct 13; alternates $2,150/3, $1,900/3, $1,850/3, $1,400/2, $1,350/2, all Oct 13
+// → the two 2-offer cards omitted, the three 3-offer cards kept.)
+//
+// CLAUSE B — late materially-weighted tail. Owner (verbatim): "if capital back
+// date (with that date representing at least 33% of the weighted money held in
+// that plan span) is later than the best total return then it also omits." →
+// omit a plan whose capital-back date is LATER than the headline's WHEN the
+// final-date tranche carries >= LATE_TAIL_OMIT_FRACTION of the plan's dollar-days
+// (money × time held). A later capital-back whose tail is a sliver (< 33%)
+// survives this clause (still subject to Clause A / dominance). "Weighted money
+// held in that plan span" is read as DOLLAR-DAYS (money × time), NOT
+// share-of-dollars-at-the-final-date — see report note.
+//
+// An EARLIER capital-back date is exempt from both clauses (a genuine timing
+// trade-off). Applied UNIFORMLY to secondary champions (filterChampionsByDisplayRule)
+// AND "Other feasible plans" (filterDominatedAlternatives) so the mental model
+// stays single.
+const LATE_TAIL_OMIT_FRACTION = 0.33;   // owner 2026-07-13: dollar-day tail share
+
+// Dollar-day share of a plan's capital that releases ON its final (capital-back)
+// date, as computed by objectiveForOffers. Absent/non-finite → 0 (no material
+// tail known → survives Clause B).
+function altTailFraction(p) {
+  const f = ((p && p.objective) || {}).tailWeightFraction;
+  return (typeof f === 'number' && isFinite(f)) ? f : 0;
+}
+
+function ownerDisplayRuleKeeps(plan, headline) {
+  if (!plan || !headline) return true;
+  if (plan === headline || plan.canonicalVector === headline.canonicalVector) return true; // headline itself
+  const headBack = altMetricBack(headline);
+  if (headBack === '9999-12-31') return true;              // no real headline date → rules dormant
+  const planBack = altMetricBack(plan);
+  if (planBack === headBack) {
+    // Clause A: same capital-back date → within one offer of the headline.
+    return altOfferCount(plan) >= altOfferCount(headline) - 1;
+  }
+  if (byteCompare(planBack, headBack) > 0 && planBack !== '9999-12-31') {
+    // Clause B: LATER capital-back with a materially-weighted final tranche → omit.
+    return altTailFraction(plan) < LATE_TAIL_OMIT_FRACTION;
+  }
+  // Earlier capital-back (or a later one with a sliver tail) → genuine trade-off.
+  return true;
+}
+
+// Prune SECONDARY champions (index >= 1) that fail the owner display rule vs the
+// headline champion (champions[0].plan, always kept). "No filler" — a removed
+// secondary is NOT replaced. `headline` is alternatives[0] (== champions[0].plan
+// by canonicalVector); passed explicitly so the champion and alternatives lists
+// judge against the same reference.
+function filterChampionsByDisplayRule(champions, headline) {
+  const list = Array.isArray(champions) ? champions : [];
+  if (list.length <= 1) return list;
+  return list.filter((c, idx) => idx === 0 || ownerDisplayRuleKeeps(c && c.plan, headline));
+}
+
 function filterDominatedAlternatives(alternatives, champions) {
   const alts = (alternatives || []).slice();
   if (alts.length <= 1) return alts;
   const championVectors = new Set(
     (champions || []).map(c => c && c.plan && c.plan.canonicalVector).filter(Boolean)
   );
-  const headlineVector = alts[0] && alts[0].canonicalVector;
+  const headline = alts[0];
+  const headlineVector = headline && headline.canonicalVector;
   const isExempt = p => !!p && (p.canonicalVector === headlineVector || championVectors.has(p.canonicalVector));
-  // Displayed dominator pool: every champion plan (valid + non-empty by
-  // construction; some may not appear in `alts`) plus every DISPLAYABLE
-  // alternative. Invalid / 0-offer plans are excluded — they are never shown, so
-  // they cannot hide a shown plan.
+  // A plan is SHOWN — and thus may dominate / dedup others — only if it is
+  // displayable AND passes the owner display rule. A plan the owner rule omits is
+  // never displayed, so (like an infeasible plan — R85 Codex P2) it must NOT hide
+  // a shown trade-off (Codex 2026-07-13 P2: a same-date parity-omitted plan could
+  // otherwise weakly-dominate a valid N−1-offer plan before being removed itself).
+  // Exempt plans (headline + champions) are always shown.
+  const isShown = p => !!p && (isExempt(p) || (altIsDisplayable(p) && ownerDisplayRuleKeeps(p, headline)));
   const dominators = (champions || []).map(c => c && c.plan).filter(Boolean)
-    .concat(alts.filter(altIsDisplayable));
+    .concat(alts.filter(isShown));
   const kept = [];
   const out = [];
   for (const B of alts) {
@@ -1290,6 +1452,9 @@ function filterDominatedAlternatives(alternatives, champions) {
     // An invalid / 0-offer alternative isn't displayed anyway — pass it through
     // untouched (the renderer drops it) and never let it dominate or dedup.
     if (!altIsDisplayable(B)) { out.push(B); continue; }
+    // Owner display rule (Clause A same-date parity + Clause B late tail): omit
+    // BEFORE dominance so an omitted plan is neither shown nor a dominator.
+    if (!ownerDisplayRuleKeeps(B, headline)) continue;
     let hidden = dominators.some(A => A
       && A.canonicalVector !== B.canonicalVector
       && altWeaklyDominates(A, B) && altStrictlyBetterSomewhere(A, B));
@@ -1305,9 +1470,9 @@ function filterDominatedAlternatives(alternatives, champions) {
   }
   // ISSUE 4: annotate every surviving non-headline plan with the axes/deltas on
   // which it beats the headline (alts[0]) — the renderer shows this on the
-  // unlabeled "Other feasible plans" cards. Computed AFTER survival so a hidden
-  // plan is never annotated; uses alts[0] as the "best"/headline reference.
-  const headline = alts[0];
+  // unlabeled "Other feasible plans" cards. Computed on the FINAL survivor set
+  // (post dominance + post owner-rule) so a card's "why it survived" never
+  // references a plan the rule removed.
   for (const p of out) {
     if (p && p !== headline) p.edgeVsHeadline = altEdgeVsHeadline(headline, p);
   }
@@ -1343,7 +1508,11 @@ function exactSearch(ctx, records, grids) {
   }
   visit(0);
   best = best || invalidPlan(ctx, 'no-evaluations');
-  best.alternatives = rankAlternatives(plans, ctx.options.alternativeLimit);
+  // Return the full ranked-diverse pool (uncapped) so the dominance + owner-rule
+  // filters run on the whole pool; optimizePlanner caps to alternativeLimit AFTER
+  // pruning (Codex 2026-07-13 P2). Owner-omitted plans are skipped during survivor
+  // collection so they never starve valid lower-ranked trade-offs.
+  best.alternatives = rankAlternatives(plans, ctx.options.alternativeLimit, false, ownerDisplayRuleKeeps);
   best.champions = selectChampions(plans);
   best.evaluated = evaluated;
   best.earlyOut = evaluated >= ctx.options.evalCap;
@@ -1386,7 +1555,9 @@ function beamSearch(ctx, records, grids, strategy) {
   const best = repaired.best || bestNode.plan;
   best.strategy = strategy;
   const beamPool = allPlans.concat(repaired.plans);
-  best.alternatives = rankAlternatives(beamPool, ctx.options.alternativeLimit);
+  // Uncapped ranked-diverse pool — capped after pruning in optimizePlanner (Codex P2).
+  // Owner-omitted plans skipped during collection so they never starve valid trade-offs.
+  best.alternatives = rankAlternatives(beamPool, ctx.options.alternativeLimit, false, ownerDisplayRuleKeeps);
   best.champions = selectChampions(beamPool);
   best.evaluated = repaired.evaluated;
   best.earlyOut = repaired.evaluated >= ctx.options.evalCap;
@@ -1496,7 +1667,26 @@ function optimizePlanner(input = {}) {
   // "Other feasible plans" list. Runs AFTER champion extraction + the 09i same-set
   // dedup (both done inside the search); champions + the headline stay (exempt)
   // but still dominate. Genuine trade-offs survive.
-  plan.alternatives = filterDominatedAlternatives(plan.alternatives, plan.champions);
+  //
+  // RULE (owner-directed 2026-07-13, planner-confirmed) — capital-back /
+  // offer-count parity. A displayed NON-HEADLINE plan whose capital-back date
+  // EQUALS the headline's (Best total return) must carry >= headlineOfferCount − 1
+  // offers, else it is omitted; a DIFFERENT capital-back date is exempt (genuine
+  // timing trade-off). Applied UNIFORMLY to secondary champions AND "Other
+  // feasible plans." Champions are pruned FIRST so an omitted secondary champion
+  // no longer serves as a dominator of the alternatives pool (only DISPLAYED
+  // plans may dominate — R85 Codex P2). The alternatives-side parity + the edge
+  // annotations both run inside filterDominatedAlternatives (edges on the
+  // post-rule survivor set). Headline = alternatives[0] == champions[0].plan.
+  // The search returns the FULL ranked-diverse alternatives pool (uncapped). Prune
+  // champions + dominated + owner-rule-omitted plans, THEN cap to alternativeLimit,
+  // so omitted plans never consume a display slot a valid lower-ranked trade-off
+  // would fill (Codex 2026-07-13 P2). The headline stays at index 0 through the
+  // slice.
+  const parityHeadline = (plan.alternatives || [])[0] || null;
+  plan.champions = filterChampionsByDisplayRule(plan.champions, parityHeadline);
+  plan.alternatives = filterDominatedAlternatives(plan.alternatives, plan.champions)
+    .slice(0, ctx.options.alternativeLimit);
   // Build-time exclusions (commitment-linked / churn-snoozed / needs-date /
   // no-window) PLUS validator-time exclusions (item 2): candidates that cleared
   // build but the qualifier rejects at every schedulable date, dropped from the
@@ -2288,6 +2478,194 @@ function testOptimizerPins() {
       .map(p => p.canonicalVector + ':' + edgeAxes(p).join('+')).join(',');
     check('edge: annotation is deterministic across runs', edgeSig(ownerAlts) === edgeSig(ownerAlts), edgeSig(ownerAlts));
   }
+  {
+    // ── Capital-back / offer-count parity rule (owner-directed 2026-07-13) ──────
+    // Owner: a lower-gross card that TIES the headline's capital-back date may be
+    // "no more than 1 less offer in its plan otherwise it's omitted." A different
+    // capital-back date is EXEMPT (genuine timing trade-off). Applied to BOTH the
+    // "Other feasible plans" list AND secondary champions.
+    // Each fixture plan carries an explicit offer count (includedIds length) plus a
+    // mutually NON-DOMINATING metric profile (gross ↓ ⇒ low-cash ↑ ⇒ APY ↑), so the
+    // ISSUE-1 dominance filter keeps every plan and ONLY the parity rule prunes —
+    // isolating this rule.
+    const parIds = n => Array.from({ length: n }, (_, i) => 'o' + i);
+    const parPlan = (cv, gross, low, apy, backISO, offers, tailFrac) => ({
+      valid: true, canonicalVector: cv, includedIds: parIds(offers),
+      capitalCurveSummary: { lowestAvailable: low },
+      objective: { grossBonus: gross, blendedAnnReturn: apy, latestCompletionISO: backISO,
+        tailWeightFraction: (typeof tailFrac === 'number' ? tailFrac : 0) }
+    });
+    const OCT13 = '2026-10-13';
+    // Owner's screenshot mirror: headline 4 offers / $2,650 / Oct 13; three 3-offer
+    // trade-offs (kept) + two 2-offer trade-offs (omitted), all the same date.
+    const hH = parPlan('v_h', 2650, 10000, 0.10, OCT13, 4);   // headline
+    const h3a = parPlan('v_3a', 2150, 20000, 0.12, OCT13, 3);
+    const h3b = parPlan('v_3b', 1900, 30000, 0.14, OCT13, 3);
+    const h3c = parPlan('v_3c', 1850, 35000, 0.15, OCT13, 3);
+    const h2a = parPlan('v_2a', 1400, 40000, 0.18, OCT13, 2); // two fewer, same date → omit
+    const h2b = parPlan('v_2b', 1350, 45000, 0.20, OCT13, 2); // two fewer, same date → omit
+    const ownerNums = [hH, h3a, h3b, h3c, h2a, h2b];
+    const keptP = filterDominatedAlternatives(ownerNums, [{ plan: hH }]).map(p => p.canonicalVector).join(',');
+    check('parity: two same-date 2-offer plans omitted, three 3-offer plans kept (owner screenshot)',
+      keptP === 'v_h,v_3a,v_3b,v_3c', keptP || '(empty)');
+    // Boundary: exactly one fewer offer at the SAME date is KEPT; two fewer at the
+    // same date is OMITTED (4 → 3 keep, 4 → 2 omit).
+    const bK = parPlan('v_bk', 2000, 25000, 0.13, OCT13, 3); // 3 = 4−1 → keep
+    const bO = parPlan('v_bo', 1500, 42000, 0.19, OCT13, 2); // 2 = 4−2 → omit
+    const bnd = filterDominatedAlternatives([hH, bK, bO], [{ plan: hH }]).map(p => p.canonicalVector);
+    check('parity: same-date N−1 offers kept, N−2 offers omitted (boundary)',
+      bnd.includes('v_bk') && !bnd.includes('v_bo'), bnd.join(','));
+    // Exemption: two fewer offers but an EARLIER capital-back date → KEPT (a real
+    // timing trade-off, not a same-timing weaker echo).
+    const earlier = parPlan('v_early', 1500, 42000, 0.19, '2026-10-06', 2);
+    const exm = filterDominatedAlternatives([hH, earlier], [{ plan: hH }]).map(p => p.canonicalVector);
+    check('parity: two-fewer offers with an EARLIER capital-back date is exempt (kept)',
+      exm.includes('v_early'), exm.join(','));
+    // Champions: a same-date secondary champion two offers short is OMITTED and NOT
+    // replaced (no filler); the headline champion (index 0) always survives.
+    const champOut = filterChampionsByDisplayRule([{ plan: hH }, { plan: h2a }], hH);
+    check('parity: same-date secondary champion two offers short is omitted, no filler',
+      champOut.length === 1 && champOut[0].plan === hH, `${champOut.length} champions`);
+    // Champions honour the rule uniformly: a same-date N−1 secondary and an
+    // earlier-date secondary are both KEPT.
+    const champKeep = filterChampionsByDisplayRule([{ plan: hH }, { plan: h3a }, { plan: earlier }], hH)
+      .map(c => c.plan.canonicalVector).join(',');
+    check('parity: champions — same-date N−1 and earlier-date secondaries are kept',
+      champKeep === 'v_h,v_3a,v_early', champKeep);
+    // Determinism: identical input → identical survivor ordering across runs.
+    const pr1 = filterDominatedAlternatives(ownerNums, [{ plan: hH }]).map(p => p.canonicalVector).join(',');
+    const pr2 = filterDominatedAlternatives(ownerNums, [{ plan: hH }]).map(p => p.canonicalVector).join(',');
+    check('parity: filter is deterministic across runs', pr1 === pr2, pr1);
+
+    // Codex 2026-07-13 P2: a plan the owner rule OMITS must not act as a dominator.
+    // p2dom is a same-date 2-offer plan (parity-omitted: 2 < 4−1) that weakly
+    // dominates the valid same-date 3-offer p3ok (higher gross/low-cash/APY). The
+    // headline hH does NOT dominate p3ok (its low-cash is lower). Before the fix,
+    // p2dom hid p3ok before being removed itself; now p3ok survives.
+    const pDomHead = parPlan('v_ph', 3000, 2000, 0.04, OCT13, 4);
+    const p3ok = parPlan('v_p3ok', 1000, 5000, 0.05, OCT13, 3);
+    const p2dom = parPlan('v_p2dom', 1500, 8000, 0.08, OCT13, 2);
+    const domFix = filterDominatedAlternatives([pDomHead, p3ok, p2dom], [{ plan: pDomHead }]).map(p => p.canonicalVector);
+    check('parity: an owner-rule-omitted plan never dominates a valid trade-off (Codex P2)',
+      domFix.includes('v_p3ok') && !domFix.includes('v_p2dom'), domFix.join(','));
+
+    // Codex 2026-07-13 P2 (#3): owner-omitted plans ranked BEFORE valid ones must
+    // not consume their slots. The engine now returns the uncapped ranked pool,
+    // filters, THEN caps to alternativeLimit — so the two same-date 2-offer plans
+    // sitting ahead of the three 3-offer plans do not hide them. (Same survivors
+    // regardless of input order, proving position-independence.)
+    const reordered = filterDominatedAlternatives([hH, h2a, h2b, h3a, h3b, h3c], [{ plan: hH }])
+      .map(p => p.canonicalVector).sort().join(',');
+    check('parity: valid trade-offs survive even when omitted plans are ranked ahead (Codex P2 #3)',
+      reordered === 'v_3a,v_3b,v_3c,v_h', reordered);
+  }
+  {
+    // ── Clause B: late materially-weighted tail (owner-directed 2026-07-13) ─────
+    // Owner: "if capital back date (with that date representing at least 33% of the
+    // weighted money held in that plan span) is later than the best total return
+    // then it also omits." → a LATER-capital-back plan is omitted iff its final-date
+    // dollar-day tail fraction ≥ LATE_TAIL_OMIT_FRACTION (0.33); a sliver tail
+    // survives. Fixtures use a mutually non-dominating profile so ONLY Clause B
+    // prunes. tailFrac is the 7th parPlan arg (objective.tailWeightFraction).
+    const parIds = n => Array.from({ length: n }, (_, i) => 'o' + i);
+    const parPlan = (cv, gross, low, apy, backISO, offers, tailFrac) => ({
+      valid: true, canonicalVector: cv, includedIds: parIds(offers),
+      capitalCurveSummary: { lowestAvailable: low },
+      objective: { grossBonus: gross, blendedAnnReturn: apy, latestCompletionISO: backISO,
+        tailWeightFraction: (typeof tailFrac === 'number' ? tailFrac : 0) }
+    });
+    const HEAD = parPlan('v_bh', 2650, 10000, 0.10, '2026-10-13', 4, 1.0); // headline
+    const LATE_HEAVY = parPlan('v_lh', 2000, 30000, 0.14, '2026-11-13', 3, 0.50); // later, heavy tail → omit
+    const LATE_SLIVER = parPlan('v_ls', 2000, 30000, 0.14, '2026-11-13', 3, 0.20); // later, sliver → keep
+    const heavy = filterDominatedAlternatives([HEAD, LATE_HEAVY], [{ plan: HEAD }]).map(p => p.canonicalVector);
+    check('clauseB: later capital-back with ≥33% dollar-day tail is omitted',
+      !heavy.includes('v_lh') && heavy.includes('v_bh'), heavy.join(','));
+    const sliver = filterDominatedAlternatives([HEAD, LATE_SLIVER], [{ plan: HEAD }]).map(p => p.canonicalVector);
+    check('clauseB: later capital-back with a <33% tail survives',
+      sliver.includes('v_ls'), sliver.join(','));
+    // Boundary: exactly 0.33 is omitted (>=), 0.32 is kept.
+    const onEdge = parPlan('v_edge', 2000, 30000, 0.14, '2026-11-13', 3, 0.33);
+    const underEdge = parPlan('v_under', 2000, 30000, 0.14, '2026-11-13', 3, 0.32);
+    const bnd = filterDominatedAlternatives([HEAD, onEdge, underEdge], [{ plan: HEAD }]).map(p => p.canonicalVector);
+    check('clauseB: the 33% boundary — 0.33 omitted, 0.32 kept',
+      !bnd.includes('v_edge') && bnd.includes('v_under'), bnd.join(','));
+    // Champions honour Clause B too: a later-date heavy-tail secondary is omitted.
+    const champB = filterChampionsByDisplayRule([{ plan: HEAD }, { plan: LATE_HEAVY }], HEAD)
+      .map(c => c.plan.canonicalVector).join(',');
+    check('clauseB: later-date heavy-tail secondary champion is omitted (no filler)',
+      champB === 'v_bh', champB);
+    // Determinism.
+    const c1 = filterDominatedAlternatives([HEAD, LATE_HEAVY, LATE_SLIVER], [{ plan: HEAD }]).map(p => p.canonicalVector).join(',');
+    const c2 = filterDominatedAlternatives([HEAD, LATE_HEAVY, LATE_SLIVER], [{ plan: HEAD }]).map(p => p.canonicalVector).join(',');
+    check('clauseB: filter is deterministic across runs', c1 === c2, c1);
+    // Real pipeline: objective.tailWeightFraction is populated. A single held
+    // offer releases entirely on the final date → tail fraction 1. Two held offers
+    // with different hold lengths (different release dates) → 0 < tail < 1.
+    const one = evaluateOptimizerPlan(_pinState({
+      offers: [_pinOffer({ id: 'off_tw1', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' })],
+      candidateIds: ['off_tw1']
+    }), { off_tw1: '2026-07-20' });
+    const two = evaluateOptimizerPlan(_pinState({
+      offers: [
+        _pinOffer({ id: 'off_twA', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' }),
+        _pinOffer({ id: 'off_twB', signupBonusAmount: 500, requiredFundingAmount: 10000, daysFundsMustRemain: 120, offerExpirationDate: '2026-12-31' })
+      ],
+      candidateIds: ['off_twA', 'off_twB']
+    }), { off_twA: '2026-07-20', off_twB: '2026-07-20' });
+    check('clauseB: real objective.tailWeightFraction — single offer = 1, split plan strictly between 0 and 1',
+      Math.abs(one.objective.tailWeightFraction - 1) < 1e-9
+      && two.objective.tailWeightFraction > 0 && two.objective.tailWeightFraction < 1,
+      `one=${one.objective.tailWeightFraction} two=${two.objective.tailWeightFraction}`);
+    // Codex 2026-07-13 P2: a standard multi-DD offer whose FINAL DD is a tiny leg
+    // must NOT attribute the whole aggregate dollar-days to the final date. A big
+    // early DD ($50k) + a tiny late DD ($500) → tail fraction ≈ 0.01 (was 1.0 under
+    // the offer-level aggregate), so Clause B does not wrongly omit its plan.
+    const multiDd = evaluateOptimizerPlan(_pinState({
+      settings: { projectionStartDate: '2026-07-09', minimumCashBuffer: 0, currentLiquidCapital: 200000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
+      offers: [_pinOffer({
+        id: 'off_ddtail', offerType: 'direct-deposit', signupBonusAmount: 600, requiredFundingAmount: 0,
+        daysAfterSignupAllowedBeforeDeposit: 120, daysFundsMustRemain: 0, lockStartsFrom: 'funded date',
+        offerExpirationDate: '2027-06-30',
+        directDeposits: [{ id: 'd1', plannedDate: '2026-07-20', amount: 50000 }, { id: 'd2', plannedDate: '2026-10-20', amount: 500 }]
+      })],
+      candidateIds: ['off_ddtail'], options: { includeChurn: false, defaultWindowDays: 365 }
+    }), { off_ddtail: '2026-07-15' });
+    check('clauseB: multi-DD tail fraction is split per return date, not the offer aggregate (Codex P2)',
+      multiDd.objective.tailWeightFraction < LATE_TAIL_OMIT_FRACTION && multiDd.objective.tailWeightFraction > 0,
+      `tailFrac=${multiDd.objective.tailWeightFraction}`);
+  }
+  {
+    // ── Survivor-cap starvation (owner display rule, Codex 2026-07-13 P2 follow-up)
+    // rankAlternatives collects survivors up to totalCap (=max(limit*8,48)=64 here)
+    // DURING the scan. If the top-ranked plans are all owner-omitted, they must NOT
+    // consume the 64 survivor slots and starve valid lower-ranked trade-offs — so
+    // omitted plans are skipped during collection (keepFn=ownerDisplayRuleKeeps).
+    // Pool: headline (4 offers) + 70 higher-gross same-date 2-offer plans (Clause A
+    // omits: 2 < 4−1) ranked ABOVE 5 valid same-date 3-offer plans. comparePlans
+    // ranks by gross desc, so the 5 valid plans sit at rank ~72 (beyond totalCap).
+    const SD = '2026-10-13';
+    const mk = (cv, gross, ids, off) => ({
+      valid: true, canonicalVector: cv, includedIds: ids,
+      capitalCurveSummary: { lowestAvailable: 1000 + gross },
+      objective: { grossBonus: gross, blendedAnnReturn: 0.05, latestCompletionISO: SD, tailWeightFraction: 1.0, churnNextEligible: [] },
+      schedule: {}
+    });
+    const head = mk('v_head4', 5000, ['h0', 'h1', 'h2', 'h3'], 4);
+    const omitted = [];
+    for (let i = 0; i < 70; i++) omitted.push(mk('v_om' + i, 2000 + i, ['x' + (2 * i), 'x' + (2 * i + 1)], 2)); // 2 offers, high gross
+    const valid = [];
+    for (let i = 0; i < 5; i++) valid.push(mk('v_val' + i, 1000 + i, ['y' + (3 * i), 'y' + (3 * i + 1), 'y' + (3 * i + 2)], 3)); // 3 offers, low gross
+    const pool = [head].concat(omitted).concat(valid);
+    const withSkip = rankAlternatives(pool, 8, false, ownerDisplayRuleKeeps).map(p => p.canonicalVector);
+    const validReached = valid.every(v => withSkip.includes(v.canonicalVector));
+    check('parity: owner-omitted plans do not starve valid trade-offs past the survivor cap (Codex P2)',
+      validReached, `valid reached=${valid.filter(v => withSkip.includes(v.canonicalVector)).length}/5`);
+    // Control: WITHOUT the skip, the 64-survivor cap fills with omitted plans and
+    // the valid trade-offs never enter the pool — proving the skip is load-bearing.
+    const noSkip = rankAlternatives(pool, 8, false, null).map(p => p.canonicalVector);
+    check('parity: control — without the skip the valid trade-offs are starved (regression guard)',
+      valid.every(v => !noSkip.includes(v.canonicalVector)), `starved=${valid.filter(v => !noSkip.includes(v.canonicalVector)).length}/5`);
+  }
 
   const pass = results.filter(r => r.ok).length;
   const fail = results.length - pass;
@@ -2305,5 +2683,7 @@ export {
   runPlannerOptimizer,
   evaluateOptimizerPlan,
   filterDominatedAlternatives,
+  filterChampionsByDisplayRule,
+  rankAlternatives,
   testOptimizerPins
 };
