@@ -2,7 +2,7 @@ name: Airtable sync
 
 on:
   schedule:
-    - cron: '0 13 * * *'   # daily ~08:00 CT (13:00 UTC)
+    - cron: '0 7 * * *'    # daily 1:00 AM CST (07:00 UTC); GitHub cron is UTC-only, so lands at 2:00 AM during CDT
   workflow_dispatch: {}     # manual "Run workflow" button for testing
 
 jobs:
