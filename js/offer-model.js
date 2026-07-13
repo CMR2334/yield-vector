@@ -1,7 +1,7 @@
 import { TODAY, addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, nextBusinessDay, parseDate } from './date-format-core.js';
 import { ddRoundTrip, ddTransferConfig, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { requirementDeadlineISO } from './requirements-templates.js';
-import { CONFIRMED_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
+import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 /* ============================================================
    OFFER DERIVED FIELDS
    ============================================================ */
@@ -184,6 +184,99 @@ function lockStartDate(offer) {
   // funding won't post until Monday). The qualifying DDs are tracked
   // separately and don't move this date.
   return bizDayISO(effectiveFundingDate(offer));
+}
+
+/* ============================================================
+   STALE PRE-ACCOUNT SIGNUP → EFFECTIVE "TODAY" DATES (2026-07-13b)
+   ============================================================
+   Owner-directed: a PRE-ACCOUNT (prospect/selected — never-run) offer whose
+   plannedSignupDate has slipped into the PAST should be modeled as if it were
+   signed up TODAY, not left to drift historical/impossible. The whole date
+   GROUP (signup + optionalPlannedFundingDate + directDeposits[].plannedDate)
+   shifts forward by ONE calendar delta so signup lands on `todayISO`, preserving
+   every internal offset — the exact P1-3 group-shift semantics the engine's
+   materializeDirectDeposits uses (uniform addDays(delta); the model functions
+   apply their own business-day normalization downstream). backDays / effective
+   / hold math are untouched — they recompute from the shifted raw dates.
+
+   NEVER shifts confirmed/open/historical offers — the eligible set is exactly
+   HYPOTHETICAL_OFFER_STATUSES (status prospect/selected), the same partition the
+   projection already uses for "hypothetical". EXPIRY COLLISION: if `todayISO` is
+   strictly past offerExpirationDate the sign-up window has already passed — the
+   offer is NOT advanced (windowPassed=true, surfaced as needs-attention on the
+   card + the optimizer's no-valid-date-window review row), because signing up
+   today would be impossible.
+
+   THE single pure helper so projection / timeline / optimizer-input cannot
+   disagree: every consumer maps its offers through effectiveOfferForToday (or the
+   mapEffectiveOffers convenience) with the SAME todayISO reference. `offer` is the
+   SAME reference when nothing changes — a cheap no-op for the overwhelming common
+   case AND byte-identical projection behavior for every non-stale fixture (this is
+   why the whole existing pin battery stays green untouched: their prospects sit
+   on/after projectionStartDate, so the guard never fires).
+
+   Returns { offer, shifted, windowPassed, deltaDays, originalSignupISO,
+             targetSignupISO }.
+   ============================================================ */
+function isPreAccountOffer(offer) {
+  // Hypothetical / never-run (prospect or selected). This is the SAME partition
+  // generateProjection uses to bucket an offer as "hypothetical", so the shift
+  // set and the projection's confirmed/hypothetical split never diverge.
+  return !!(offer && HYPOTHETICAL_OFFER_STATUSES.has(offer.status));
+}
+
+function effectiveOfferForToday(offer, todayISO) {
+  const sig = (offer && offer.plannedSignupDate) || '';
+  const noShift = {
+    offer, shifted: false, windowPassed: false, deltaDays: 0,
+    originalSignupISO: sig, targetSignupISO: sig
+  };
+  if (!offer || !todayISO) return noShift;
+  if (!isPreAccountOffer(offer)) return noShift;      // confirmed/open/historical → never
+  const signup = parseDate(offer.plannedSignupDate);
+  const today = parseDate(todayISO);
+  if (!signup || !today) return noShift;
+  if (signup >= today) return noShift;                // not stale (future or already today)
+  // EXPIRY COLLISION: today is strictly past the expiration → do NOT advance
+  // (an expiration exactly == today still permits signing up today).
+  const exp = parseDate(offer.offerExpirationDate);
+  if (exp && today > exp) {
+    return { offer, shifted: false, windowPassed: true, deltaDays: 0,
+             originalSignupISO: sig, targetSignupISO: sig };
+  }
+  const deltaDays = daysBetween(signup, today);       // positive calendar delta
+  if (deltaDays <= 0) return noShift;
+  const shiftISO = (iso) => { const d = parseDate(iso); return d ? isoDate(addDays(d, deltaDays)) : iso; };
+  const eff = Object.assign({}, offer);
+  eff.plannedSignupDate = shiftISO(offer.plannedSignupDate);   // == todayISO by construction
+  if (offer.optionalPlannedFundingDate) eff.optionalPlannedFundingDate = shiftISO(offer.optionalPlannedFundingDate);
+  if (Array.isArray(offer.directDeposits) && offer.directDeposits.length) {
+    // Clone each DD preserving its id (feeds/consumers key on id) — only the
+    // plannedDate moves. DDs without a planned date pass through untouched.
+    eff.directDeposits = offer.directDeposits.map(dd => (dd && dd.plannedDate)
+      ? Object.assign({}, dd, { plannedDate: shiftISO(dd.plannedDate) })
+      : dd);
+  }
+  return { offer: eff, shifted: true, windowPassed: false, deltaDays,
+           originalSignupISO: offer.plannedSignupDate, targetSignupISO: eff.plannedSignupDate };
+}
+
+// Convenience: map an offers array to its effective forms, returning the SAME
+// array reference when nothing shifts (so a projection over a non-stale fixture
+// allocates nothing and behaves byte-identically to the pre-feature code). The
+// output array is materialized lazily on the FIRST shift, so the common no-shift
+// case does zero allocation.
+function mapEffectiveOffers(offers, todayISO) {
+  if (!Array.isArray(offers) || !offers.length || !todayISO) return offers;
+  let out = null;
+  for (let i = 0; i < offers.length; i++) {
+    const r = effectiveOfferForToday(offers[i], todayISO);
+    if (r.offer !== offers[i]) {
+      if (!out) out = offers.slice();   // lazy copy — only when something actually shifts
+      out[i] = r.offer;
+    }
+  }
+  return out || offers;
 }
 
 /* ============================================================
@@ -683,4 +776,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, isPreAccountOffer, effectiveOfferForToday, mapEffectiveOffers, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

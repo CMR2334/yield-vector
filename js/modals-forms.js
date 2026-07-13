@@ -662,6 +662,11 @@ function showOfferModal(offerId = null, seed = null) {
           (ev.target.dataset && (ev.target.dataset.ddField === 'amount' || ev.target.dataset.ddField === 'plannedDate'))) {
         refreshRequirementsSection();
       }
+      // Feature 1: any commit that could change a bound OR the set of DD rows
+      // (sign-up/expiry/days-deposit edits, offer-type/DD-mode structural
+      // changes, a re-rendered DD list) → refresh every field's constraints +
+      // typed-violation hint. Cheap; the change event fires only on commit.
+      applyDateConstraints(form);
     });
     // Generate-dates button (delegated click).
     form.addEventListener('click', (ev) => {
@@ -736,12 +741,83 @@ function showOfferModal(offerId = null, seed = null) {
       if (ev.target && ev.target.id === 'f-signup') {
         refreshRequirementDates();
       }
+      // Feature 1: live-refresh date constraints + typed-violation hints when a
+      // date field or the days-after-signup window changes (per keystroke, so the
+      // picker's floors/ceilings and the inline warning track what you type).
+      if (ev.target && ((ev.target.classList && ev.target.classList.contains('yv-date')) || ev.target.id === 'f-days-deposit')) {
+        applyDateConstraints(form);
+      }
     });
     // Run the section sync once at open. This shows/hides the DD section
     // for the current type AND auto-populates DD rows if the section is
     // visible but empty (covers an already-DD offer opened fresh).
     syncDdSectionUI();
+    // Feature 1: seed the per-field date constraints from the offer's opening
+    // values so the picker grays impossible days from the first tap.
+    applyDateConstraints(form);
   }, 50);
+}
+
+/* ============================================================
+   DATE-FIELD CONSTRAINTS (Feature 1, 2026-07-13b)
+   ============================================================
+   Per-field ISO floor/ceiling derived from the LIVE form values (not saved
+   state), so mid-edit changes apply immediately. Written onto each date input's
+   data-floor / data-ceiling — which the custom DatePicker reads to gray + block
+   impossible days — and which also drive the gentle typed/pasted-violation hint
+   below (the picker grays these, but a typed date must not be a silent loophole).
+   Rules (owner-specified):
+     • planned funding date → floor = entered sign-up date; ceiling = deposit
+       deadline (sign-up + daysAfterSignupAllowedBeforeDeposit) when derivable.
+     • DD initiation dates  → floor = sign-up date (no ceiling).
+     • planned sign-up date → NO floor (historical entry stays fully allowed);
+       ceiling = offer expiration when entered.
+   Constrained fields that lack the needed inputs simply carry no bound (the
+   picker then behaves exactly as before). ============================================================ */
+function applyDateConstraints(form) {
+  if (!form) return;
+  const isoVal = (sel) => { const el = form.querySelector(sel); return el ? parseDateInput(el.value || '') : ''; };
+  const signupISO = isoVal('#f-signup');
+  const expiresISO = isoVal('#f-expires');
+  const daysEl = form.querySelector('#f-days-deposit');
+  const nDays = daysEl ? Number(daysEl.value) : NaN;
+  const depositDeadlineISO = (signupISO && Number.isFinite(nDays) && nDays > 0)
+    ? isoDate(addDays(parseDate(signupISO), nDays)) : '';
+  // planned sign-up: NO floor (historical allowed); ceiling = expiration
+  setFieldConstraint(form.querySelector('#f-signup'), '', expiresISO, 'the offer expiration');
+  // planned funding: floor = sign-up; ceiling = deposit deadline
+  setFieldConstraint(form.querySelector('#f-funded'), signupISO, depositDeadlineISO, 'the deposit deadline');
+  // DD initiation dates: floor = sign-up; no ceiling
+  form.querySelectorAll('[data-dd-field="plannedDate"]').forEach(inp => setFieldConstraint(inp, signupISO, '', ''));
+}
+function setFieldConstraint(inp, floorISO, ceilingISO, ceilingLabel) {
+  if (!inp) return;
+  if (floorISO) inp.dataset.floor = floorISO; else delete inp.dataset.floor;
+  if (ceilingISO) inp.dataset.ceiling = ceilingISO; else delete inp.dataset.ceiling;
+  if (ceilingLabel) inp.dataset.ceilingLabel = ceilingLabel; else delete inp.dataset.ceilingLabel;
+  updateDateViolationHint(inp);
+}
+// Gentle inline hint when the TYPED/pasted value violates the field's bound.
+// Finds-or-creates a .yv-date-warn field-hint in the field (or the DD row); an
+// in-range or empty value removes it. Never blocks saving — it's advisory,
+// mirroring how the picker grays rather than hard-rejects.
+function updateDateViolationHint(inp) {
+  if (!inp) return;
+  const iso = parseDateInput(inp.value || '');
+  const floor = inp.dataset.floor || '';
+  const ceil = inp.dataset.ceiling || '';
+  let msg = '';
+  if (iso) {
+    if (floor && iso < floor) msg = `That's before the sign-up date (${formatDateMedium(parseDate(floor))}) — a later action can't come before sign-up.`;
+    else if (ceil && iso > ceil) msg = `That's after ${inp.dataset.ceilingLabel || 'the allowed window'} (${formatDateMedium(parseDate(ceil))}).`;
+  }
+  const row = inp.closest('.dd-row');
+  const container = row || inp.closest('.field') || inp.parentElement;
+  if (!container) return;
+  let span = container.querySelector(':scope > .yv-date-warn');
+  if (!msg) { if (span) span.remove(); return; }
+  if (!span) { span = document.createElement('span'); span.className = 'field-hint yv-date-warn'; container.appendChild(span); }
+  span.textContent = msg;
 }
 
 // One row in the planned-DD list inside the Add-Offer modal. Each row
@@ -1198,6 +1274,7 @@ function generateDdDatesFromRequirement() {
     else cursor = addBusinessDays(cursor, 3); // count mode: a few business days apart
   }
   entries.innerHTML = rows.map((dd, i) => renderDdRow(dd, i)).join('');
+  applyDateConstraints(form);   // Feature 1: constrain the freshly-rendered DD dates
 }
 
 // Re-read every .dd-row in the form and return the canonical
@@ -1232,6 +1309,7 @@ function addDdRow() {
   const current = readDdRowsFromForm();
   current.push({ id: uid('dd'), plannedDate: '', amount: null });
   entries.innerHTML = current.map((dd, i) => renderDdRow(dd, i)).join('');
+  applyDateConstraints(document.getElementById('offer-form'));   // Feature 1
 }
 
 function removeDdRow(rowEl) {
@@ -1243,6 +1321,7 @@ function removeDdRow(rowEl) {
     current.splice(idx, 1);
   }
   entries.innerHTML = current.map((dd, i) => renderDdRow(dd, i)).join('');
+  applyDateConstraints(document.getElementById('offer-form'));   // Feature 1
 }
 
 function readOfferForm(idArg, isEdit) {

@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.13a",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.13a",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.13a",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.13a",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.13a",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.13a",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.13a",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.13a",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.13a",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.13a",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.13a",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.13a",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.13a",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.13a",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.13a",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.13a",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.13a",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.13a",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.13a"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.13b",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.13b",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.13b",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.13b",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.13b",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.13b",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.13b",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.13b",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.13b",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.13b",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.13b",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.13b",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.13b",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.13b",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.13b",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.13b",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.13b",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.13b",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.13b"
   }
 }
 </script>
@@ -1073,11 +1073,17 @@ a { color: inherit; text-decoration: none; }
 .yv-dp-day.amber { background: #fff5e0; }            .yv-dp-day.amber b { color: #b45309; }
 .yv-dp-day.bad   { background: #fde8e8; }            .yv-dp-day.bad b, .yv-dp-day.bad i { color: #c0392b; }
 .yv-dp-day.sel   { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,92,246,.2); }
+/* Feature 1 (2026-07-13b): a day that is impossible for this field — muted and
+   non-interactive (the <button> is also `disabled`). */
+.yv-dp-day.blocked { background: var(--bg); color: var(--text-tertiary); opacity: .45; cursor: not-allowed; }
+.yv-dp-day.blocked b { text-decoration: line-through; }
+.yv-dp-day.blocked:hover { box-shadow: none; }
 .yv-dp-day.holiday::after { content: ''; position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--danger); }
 .yv-dp-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 10.5px; color: var(--text-secondary); }
 .yv-dp-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .yv-dp-legend .s { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .yv-dp-legend .s.good { background: var(--success-soft); } .yv-dp-legend .s.mid, .yv-dp-legend .s.amber { background: #fff5e0; } .yv-dp-legend .s.bad { background: #fde8e8; }
+.yv-dp-legend .s.blocked { background: var(--bg); border: 1px solid var(--border); opacity: .55; }
 .yv-dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
 .yv-dp-foot button { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 6px; font-weight: 500; }
 .yv-dp-foot button:hover { text-decoration: underline; }
@@ -1170,6 +1176,15 @@ a { color: inherit; text-decoration: none; }
   margin-top: var(--space-3);
   margin-bottom: var(--space-3);
 }
+/* Feature 2 (2026-07-13b): "date passed — treated as today" one-tap persist row
+   on a stale pre-account card. Muted note + a compact ghost button. */
+.offer-move-today {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  flex-wrap: wrap; margin-bottom: var(--space-3);
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--warning-soft); border: 1px solid var(--border);
+}
+.offer-move-today-note { font-size: 11.5px; color: var(--text-secondary); flex: 1; min-width: 0; line-height: 1.35; }
 
 .chip {
   display: inline-block;
@@ -2148,6 +2163,12 @@ a { color: inherit; text-decoration: none; }
   #capital-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .field-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+/* Feature 1 (2026-07-13b): gentle inline warning when a TYPED/pasted date
+   violates the field's floor/ceiling (the picker grays these, but typing must not
+   be a silent loophole). Reuses the field-hint idiom in a danger tone. Inside a DD
+   row (a grid) it spans the full width. */
+.field-hint.yv-date-warn { color: var(--danger); font-weight: 500; }
+.dd-row > .field-hint.yv-date-warn { grid-column: 1 / -1; margin-top: 0; }
 
 .input, .select, .textarea {
   width: 100%;

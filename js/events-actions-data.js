@@ -6,7 +6,7 @@ import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImpo
 import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
 import { optimizePlanner } from './optimizer-engine.js';
 import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarget, readCommitmentForm, readEventForm, readOfferForm, removeDdRow, removeRequirementRow, removeSourceBank, showCommitmentModal, showEventModal, showOfferModal, showSyncHistoryModal } from './modals-forms.js';
-import { isOfferComplete, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
+import { effectiveOfferForToday, isOfferComplete, mapEffectiveOffers, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
 import { convertOfferToCommitment, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { updateUpcomingPage } from './reminders.js';
 import { diagReportText, optimizerProposalModel } from './render-main-views.js';
@@ -139,6 +139,7 @@ function onClick(e) {
     case 'edit-offer': if (App._optimizerRecheck && App._optimizerRecheck.sourceId !== id) App._optimizerRecheck = null; App._optimizerEditReturn = false; showOfferModal(id); break;
     case 'edit-offer-from-optimize': editOfferFromOptimize(id, target.dataset.focus); break;
     case 'duplicate-offer': duplicateOffer(id); break;
+    case 'move-offer-to-today': moveOfferToToday(id); break;
     case 'convert-offer': convertOffer(id); break;
     case 'delete-offer': if (confirm('Delete this offer?')) deleteOffer(id); break;
     case 'delete-offer-from-modal': if (confirm('Delete this offer?')) { App._optimizerRecheck = null; App._optimizerEditReturn = false; deleteOffer(id); closeModal(); } break;
@@ -1050,6 +1051,14 @@ function buildOptimizerInput() {
   // update-candidate set stays explicitly empty; churn synthesis is independent
   // of candidateIds and still runs.
   if (candidateIds.length === 0) candidateIds.push('__yv_no_update_candidates__');
+  // Feature 2 (2026-07-13b): feed the engine EFFECTIVE (treated-as-today) offers
+  // so a stale prospect enters as if signed up today, matching the current-state
+  // projection. The engine re-sequences candidates anyway (so this is largely a
+  // no-op there), but it keeps the input consistent with Home/Timeline and never
+  // touches the engine's own pins (they bypass buildOptimizerInput). candidateIds
+  // key on id, which the effective offers preserve. An expiry-collision prospect
+  // stays unshifted → the engine surfaces it as a no-valid-date-window review row.
+  const effTodayISO = settings.projectionStartDate || isoDate(TODAY);
   return {
     today: isoDate(TODAY),
     settings: {
@@ -1058,7 +1067,7 @@ function buildOptimizerInput() {
       currentLiquidCapital: Number(settings.currentLiquidCapital) || 0,
       projectionStartDate: settings.projectionStartDate || isoDate(TODAY)
     },
-    offers: s.offers || [],
+    offers: mapEffectiveOffers(s.offers || [], effTodayISO),
     commitments: s.commitments || [],
     events: s.events || [],
     candidateIds,
@@ -1115,6 +1124,41 @@ function applyScheduleToOffer(o, sched, now) {
   o.last_edited = now;
   reconcileClosedDate(o, o.accountStatus);
   syncRequirementsWithLegacy(o);
+}
+
+// Feature 2 (2026-07-13b): PERSIST a stale pre-account offer's treated-as-today
+// dates (the card's one-tap "Move to today"). USER-INITIATED only — the effective
+// shift is otherwise never written to storage (a boot-time auto-write would fire
+// sync pushes from every device and could race the Gist). Mirrors modal-save
+// semantics: DD ids preserved (plannedDate moved by id), last_edited stamp,
+// reconcileClosedDate (no-op — no status change), syncRequirementsWithLegacy
+// (re-dates derived rows). Deliberately does NOT force includeInScenario (unlike
+// applyScheduleToOffer) — moving dates must not silently opt an offer into the
+// scenario.
+function moveOfferToToday(id) {
+  const s = App.state;
+  const effTodayISO = (s.settings && s.settings.projectionStartDate) || isoDate(TODAY);
+  const src = (s.offers || []).find(o => o.id === id);
+  if (!src) return;
+  const info = effectiveOfferForToday(src, effTodayISO);
+  if (!info.shifted) { toast('Sign-up is already current — nothing to move'); return; }
+  const now = new Date().toISOString();
+  const eff = info.offer;
+  App.update(st => {
+    const o = st.offers.find(x => x.id === id);
+    if (!o) return;
+    o.plannedSignupDate = eff.plannedSignupDate || '';
+    o.optionalPlannedFundingDate = eff.optionalPlannedFundingDate || '';
+    const byId = new Map((eff.directDeposits || []).map(d => [d.id, d.plannedDate]));
+    for (const dd of (o.directDeposits || [])) {
+      if (dd && dd.id && byId.has(dd.id)) dd.plannedDate = byId.get(dd.id);
+    }
+    o.last_edited = now;
+    reconcileClosedDate(o, o.accountStatus);
+    syncRequirementsWithLegacy(o);
+  });
+  toast('Sign-up moved to today');
+  render();
 }
 
 // Materialize a synthesized churn candidate (op 'create') into a REAL Run-again

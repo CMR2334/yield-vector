@@ -3,7 +3,7 @@ import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrenc
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, pathState, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, effectiveOfferForToday, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, offerIssues, pathState, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
@@ -933,7 +933,15 @@ function offerDocLink(o) {
   return `<a class="offer-doc-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="Open the source DoC post" aria-label="Open source post (new tab)">DoC <span aria-hidden="true">↗</span></a>`;
 }
 
-function renderOfferCard(o) {
+function renderOfferCard(oRaw) {
+  // Feature 2 (2026-07-13b): render a stale PRE-ACCOUNT offer at its EFFECTIVE
+  // (treated-as-today) dates so the card agrees with the projection/timeline, and
+  // surface a chip + one-tap "Move to today" to persist the shift. Keyed on the
+  // same "now" the projection uses (projectionStartDate). windowPassed → the
+  // sign-up window has already passed (needs-attention, not advanced).
+  const effTodayISO = (App.state.settings && App.state.settings.projectionStartDate) || isoDate(TODAY);
+  const effInfo = effectiveOfferForToday(oRaw, effTodayISO);
+  const o = effInfo.offer;   // effective dates (same ref when nothing shifts); o.id === oRaw.id
   const complete = isOfferComplete(o);
   const issues = offerIssues(o);
   const start = lockStartDate(o);
@@ -1027,12 +1035,19 @@ function renderOfferCard(o) {
         <span class="chip ${SUB_STATUS_CHIP_CLASS[o.subStatus] || 'chip-muted'}">${SUB_STATUS_LABELS[o.subStatus] || o.subStatus || '—'}</span>
         ${eitherOrChip(o)}
         ${offerNeedsInfoChip(o)}
+        ${effInfo.shifted ? `<span class="chip chip-warn" title="Planned sign-up was ${escapeAttr(formatDateMedium(effInfo.originalSignupISO))}, in the past. It's modeled as today so it stays possible — tap &quot;Move to today&quot; to make it permanent.">date passed — treated as today</span>` : ''}
+        ${effInfo.windowPassed ? `<span class="chip chip-danger" title="This offer expired ${escapeAttr(formatDateMedium(oRaw.offerExpirationDate))}, before today — the sign-up window has passed. Update or archive it.">sign-up window passed</span>` : ''}
         ${offerExpirationChip(o)}
         ${o.accountStatus === 'closed' ? `<span class="chip chip-muted" title="Account closed — excluded from the cash projection">Closed</span>` : ''}
         ${o.confidence ? `<span class="chip chip-muted">${CONFIDENCE_LABELS[o.confidence] || o.confidence}</span>` : ''}
         ${sr != null ? `<span class="chip chip-muted" title="Simple return: bonus ÷ required funding (not annualized). Useful as the raw payout ratio.">${formatPercent(sr)} simple</span>` : ''}
         ${pathState(o).debitActive && o.debitRequirement && o.debitRequirement.count ? (() => { const _dl = debitDeadlineISO(o); return `<span class="chip chip-warn" title="${o.debitRequirement.count} qualifying debit-card purchase${o.debitRequirement.count === 1 ? '' : 's'} required${_dl ? ' by ' + formatDateMedium(_dl) : ''}">${o.debitRequirement.count} debit txns</span>`; })() : ''}
       </div>
+      ${effInfo.shifted ? `
+        <div class="offer-move-today">
+          <span class="offer-move-today-note">Sign-up was ${formatDateMedium(effInfo.originalSignupISO)} — dates shown are shifted to today.</span>
+          <button class="btn btn-ghost btn-xs" data-action="move-offer-to-today" data-id="${o.id}" title="Persist the shifted sign-up, funding and DD dates">Move to today</button>
+        </div>` : ''}
       ${(() => {
         // R70 [6]: the DoC source link now STACKS BELOW the Updated stamp
         // (stamp on top, link beneath) — both right-aligned in a column footer.
@@ -1088,7 +1103,11 @@ function renderTimeline() {
       isVirtual: false
     });
   }
-  for (const o of App.state.offers) {
+  // Feature 2 (2026-07-13b): bars use EFFECTIVE (treated-as-today) dates for
+  // stale pre-account offers so each bar lines up with the same-shifted capital
+  // curve below (generateProjection). No-op (same ref) for non-stale sets.
+  const tlEffToday = settings.projectionStartDate || isoDate(TODAY);
+  for (const o of mapEffectiveOffers(App.state.offers, tlEffToday)) {
     if (offerWithCommitment.has(o.id)) continue;
     if (!isOfferComplete(o)) continue;
     if (!offerIsActiveForProjection(o) && o.status !== 'completed') continue;
@@ -1990,7 +2009,13 @@ function renderHeroChart(svg) {
     return ambiguous ? offerDisplayLabel(o) : o.bankName;
   };
   const markers = [];
-  for (const o of App.state.offers) {
+  // Feature 2 (2026-07-13b): compute the offer MARKERS (fund/withdraw/DD/deposit-
+  // deadline dots) from EFFECTIVE (treated-as-today) dates, keyed on the same
+  // projectionStartDate the curve above uses (generateProjection shifts it too),
+  // so the dots land on the shifted curve instead of the stale raw dates. No-op
+  // (same ref) for non-stale offer sets. [review-after P2 fold]
+  const heroEffToday = App.state.settings.projectionStartDate || isoDate(TODAY);
+  for (const o of mapEffectiveOffers(App.state.offers, heroEffToday)) {
     if (!offerIsActiveForProjection(o)) continue;
     const name = displayName(o);
     const offerColor = offerColorHex(o);  // '' if none — falls back to white stroke

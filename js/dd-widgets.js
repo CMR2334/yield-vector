@@ -46,6 +46,12 @@ function suggestedFundingDate(signupISO, daysAfterDeposit) {
    ============================================================ */
 const DatePicker = {
   el: null, input: null, mode: 'plain', vY: 0, vM: 0,
+  // Feature 1 (2026-07-13b): per-field CONSTRAINTS (ISO floor/ceiling) so dates
+  // that are no longer possible for THIS field are grayed + unclickable. Read
+  // fresh from the input's data-floor / data-ceiling on every open (the form
+  // keeps them current from the LIVE field values — see modals-forms
+  // applyDateConstraints), and reset to '' for fields that carry no constraint.
+  floorISO: '', ceilingISO: '',
   ensure() {
     if (this.el) return;
     const d = document.createElement('div');
@@ -65,6 +71,9 @@ const DatePicker = {
     this.ensure();
     this.input = input;
     this.mode = input.dataset.pickerMode || 'plain';
+    // Reset-then-read so a constraint from a previously-opened field can't leak.
+    this.floorISO = input.dataset.floor || '';
+    this.ceilingISO = input.dataset.ceiling || '';
     // input.value holds the M-D-YYYY display string; parse back to ISO
     // (parseDateInput also tolerates a pasted ISO) before seeding the grid.
     const cur = parseDate(parseDateInput(input.value)) || TODAY;
@@ -131,6 +140,16 @@ const DatePicker = {
     for (let i = 0; i < firstPad; i++) cells += '<span></span>';
     for (let d = 1; d <= dim; d++) {
       const date = new Date(y, m, d);
+      const dayISO = isoDate(date);
+      // Feature 1: a day outside this field's [floor, ceiling] is IMPOSSIBLE for
+      // the task (e.g. a funding date before the entered sign-up date). Render it
+      // muted + NON-interactive (no data-day, disabled) so it's visibly and
+      // functionally unavailable. Blocking wins over the optimality shading.
+      const blocked = (this.floorISO && dayISO < this.floorISO) || (this.ceilingISO && dayISO > this.ceilingISO);
+      if (blocked) {
+        cells += `<button type="button" class="yv-dp-day blocked" disabled aria-disabled="true"><b>${d}</b></button>`;
+        continue;
+      }
       const biz = isBusinessDay(date), holi = isUsBankHoliday(date);
       let cls = 'yv-dp-day';
       let badge = '';
@@ -156,9 +175,12 @@ const DatePicker = {
     // relying on min-height stretching (which caused the overflow bug).
     const totalCells = firstPad + dim;
     for (let i = totalCells; i < 42; i++) cells += '<span></span>';
+    // Feature 1: show the "unavailable" key only when this field is actually
+    // constrained, so unconstrained pickers stay uncluttered.
+    const blockedLegend = (this.floorISO || this.ceilingISO) ? `<span><i class="s blocked"></i>unavailable</span>` : '';
     const legend = this.mode === 'dd'
-      ? `<div class="yv-dp-legend"><span><i class="s good"></i>shortest</span><span><i class="s mid"></i>mid</span><span><i class="s bad"></i>longest</span></div>`
-      : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span></div>`;
+      ? `<div class="yv-dp-legend"><span><i class="s good"></i>shortest</span><span><i class="s mid"></i>mid</span><span><i class="s bad"></i>longest</span>${blockedLegend}</div>`
+      : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span>${blockedLegend}</div>`;
     this.el.innerHTML =
       `<div class="yv-dp-head"><button type="button" data-nav="-1">‹</button><span>${monthName}</span><button type="button" data-nav="1">›</button></div>`
       + `<div class="yv-dp-dow">${['S','M','T','W','T','F','S'].map(x => `<span>${x}</span>`).join('')}</div>`

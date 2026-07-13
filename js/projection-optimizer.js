@@ -1,7 +1,7 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
-import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate, withdrawalInitiateDate } from './offer-model.js';
+import { annualizedReturn, ddCapitalTime, effectiveOfferForToday, isOfferComplete, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate, withdrawalInitiateDate } from './offer-model.js';
 import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
@@ -61,7 +61,12 @@ function effectiveHorizonDays(state) {
   // no extra fudge factor anywhere. If no active offer, 30-day floor.
   let lastAction = null;
   const debug = [];
-  for (const o of state.offers || []) {
+  // Feature 2 (2026-07-13b): stale pre-account signups are horizon-scanned at
+  // their EFFECTIVE (treated-as-today) dates so the auto horizon covers where a
+  // stale prospect actually lands, matching generateProjection. No-op (same
+  // array ref) for every non-stale offer set. See offer-model.effectiveOfferForToday.
+  const effToday = settings.projectionStartDate || isoDate(TODAY);
+  for (const o of mapEffectiveOffers(state.offers || [], effToday)) {
     if (!offerIsActiveForProjection(o)) continue;
     const we = withdrawalEligibleDate(o);
     const d = we ? parseDate(we) : null;
@@ -77,6 +82,18 @@ function effectiveHorizonDays(state) {
 
 function generateProjection(state, options = {}) {
   const settings = state.settings;
+  // Feature 2 (2026-07-13b): model stale PRE-ACCOUNT (prospect/selected) signups
+  // as if signed up TODAY (effective dates) so a slipped prospect stops distorting
+  // the current-state curve. Keyed on the projection's own "now" —
+  // projectionStartDate (auto-rolled to today live via rollProjectionStartIfStale;
+  // set explicitly by pins) — so it is DETERMINISTIC and NEVER fires for a fixture
+  // whose prospects sit on/after that date (every existing feasibility/optimizer
+  // pin), keeping the whole battery byte-identical. mapEffectiveOffers returns the
+  // SAME array ref when nothing shifts, so we only clone `state` when it matters.
+  const effToday = (settings && settings.projectionStartDate) || isoDate(TODAY);
+  const rawOffers = state.offers || [];
+  const effOffers = mapEffectiveOffers(rawOffers, effToday);
+  if (effOffers !== rawOffers) state = Object.assign({}, state, { offers: effOffers });
   // C3: the optimizer passes an explicit horizon that covers the evaluated
   // combo's full capital-lock life (see optimizerHorizonForState). EVERY other
   // caller omits options.horizonDays and gets the user's configured horizon
@@ -757,6 +774,105 @@ function testFeasibilityPins() {
       const f0 = runFeas(0), f3 = runFeas(3);
       check('Clag-E runOptimizer honors state ddTransfer.backDays (0 feasible, 3 infeasible)',
         true, f0 === true && f3 === false, `b0=${f0} b3=${f3}`);
+    }
+  }
+
+  // ---- STALE PRE-ACCOUNT SIGNUP → EFFECTIVE "TODAY" (2026-07-13b, Feature 2).
+  // A never-run prospect/selected offer whose plannedSignupDate slipped into the
+  // past is modeled as if signed up TODAY (whole date group shifted by one
+  // calendar delta), so it stops distorting the current-state curve. Confirmed/
+  // open offers are never shifted; an expiry collision flips to needs-attention.
+  {
+    const T = '2026-07-13';   // the projection's "now" (projectionStartDate)
+
+    // (Cstale-A) EFFECTIVE-TODAY PROJECTION: a stale prospect held lump no longer
+    // reads as free capital. Signup/funding 42 days back would tie up entirely in
+    // the past (nothing in the [today, …) window) — the pre-feature distortion.
+    // Shifted to today it ties up its 30k from today through the hold+lag, so the
+    // current-state curve DIPS to 20k (liquid 50k) INSIDE the window.
+    {
+      const stale = _fpOffer({ id: 'off_stale', requiredFundingAmount: 30000, daysFundsMustRemain: 10,
+        plannedSignupDate: '2026-06-01', optionalPlannedFundingDate: '2026-06-01',
+        status: 'prospect', includeInScenario: true });
+      const st = _fpState({ settings: { projectionStartDate: T, minimumCashBuffer: 0, currentLiquidCapital: 50000 }, offers: [stale] });
+      const proj = generateProjection(st, { horizonDays: 40 });
+      const s = summarizeProjection(proj, st.settings);
+      // Day 0 (today) is inside the tied-up interval → 20k; lowest across the
+      // window is 20k (never the free-capital 50k the stale raw dates implied).
+      check('Cstale-A effective-today: stale prospect ties up from today (curve dips, not free capital)',
+        true, proj[0].availableCapital === 20000 && s.lowest.availableCapital === 20000,
+        `day0=${proj[0].availableCapital} lowest=${s.lowest.availableCapital}`);
+    }
+
+    // (Cstale-B) GROUP-SHIFT COHERENCE: signup lands on today and EVERY internal
+    // offset (funding, each DD) is preserved by the single calendar delta; DD ids
+    // survive (consumers key on them). Uses the pure helper directly.
+    {
+      const src = _fpOffer({ id: 'off_grp', offerType: 'held-and-dd', requiredFundingAmount: 40000,
+        daysFundsMustRemain: 20, status: 'prospect', includeInScenario: true,
+        plannedSignupDate: '2026-06-01', optionalPlannedFundingDate: '2026-06-03',
+        directDeposits: [{ id: 'dA', amount: 20000, plannedDate: '2026-06-05' },
+                         { id: 'dB', amount: 20000, plannedDate: '2026-06-12' }] });
+      const r = effectiveOfferForToday(src, T);
+      const e = r.offer;
+      const off = (a, b) => daysBetween(parseDate(a), parseDate(b));
+      const okSignup = e.plannedSignupDate === T && r.deltaDays === off('2026-06-01', T);
+      const okFund = off(e.plannedSignupDate, e.optionalPlannedFundingDate) === off('2026-06-01', '2026-06-03');
+      const okDd0 = e.directDeposits[0].id === 'dA' && off(e.plannedSignupDate, e.directDeposits[0].plannedDate) === off('2026-06-01', '2026-06-05');
+      const okDd1 = e.directDeposits[1].id === 'dB' && off(e.plannedSignupDate, e.directDeposits[1].plannedDate) === off('2026-06-01', '2026-06-12');
+      check('Cstale-B group-shift coherence: signup→today, funding+DD offsets preserved, DD ids kept',
+        true, r.shifted && okSignup && okFund && okDd0 && okDd1,
+        `signup=${e.plannedSignupDate} fund=${e.optionalPlannedFundingDate} dd=${e.directDeposits.map(d=>d.id+':'+d.plannedDate).join(',')}`);
+    }
+
+    // (Cstale-C) EXPIRY COLLISION → needs-attention: today strictly past the
+    // expiration → NOT advanced (windowPassed, unchanged offer). A future
+    // expiration shifts normally; an expiration EXACTLY today still permits
+    // signing up today (strict >).
+    {
+      const mk = (exp) => _fpOffer({ id: 'off_exp', status: 'prospect', plannedSignupDate: '2026-06-01', offerExpirationDate: exp });
+      const passed = effectiveOfferForToday(mk('2026-06-20'), T);
+      const future = effectiveOfferForToday(mk('2026-12-31'), T);
+      const edge = effectiveOfferForToday(mk(T), T);
+      check('Cstale-C expiry collision: past-expiry NOT advanced (needs-attention); future/edge shift',
+        true,
+        passed.windowPassed && !passed.shifted && passed.offer.plannedSignupDate === '2026-06-01'
+        && future.shifted && !future.windowPassed && future.offer.plannedSignupDate === T
+        && edge.shifted && !edge.windowPassed,
+        `passed=${passed.windowPassed} future=${future.shifted} edge=${edge.shifted}`);
+    }
+
+    // (Cstale-D) CONFIRMED/OPEN NEVER SHIFTED; both hypothetical kinds (prospect
+    // AND selected) do shift. A funded offer with the same stale signup is left
+    // exactly as entered.
+    {
+      const funded = effectiveOfferForToday(_fpOffer({ id: 'off_conf', status: 'funded', plannedSignupDate: '2026-06-01' }), T);
+      const selected = effectiveOfferForToday(_fpOffer({ id: 'off_sel', status: 'selected', plannedSignupDate: '2026-06-01' }), T);
+      const prospect = effectiveOfferForToday(_fpOffer({ id: 'off_pro', status: 'prospect', plannedSignupDate: '2026-06-01' }), T);
+      check('Cstale-D confirmed/open never shifted; prospect & selected both shift',
+        true,
+        !funded.shifted && funded.offer.plannedSignupDate === '2026-06-01'
+        && selected.shifted && selected.offer.plannedSignupDate === T
+        && prospect.shifted && prospect.offer.plannedSignupDate === T,
+        `funded=${funded.shifted} selected=${selected.shifted} prospect=${prospect.shifted}`);
+    }
+
+    // (Cstale-E) DETERMINISM + IDEMPOTENCE: identical input → identical shift; and
+    // mapping the already-effective array again is a no-op (signup==today, not <),
+    // so re-projection can't drift.
+    {
+      const src = _fpOffer({ id: 'off_det', status: 'prospect', plannedSignupDate: '2026-06-01',
+        optionalPlannedFundingDate: '2026-06-04', directDeposits: [{ id: 'd1', amount: 5000, plannedDate: '2026-06-06' }] });
+      const a = effectiveOfferForToday(src, T).offer;
+      const b = effectiveOfferForToday(src, T).offer;
+      const once = mapEffectiveOffers([src], T);
+      const twice = mapEffectiveOffers(once, T);
+      const sameDates = a.plannedSignupDate === b.plannedSignupDate
+        && a.optionalPlannedFundingDate === b.optionalPlannedFundingDate
+        && a.directDeposits[0].plannedDate === b.directDeposits[0].plannedDate;
+      check('Cstale-E determinism + idempotence: repeat shift identical, re-map is a no-op',
+        true, sameDates && twice[0].plannedSignupDate === once[0].plannedSignupDate && twice[0].plannedSignupDate === T,
+        `once=${once[0].plannedSignupDate} twice=${twice[0].plannedSignupDate}`);
     }
   }
 
