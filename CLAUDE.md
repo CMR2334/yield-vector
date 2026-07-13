@@ -8,11 +8,6 @@ it; don't restate it.
 ## Session start
 1. Read [HANDOFF.md](HANDOFF.md): the Current state block + top 2–3 entries.
    Prepend a new entry after each meaningful round — be proactive.
-2. Claim the session (guard details: [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md)):
-   ```bash
-   node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform claude --scope "$PWD" --task "short description"
-   ```
-   Release after commit+push with `… done --id SESSION_ID`.
 
 ## Permissions
 `bypassPermissions` mode via `.claude/settings.json` — all tool calls

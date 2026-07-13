@@ -4,7 +4,6 @@ This document is for any AI assistant working in this directory. It is AI-agnost
 
 See [../docs/USER_PROFILE.md](../docs/USER_PROFILE.md) for the workspace owner's working style and communication preferences.
 See [../docs/PREFERENCES.md](../docs/PREFERENCES.md) for code and documentation standards.
-See [../docs/AI_COORDINATION.md](../docs/AI_COORDINATION.md) before editing files so parallel Claude/Codex work does not overlap silently.
 
 ---
 
@@ -133,10 +132,8 @@ One source of truth per fact — don't duplicate (per [../docs/PREFERENCES.md](.
 
 ## Session Protocol
 
-1. Claim the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js start --platform <codex|claude> --scope "$PWD" --task "short description"`.
-2. Read `HANDOFF.md` at the start of every session (Current state block + top 2–3 entries).
-3. Do the work.
-4. Commit and push (descriptive message); push at least every 30 minutes of active work and before the owner steps away.
-5. Release the session with `node /Users/collinrekowski/Automation/scripts/agent-session.js done --id SESSION_ID`.
-6. Prepend a new entry to `HANDOFF.md` summarizing what changed.
-7. On a confirmed-good state, bump `APP_VERSION` + tag `stable-YYYY-MM-DD` + add a CHANGELOG milestone entry.
+1. Read `HANDOFF.md` at the start of every session (Current state block + top 2–3 entries).
+2. Do the work.
+3. Commit and push (descriptive message); push at least every 30 minutes of active work and before the owner steps away.
+4. Prepend a new entry to `HANDOFF.md` summarizing what changed.
+5. On a confirmed-good state, bump `APP_VERSION` + tag `stable-YYYY-MM-DD` + add a CHANGELOG milestone entry.
