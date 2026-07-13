@@ -17,7 +17,59 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-13, Round 88)
+## Current state (as of 2026-07-13, Round 89)
+
+- **R89 (v2026.07.13a — CORRECTNESS: hold-release transfer lag — no same-day optimistic netting):**
+  Codex audit (`/tmp/yv-cash-ordering-audit.log`, VERDICT: OPTIMISTIC-NETTING CONFIRMED) found the day model
+  treated held capital as spendable the SAME day it becomes withdrawal-eligible (tied-up intervals `[start, end)`
+  with the eligibility date exclusive), while DDs already model a transfer-back leg (`ddRoundTrip().returnDate`
+  bakes in `backDays`). Owner-confirmed intent: *"factor in actual cash deposit dates for when capital will be
+  dispensed… if those overlap such that I go below my buffer, that's not an optimal plan and can't be an option."*
+  Real case: funding BMO $25k + Old National $20k on the exact day Brex's $50k released claimed low cash **+$24,500**
+  on Jul 17; with a 1-business-day return leg it's actually **−$25,500**. **FIX (audit option 3, scoped):**
+  `withdrawalEligibleDate(offer, cfg)` (`js/offer-model.js`) now returns the **capital-back / LANDING** date for held
+  types = the bank hold-release date PLUS `ddTransfer.backDays` **business** days (reuses the existing DD transfer-back
+  leg — no new setting; `backDays=0` degenerates to the old behavior). For DD it is unchanged (returnDate already
+  landed → no double lag), making DD and held **symmetric** (both spendable ON the landing day in `[start, landing)`).
+  Because every capital-back surface already routed through `withdrawalEligibleDate`, the **projection tied-up
+  interval, horizon, plan capital-back metric, sequence-card "Capital back", champions/edge math, completion tie-break,
+  offer-card + timeline + days-tied-up** all became landing-consistent through this ONE change — no downstream logic
+  edits. New `withdrawalInitiateDate(offer, cfg)` (the pre-lag hold-release date) preserves the **withdraw REMINDER**'s
+  due date (an action prompt: "go withdraw now" must fire on release, not after landing) — `js/reminders.js` repointed.
+  Shared `_heldReleaseDate` core avoids a string↔Date round-trip on the beam hot path. **UI:** offer-card + debug-table
+  "Withdrawal date" relabeled **"Capital back"** (they now show landing) + days-tied-up tooltip updated; new
+  **Optimize-panel current-state banner** (`.opt-current-danger`, muted `--danger-deep`): when the ENTERED schedule
+  already dips below buffer (per Home's `generateProjection(App.state)`) it says *"Your current schedule dips to −$X on
+  <date> —"* + *"this proposal reschedules to stay above your buffer"* (post-run, feasible) / *"run the optimizer to fix
+  it"* (pre-run). Eligibility-vs-landing distinction documented in `docs/assessments/2026-07-13-hold-release-transfer-
+  lag.md` + code comments (`offer-model.js`, `projection-optimizer.js`). **Pins:** feasibility 7→**12** (Clag-A landing
+  boundary: tied ON release day, freed ON landing; Clag-B backDays 0/1/3 shift recovery, 0 degenerates to release;
+  Clag-C the exact audit Jul-17 arithmetic — backDays=0 → +$24,500, backDays=1 → −$25,500, swing = Brex's $50k; Clag-E
+  the exported `runOptimizer` honors `state.ddTransfer.backDays` — 0 feasible / 3 infeasible); optimizer 82→**83**
+  (Clag-D: engine re-sequences a candidate PAST the landing date, not the release day, buffer-safe).
+  Wall-clock perf budget 2000→2200ms (honest: the transfer-lag adds a bounded `addBusinessDays` per held offer per eval;
+  companion `evaluated <= EVAL_CAP` guard untouched). **No existing pin asserted an optimistic same-day date** — all prior
+  82 optimizer + 7 feasibility pins stayed green untouched (their held-offer date/feasibility assertions don't flip under
+  the +backDays shift). **Battery (in-browser, real `?v=2026.07.13a` modules): optimizer 83/83, feasibility 12/12,
+  parser 20/20; node --check all clean.** **REVIEW-AFTER — Codex adversarial (RUNG 1, default profile `-m gpt-5.5`,
+  ran clean; `codex-companion adversarial-review --scope branch --base origin/main`; focus = interval-boundary
+  off-by-ones / DD-vs-hold asymmetry / horizon interactions / apply-undo date writes): verdict needs-attention, ONE
+  medium — the exported legacy `runOptimizer`/`optimizerHorizonForState` feasibility path didn't thread
+  `state.settings.ddTransfer`, so a non-default `backDays` would be scored against the default 1/1/1 lag (pins-only path;
+  the live `optimizePlanner` already threads `ctx.ddTransfer`, and live non-engine callers get the owner's backDays via
+  the registered provider). **FOLDED exactly as recommended:** `runOptimizer` normalizes `cfg` once and threads it to
+  `optimizerHorizonForState` (new `cfg` param), the candidacy `withdrawalEligibleDate`, `annualizedReturn`,
+  `ddCapitalTime`, and `generateProjection`; guard pin Clag-E added. Behavior-preserving for the default-backDays C2/C3
+  pins. **APP_VERSION → 2026.07.13a** ×3 (index.html ×19 import-map `?v=`,
+  runtime-status.js, sw.js; sw precache derives `yv-precache-2026.07.13a`; **0 strays** of 11c). **Preview E2E** (port
+  8765, 380px, owner localStorage STRICTLY READ-ONLY — `App.save` stubbed to a no-op then restored, owner's 7 offers
+  restored byte-identical): seeded the audit scenario (Brex confirmed 50k releasing Jul 17 / landing Jul 20; BofA/BMO/ONB
+  prospects) — Home showed **−$25,500 / 3 shortfall days** (was optimistic +$24,500); pre-run banner *"…dips to −$25,500
+  on Jul 17 — run the optimizer to fix it"*; the optimizer **spread BMO (Jul 17→Jul 22) and Old National (Jul 17→Jul 22)
+  past Brex's Jul 20 landing**, kept BofA at Jul 15 → headline valid, 0 shortfall, low cash $19,500; post-run banner
+  *"…— this proposal reschedules to stay above your buffer"*; offer cards read *"Fund date Jul 14 · Capital back Jul 20"*;
+  **380px zero horizontal overflow; zero console errors.** Owner-owned paths (`.github/`, `AGENTS.md`, `CLAUDE.md`,
+  `.claude/settings.json`) untouched — explicit-path `git add` only. **Remaining (owner gate): device-check v2026.07.13a.**
 
 - **R88 (v2026.07.11c — owner-directed RULE: two omission clauses for displayed non-headline plans):**
   Two clauses the owner added on top of the 10a Pareto filter, both engine-side in the same stage family

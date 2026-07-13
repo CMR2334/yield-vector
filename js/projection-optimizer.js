@@ -1,7 +1,7 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
-import { ddRoundTrip, directDepositEffectiveDate } from './dd-core.js';
+import { ddRoundTrip, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
-import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
+import { annualizedReturn, ddCapitalTime, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate, withdrawalInitiateDate } from './offer-model.js';
 import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
@@ -17,8 +17,14 @@ import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requireme
 
    Interval convention:
      A commitment with startDate=A and endDate=B ties up funds on each day d
-     where A <= d < B. If a deposit lands March 1 and is withdrawal-eligible
-     May 1, the funds are tied up March 1 through April 30 (61 days).
+     where A <= d < B — so the funds are SPENDABLE ON day B. B is the
+     CAPITAL-BACK (landing) date: the day the money is back in the hub account
+     (withdrawalEligibleDate). For held offers that is the bank hold-release date
+     PLUS the return-transfer lag (ddTransfer.backDays business days); for DDs it
+     is the round-trip returnDate (backDays already baked in). This makes held
+     and DD symmetric: capital an offer releases is not spendable the same day it
+     becomes withdrawal-eligible, only the day it actually LANDS back (2026-07-13
+     hold-release transfer-lag fix — no same-day optimistic netting).
 
    Sources of commitments:
      1. Manual/explicit Capital Commitments (with includeInProjection true).
@@ -176,10 +182,13 @@ function generateProjection(state, options = {}) {
       continue;
     }
     // HELD + DD: two distinct capital commitments, both tied up through the
-    // bonus hold (withdrawal-eligible) date:
+    // CAPITAL-BACK (landing) date `we` = withdrawalEligibleDate (the hold-release
+    // date plus the return-transfer lag; see offer-model.js):
     //   1. the held LUMP SUM (requiredFundingAmount) from the funding date, and
     //   2. each qualifying DD's amount from when it lands.
-    // Previously only (2) was modeled, so the held funds never hit the chart.
+    // Previously only (2) was modeled, so the held funds never hit the chart;
+    // and `we` was the hold-release date, letting the lump be spent the day the
+    // hold lifted rather than the day it landed back (fixed 2026-07-13).
     if (o.offerType === 'held-and-dd' && Array.isArray(o.directDeposits) && o.directDeposits.length > 0) {
       const we = parseDate(withdrawalEligibleDate(o, cfg));
       if (!we) continue;
@@ -196,7 +205,9 @@ function generateProjection(state, options = {}) {
       }
       continue;
     }
-    // New funds held: single block over the lock window.
+    // New funds held: single block from the funding date to the CAPITAL-BACK
+    // (landing) date — the hold-release date plus the return-transfer lag, so the
+    // lump is spendable the day it lands back, not the day the hold lifts.
     const start = parseDate(lockStartDate(o));
     const end = parseDate(withdrawalEligibleDate(o, cfg));
     if (!start || !end || start >= end) continue;
@@ -328,7 +339,7 @@ const OPTIMIZER_HORIZON_CEILING_DAYS = 730;
 // NEVER shorter than the user's display horizon (effectiveHorizonDays), so no
 // mode regresses; it only ever EXTENDS past the auto-mode 180d clamp so a late
 // shortfall can't hide beyond the end of the projection.
-function optimizerHorizonForState(state, horizonStart) {
+function optimizerHorizonForState(state, horizonStart, cfg) {
   const start = horizonStart || parseDate(state.settings.projectionStartDate) || TODAY;
   const base = effectiveHorizonDays(state);
   let latest = null;
@@ -336,7 +347,9 @@ function optimizerHorizonForState(state, horizonStart) {
     const inPlay = offerIsActiveForProjection(o)
       || (HYPOTHETICAL_OFFER_STATUSES.has(o.status) && isOfferComplete(o));
     if (!inPlay) continue;
-    const iso = safeToCloseDate(o) || withdrawalEligibleDate(o) || lockStartDate(o);
+    // cfg threads the state's ddTransfer so the horizon covers the landing
+    // (capital-back) date, not the earlier hold-release date (2026-07-13).
+    const iso = safeToCloseDate(o, cfg) || withdrawalEligibleDate(o, cfg) || lockStartDate(o);
     const d = iso ? parseDate(iso) : null;
     if (d && (latest == null || d > latest)) latest = d;
   }
@@ -356,15 +369,20 @@ function optimizerHorizonForState(state, horizonStart) {
 // wire this to any UI surface as a plan validator — use optimizePlanner, which
 // runs validateOfferQualification, instead.
 function runOptimizer(state) {
+  // Thread the state's ddTransfer through EVERY landing-based computation so this
+  // exported feasibility path honors the configured transfer lag exactly like the
+  // live optimizePlanner (2026-07-13 review fold). Normalized once; a state with
+  // no ddTransfer degenerates to 1/1/1, unchanged from before.
+  const cfg = normalizeDdTransfer(state.settings.ddTransfer);
   const horizonStart = parseDate(state.settings.projectionStartDate) || TODAY;
-  const optimizerHorizonDays = optimizerHorizonForState(state, horizonStart);
+  const optimizerHorizonDays = optimizerHorizonForState(state, horizonStart, cfg);
   const horizonEnd = addDays(horizonStart, optimizerHorizonDays);
 
   const candidates = state.offers.filter(o => {
     if (!HYPOTHETICAL_OFFER_STATUSES.has(o.status)) return false;
     if (!isOfferComplete(o)) return false;
     const start = parseDate(lockStartDate(o));
-    const end = parseDate(withdrawalEligibleDate(o));
+    const end = parseDate(withdrawalEligibleDate(o, cfg));
     if (!start || !end) return false;
     if (end <= horizonStart || start >= horizonEnd) return false;
     return true;
@@ -415,14 +433,14 @@ function runOptimizer(state) {
         includedIds.push(o.id);
         totalBonus += Number(o.signupBonusAmount) || 0;
         totalRequired += Number(o.requiredFundingAmount) || 0;
-        const ar = annualizedReturn(o);
+        const ar = annualizedReturn(o, cfg);
         if (ar != null) {
           // Weight by capital × duration (dollar-days) to get a blended
           // rate. DD offers use their actual round-trip dollar-days;
           // held offers use required funding × stated hold days.
           let weight;
           if (o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') {
-            const ct = ddCapitalTime(o);
+            const ct = ddCapitalTime(o, cfg);
             weight = ct ? ct.dollarDays : 0;
           } else {
             weight = Number(o.requiredFundingAmount) * Number(o.daysFundsMustRemain || 0);
@@ -437,7 +455,8 @@ function runOptimizer(state) {
 
     const proj = generateProjection(state, {
       includedOfferIds: baseActiveIds.concat(includedIds),
-      horizonDays: optimizerHorizonDays
+      horizonDays: optimizerHorizonDays,
+      ddTransfer: cfg
     });
     let lowest = Infinity;
     let belowBufferDays = 0;
@@ -638,6 +657,107 @@ function testFeasibilityPins() {
     const debitLow = low('debit');
     check('Ceo either/or debit path ties up no capital; dd path ties up its DD',
       true, debitLow === 50000 && ddLow != null && ddLow < 50000, `dd=${ddLow} debit=${debitLow}`);
+  }
+
+  // ---- HOLD-RELEASE TRANSFER LAG (2026-07-13). The day model must treat held
+  // capital as spendable only when it LANDS back in the hub (withdrawal-
+  // eligibility + ddTransfer.backDays business days), NOT the day the hold
+  // releases. Owner-confirmed intent: a plan whose held releases overlap same-day
+  // funding below the buffer is infeasible, not optimal. All dates are DERIVED
+  // from the model functions (no hardcoded calendar) so the pins stay robust.
+  {
+    const dayByISO = (proj, iso) => proj.find(d => d.dateISO === iso) || null;
+    const cfg = (b) => ({ inDays: 1, seasonDays: 1, backDays: b });
+
+    // (Clag-A) LANDING-DAY BOUNDARY: a 30k held lump (liquid 50k) is still tied
+    // up ON the hold-release/withdrawal-eligibility day and freed ON the landing
+    // day (release + backDays). Under the pre-fix same-day model the release day
+    // itself would already read full liquid — this pin encodes the fix.
+    {
+      const held = _fpOffer({ id: 'off_land', requiredFundingAmount: 30000, daysFundsMustRemain: 10,
+        plannedSignupDate: '2026-07-06', optionalPlannedFundingDate: '2026-07-06', includeInScenario: true });
+      const st = _fpState({ settings: { projectionStartDate: '2026-07-06', minimumCashBuffer: 0, currentLiquidCapital: 50000 }, offers: [held] });
+      const proj = generateProjection(st, { includedOfferIds: ['off_land'], horizonDays: 40, ddTransfer: cfg(1) });
+      const relISO = withdrawalInitiateDate(held);        // hold-release (backDays-independent)
+      const landISO = withdrawalEligibleDate(held, cfg(1)); // capital-back = release + 1 biz day
+      const relDay = dayByISO(proj, relISO);
+      const landDay = dayByISO(proj, landISO);
+      check('Clag-A landing boundary: tied up ON release day, freed ON landing day (release+backDays)',
+        true, !!(landISO > relISO && relDay && landDay && relDay.availableCapital === 20000 && landDay.availableCapital === 50000),
+        relDay && landDay ? `rel(${relISO})=${relDay.availableCapital} land(${landISO})=${landDay.availableCapital}` : 'missing day');
+    }
+
+    // (Clag-B) backDays VARIANTS 0/1/3 end-to-end: the projection's capital-back
+    // recovery date equals withdrawalEligibleDate for each backDays, 0 degenerates
+    // to the release day (pre-fix behavior), and the recovery shifts strictly
+    // later 0 < 1 < 3.
+    {
+      const held = _fpOffer({ id: 'off_var', requiredFundingAmount: 30000, daysFundsMustRemain: 10,
+        plannedSignupDate: '2026-07-06', optionalPlannedFundingDate: '2026-07-06', includeInScenario: true });
+      const recovery = (b) => {
+        const st = _fpState({ settings: { projectionStartDate: '2026-07-06', minimumCashBuffer: 0, currentLiquidCapital: 50000 }, offers: [held] });
+        const proj = generateProjection(st, { includedOfferIds: ['off_var'], horizonDays: 40, ddTransfer: cfg(b) });
+        const d = proj.find(x => x.availableCapital === 50000);
+        return d ? d.dateISO : null;
+      };
+      const relISO = withdrawalInitiateDate(held);
+      const r0 = recovery(0), r1 = recovery(1), r3 = recovery(3);
+      const m0 = withdrawalEligibleDate(held, cfg(0)), m1 = withdrawalEligibleDate(held, cfg(1)), m3 = withdrawalEligibleDate(held, cfg(3));
+      check('Clag-B backDays 0/1/3: projection recovery == withdrawalEligibleDate, 0 degenerates to release, 0<1<3',
+        true, r0 === m0 && r1 === m1 && r3 === m3 && r0 === relISO && r0 < r1 && r1 < r3,
+        `b0=${r0} b1=${r1} b3=${r3} rel=${relISO}`);
+    }
+
+    // (Clag-C) OWNER Jul-17 AUDIT REPRODUCTION. Liquid 84,500; Brex 50k held
+    // releasing on its withdrawal-eligibility day, BofA 15k + BMO 25k + Old
+    // National 20k held past it. On Brex's release day: backDays=0 (optimistic
+    // netting) frees Brex same day → +24,500 (the audit's feasible figure);
+    // backDays=1 keeps Brex in transit → −25,500 (real shortfall). The 50k swing
+    // is exactly Brex's lump, proving same-day netting was the bug.
+    {
+      const brex = _fpOffer({ id: 'off_brex', requiredFundingAmount: 50000, daysFundsMustRemain: 3,
+        plannedSignupDate: '2026-07-14', optionalPlannedFundingDate: '2026-07-14', includeInScenario: true });
+      const bofa = _fpOffer({ id: 'off_bofa', requiredFundingAmount: 15000, daysFundsMustRemain: 40,
+        plannedSignupDate: '2026-07-15', optionalPlannedFundingDate: '2026-07-15', includeInScenario: true });
+      const bmo = _fpOffer({ id: 'off_bmo', requiredFundingAmount: 25000, daysFundsMustRemain: 40,
+        plannedSignupDate: '2026-07-17', optionalPlannedFundingDate: '2026-07-17', includeInScenario: true });
+      const onb = _fpOffer({ id: 'off_onb', requiredFundingAmount: 20000, daysFundsMustRemain: 40,
+        plannedSignupDate: '2026-07-17', optionalPlannedFundingDate: '2026-07-17', includeInScenario: true });
+      const ids = ['off_brex', 'off_bofa', 'off_bmo', 'off_onb'];
+      const proj = (b) => generateProjection(
+        _fpState({ settings: { projectionStartDate: '2026-07-13', minimumCashBuffer: 0, currentLiquidCapital: 84500 }, offers: [brex, bofa, bmo, onb] }),
+        { includedOfferIds: ids, horizonDays: 60, ddTransfer: cfg(b) });
+      const brexRelease = withdrawalInitiateDate(brex); // Brex's withdrawal-eligibility day (the audit's Jul 17)
+      const d0 = dayByISO(proj(0), brexRelease);
+      const d1 = dayByISO(proj(1), brexRelease);
+      check('Clag-C audit Jul-17: backDays=0 optimistic netting leaves +24,500 on Brex release day',
+        24500, d0 ? d0.availableCapital : null, `date=${brexRelease}`);
+      check('Clag-C audit Jul-17: backDays=1 transfer lag exposes −25,500 same-day overlap (Brex still in transit)',
+        -25500, d1 ? d1.availableCapital : null, `swing=${d0 && d1 ? d0.availableCapital - d1.availableCapital : '?'}`);
+    }
+
+    // (Clag-E) The EXPORTED runOptimizer feasibility path must honor the state's
+    // ddTransfer.backDays (2026-07-13 Codex review fold). A 30k held candidate
+    // (liquid 30k) with a −5k outflow the day after its hold releases is feasible
+    // at backDays=0 (capital already landed → freed) but INFEASIBLE at backDays=3
+    // (still in transit → the outflow drives −5k). If runOptimizer ignored the
+    // config (used the 1/1/1 default) both verdicts would agree — this pin fails.
+    {
+      const lagCand = _fpOffer({ id: 'off_lagfeas', requiredFundingAmount: 30000, daysFundsMustRemain: 10,
+        plannedSignupDate: '2026-07-06', optionalPlannedFundingDate: '2026-07-06' });
+      const runFeas = (b) => {
+        const r = runOptimizer(_fpState({
+          settings: { projectionStartDate: '2026-07-06', projectionHorizonMode: 'auto', minimumCashBuffer: 0, currentLiquidCapital: 30000, maxOptimizerCandidates: 15, ddTransfer: cfg(b) },
+          offers: [lagCand],
+          events: [{ id: 'ev_lagfeas', includeInProjection: true, amount: -5000, date: '2026-07-17' }]
+        }));
+        const c = (r.allResults || []).find(x => x.offerCount === 1);
+        return c ? c.feasible : null;
+      };
+      const f0 = runFeas(0), f3 = runFeas(3);
+      check('Clag-E runOptimizer honors state ddTransfer.backDays (0 feasible, 3 infeasible)',
+        true, f0 === true && f3 === false, `b0=${f0} b3=${f3}`);
+    }
   }
 
   const pass = results.filter(r => r.ok).length;

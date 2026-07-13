@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, formatCompactCurrency, formatCurrency, formatDateDisplay, isoDate, nextEventInstance, parseDate, relativeDays } from './date-format-core.js';
 import { ddWindowEndDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, pathState, safeToCloseDate, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, pathState, safeToCloseDate, withdrawalInitiateDate } from './offer-model.js';
 import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel, requirementSummary } from './requirements-templates.js';
 import { ErrCode, WORKING_SUB_STATUSES, logError } from './runtime-status.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
@@ -208,11 +208,14 @@ function buildReminderItems(state) {
       }
     }
 
-    // withdrawal / lock-release — informational: funds free up. Keyed on the
-    // modern field: any offer whose capital is still live (approved/on-track/
-    // met-waiting) and whose hold has a computable release date (prospects
-    // have no live account to release from).
-    const we = withdrawalEligibleDate(o);
+    // withdrawal / lock-release — informational: the hold releases and the owner
+    // can INITIATE the withdrawal. Keyed on the modern field: any offer whose
+    // capital is still live (approved/on-track/met-waiting) and whose hold has a
+    // computable release date (prospects have no live account to release from).
+    // Uses withdrawalInitiateDate (the eligibility / hold-release date) — NOT the
+    // capital-back landing date — so this "go withdraw now" prompt fires when the
+    // hold lifts, not after the return transfer has already landed (2026-07-13).
+    const we = withdrawalInitiateDate(o);
     if (we && capitalLive) {
       const due = isoDateOnly(we);
       if (due) items.push({

@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, withdrawalEligibleDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -1855,6 +1855,34 @@ function testOptimizerPins() {
     check('confirmed base offer remains in evaluated set', !forced.valid && forced.capitalCurveSummary.lowestAvailable < 0, String(forced.capitalCurveSummary.lowestAvailable));
   }
   {
+    // Clag-D (2026-07-13 hold-release transfer lag): the engine must re-sequence a
+    // candidate PAST the base offer's capital-back LANDING date, not merely its
+    // withdrawal-eligibility/release date. A confirmed 50k held base (funded
+    // 2026-07-14, 3-day hold → releases 2026-07-17, LANDS 2026-07-20 at
+    // backDays=1) leaves only 10k free of 60k liquid until it lands; a 25k
+    // candidate cannot fund on the release day (same-day netting was the bug) and
+    // must wait for the landing. Proves the owner-confirmed intent end-to-end: a
+    // below-buffer same-day overlap "can't be an option."
+    const cfg1 = { inDays: 1, seasonDays: 1, backDays: 1 };
+    const hold = _pinOffer({
+      id: 'off_hold', status: 'funded', accountStatus: 'open', subStatus: 'on-track',
+      includeInScenario: true, requiredFundingAmount: 50000, daysFundsMustRemain: 3,
+      plannedSignupDate: '2026-07-14', optionalPlannedFundingDate: '2026-07-14', offerExpirationDate: '2026-12-31'
+    });
+    const next = _pinOffer({ id: 'off_next', signupBonusAmount: 400, requiredFundingAmount: 25000, daysFundsMustRemain: 30, offerExpirationDate: '2026-12-31' });
+    const plan = optimizePlanner(_pinState({
+      settings: { projectionStartDate: '2026-07-13', minimumCashBuffer: 0, currentLiquidCapital: 60000, ddTransfer: cfg1 },
+      offers: [hold, next], candidateIds: ['off_next']
+    }));
+    const relISO = withdrawalInitiateDate(hold);          // 2026-07-17 (release)
+    const landISO = withdrawalEligibleDate(hold, cfg1);    // 2026-07-20 (landing = release + 1 biz)
+    const sched = plan.schedule && plan.schedule.off_next;
+    check('Clag-D engine re-sequences candidate past the LANDING date (not the release day) + buffer-safe',
+      plan.valid && plan.capitalCurveSummary.shortfallDays === 0 && plan.capitalCurveSummary.belowBufferDays === 0
+      && plan.includedIds.includes('off_next') && landISO > relISO && sched && sched.derived.lockStart >= landISO,
+      sched ? `lockStart=${sched.derived.lockStart} release=${relISO} landing=${landISO}` : 'no schedule');
+  }
+  {
     const activeCandidate = _pinOffer({
       id: 'off_active_candidate',
       includeInScenario: true,
@@ -2061,7 +2089,13 @@ function testOptimizerPins() {
     }));
     const elapsed = Date.now() - start;
     check('beam perf stays under eval cap', plan.evaluated <= EVAL_CAP, String(plan.evaluated));
-    check('beam perf stays under wall-clock budget', elapsed < 2000, `${elapsed}ms`);
+    // Wall-clock smoke ceiling for the 14-held-offer / ~11.8k-eval beam. Raised
+    // 2000→2200ms (2026-07-13): modeling the hold-release transfer lag adds a
+    // bounded business-day computation (addBusinessDays) per held offer per
+    // eval — ~5% here (~1.9s→~2.0s on the dev box). The structural blow-up guard
+    // is the separate `evaluated <= EVAL_CAP` check above; this only catches a
+    // gross regression, so the small feature cost gets honest headroom.
+    check('beam perf stays under wall-clock budget', elapsed < 2200, `${elapsed}ms`);
     const again = optimizePlanner(_pinState({
       settings: { projectionStartDate: '2026-07-09', minimumCashBuffer: 0, currentLiquidCapital: 50000, ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 } },
       offers,

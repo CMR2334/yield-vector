@@ -1,5 +1,5 @@
-import { TODAY, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, nextBusinessDay, parseDate } from './date-format-core.js';
-import { ddRoundTrip, directDepositEffectiveDate } from './dd-core.js';
+import { TODAY, addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, nextBusinessDay, parseDate } from './date-format-core.js';
+import { ddRoundTrip, ddTransferConfig, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { requirementDeadlineISO } from './requirements-templates.js';
 import { CONFIRMED_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 /* ============================================================
@@ -77,7 +77,34 @@ function pathState(offer) {
   };
 }
 
-function withdrawalEligibleDate(offer, cfg) {
+// The bank WITHDRAWAL-ELIGIBILITY / hold-release date — the day the account
+// first permits withdrawal (held types) or the qualifying DD round-trip
+// completes (direct-deposit). For held types this is when the owner INITIATES
+// the return ACH back to the hub; the money then LANDS `ddTransfer.backDays`
+// business days later (see withdrawalEligibleDate below for the landing date).
+// This IS the pre-2026-07-13 withdrawalEligibleDate body, extracted verbatim so
+// the withdraw REMINDER — an action prompt ("go withdraw now") that must fire on
+// the release date, NOT after the money has already landed — keeps its exact due
+// date. Returns '' (DD debit-path / no DDs) or null (held with no anchor).
+// The held/other bank hold-release DATE (or null) — the business-day-normalized
+// day the hold lifts. Shared core so withdrawalInitiateDate and
+// withdrawalEligibleDate avoid a string→Date round-trip on the beam-search hot
+// path. HELD + DD and NEW FUNDS HELD share this hold model: a held lump sum
+// (requiredFundingAmount) governed by daysFundsMustRemain from the chosen anchor;
+// the qualifying DDs are modeled separately (see generateProjection) and do NOT
+// drive the hold window. Anchor:
+//   'open date'   → bank counts from the account open date (US Bank style). Open
+//                   date itself stays as user-entered.
+//   'funded date' → bank counts from when funds actually posted.
+function _heldReleaseDate(offer) {
+  const anchorRaw = offer.lockStartsFrom === 'open date'
+    ? offer.plannedSignupDate
+    : bizDayISO(effectiveFundingDate(offer));
+  if (!anchorRaw || offer.daysFundsMustRemain == null) return null;
+  return nextBusinessDay(addDays(parseDate(anchorRaw), Number(offer.daysFundsMustRemain)));
+}
+
+function withdrawalInitiateDate(offer, cfg) {
   // STANDARD direct deposit: no bank-imposed hold. Each DD just needs to
   // hit the account; the money is "tied up" only for its transfer round
   // trip. The overall "funds are fully back" date = the LATEST round-trip
@@ -94,19 +121,46 @@ function withdrawalEligibleDate(offer, cfg) {
     if (rets.length === 0) return '';
     return isoDate(new Date(Math.max(...rets)));
   }
-  // HELD + DD and NEW FUNDS HELD share the same hold model: a held lump sum
-  // (requiredFundingAmount) governed by daysFundsMustRemain from the chosen
-  // anchor. The qualifying DDs are modeled separately (see generateProjection);
-  // they do NOT drive the hold window. Anchor:
-  //   'open date'   → bank counts from the account open date (US Bank
-  //                   style). Open date itself stays as user-entered.
-  //   'funded date' → bank counts from when funds actually posted.
-  const anchorRaw = offer.lockStartsFrom === 'open date'
-    ? offer.plannedSignupDate
-    : bizDayISO(effectiveFundingDate(offer));
-  if (!anchorRaw || offer.daysFundsMustRemain == null) return null;
-  const calc = addDays(parseDate(anchorRaw), Number(offer.daysFundsMustRemain));
-  return bizDayISO(calc);
+  const rel = _heldReleaseDate(offer);
+  return rel ? isoDate(rel) : null;
+}
+
+// The CAPITAL-BACK (landing) date — the day the money is fully back in the hub
+// account and SPENDABLE again. THE single source of truth every "capital back"
+// surface and the day model's tied-up-interval END read (2026-07-13 hold-release
+// transfer-lag fix; owner-confirmed intent: capital dispensed on ACTUAL deposit
+// dates, so a plan whose held releases overlap same-day funding below the buffer
+// is infeasible, not optimal).
+//   • direct-deposit: the round-trip already returns funds to origin at
+//     ddRoundTrip().returnDate (which bakes in backDays), so capital-back ==
+//     withdrawalInitiateDate — NO double lag.
+//   • held / held-and-dd / new-funds-held / other: the bank hold releases on the
+//     withdrawal-ELIGIBILITY date (withdrawalInitiateDate); the owner then
+//     initiates the return ACH and it LANDS `ddTransfer.backDays` BUSINESS days
+//     later. Reuses the existing DD transfer-back leg — no new setting.
+//     backDays=0 degenerates to the release date (pre-fix behavior).
+// This makes held offers SYMMETRIC with DD: both return the landing date, and
+// both are spendable ON that day in generateProjection's [start, landing)
+// interval. The eligibility-vs-landing distinction is documented in
+// projection-optimizer.js and docs/assessments/2026-07-13-hold-release-transfer-
+// lag.md. `cfg` is the ddTransfer model (engine passes it explicitly; omitted →
+// the live config via ddTransferConfig(), exactly like ddRoundTrip's default).
+function withdrawalEligibleDate(offer, cfg) {
+  // DD family: the round-trip already lands funds at returnDate (backDays baked
+  // in), so capital-back == withdrawalInitiateDate — no double lag. Returns ''
+  // for a debit-path / no-DD offer.
+  if (offer.offerType === 'direct-deposit') return withdrawalInitiateDate(offer, cfg);
+  // Held/other: bank hold-release Date PLUS the return-transfer lag (backDays
+  // business days). Compute the release as a Date directly (no string round-trip
+  // — this is a beam-search hot path) and add the lag. Read cfg.backDays directly
+  // when it's already a normalized engine object; else resolve via the live
+  // config (undefined) or normalizeDdTransfer (partial) exactly like ddRoundTrip.
+  const rel = _heldReleaseDate(offer);
+  if (!rel) return null;
+  const back = (cfg && Number.isFinite(cfg.backDays))
+    ? cfg.backDays
+    : normalizeDdTransfer(cfg == null ? ddTransferConfig() : cfg).backDays;
+  return isoDate(back > 0 ? addBusinessDays(rel, back) : rel); // backDays=0 → landing == release
 }
 
 function lockStartDate(offer) {
@@ -629,4 +683,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.11c",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.11c",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.11c",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.11c",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.11c",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.11c",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.11c",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.11c",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.11c",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.11c",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.11c",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.11c",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.11c",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.11c",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.11c",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.11c",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.11c",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.11c",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.11c"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.13a",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.13a",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.13a",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.13a",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.13a",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.13a",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.13a",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.13a",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.13a",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.13a",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.13a",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.13a",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.13a",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.13a",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.13a",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.13a",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.13a",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.13a",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.13a"
   }
 }
 </script>
@@ -2669,6 +2669,11 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 .banner > div { flex: 1 1 0; min-width: 0; }
 .banner.warn { background: var(--warning-soft); color: #92400e; border-color: rgba(245, 158, 11, 0.3); }
 .banner.danger { background: var(--danger-soft); color: #c95555; border-color: rgba(232, 113, 113, 0.3); }
+/* Optimize-panel current-state shortfall banner (2026-07-13): muted maroon
+   (--danger-deep) — reads as "your entered schedule already breaches", distinct
+   from the vibrant .banner.danger. */
+.banner.opt-current-danger { background: var(--danger-soft); color: var(--danger-deep); border-color: rgba(139, 58, 70, 0.35); }
+.banner.opt-current-danger strong { color: var(--danger-deep); }
 .banner svg { flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px; }
 
 /* About & diagnostics (Settings) */

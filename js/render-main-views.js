@@ -4,7 +4,7 @@ import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, offerIsActiveForProjection, offerIssues, pathState, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
-import { effectiveHorizonDays, generateProjection } from './projection-optimizer.js';
+import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
@@ -161,7 +161,43 @@ function renderOptimizeSegment() {
   } else {
     body = renderOptimizerProposal(plan);
   }
-  return header + runBar + body;
+  return header + runBar + renderOptCurrentStateBanner(plan) + body;
+}
+
+// Current-state shortfall banner (2026-07-13). The Optimize panel evaluates
+// PROPOSALS while Home shows the CURRENT entered dates — two different states. So
+// a schedule that already breaches the buffer today (per generateProjection on
+// App.state, exactly what Home charts) is surfaced here, telling the owner the
+// optimizer will fix it (pre-run) or has (post-run, when a feasible plan exists).
+// Muted-danger styling (--danger-deep). Returns '' when the current schedule is
+// clean. Wrapped defensively so a projection throw can never blank the panel.
+function renderOptCurrentStateBanner(plan) {
+  let summary;
+  try {
+    summary = summarizeProjection(generateProjection(App.state), App.state.settings);
+  } catch (_) { return ''; }
+  if (!summary || !summary.lowest) return '';
+  const shortfall = summary.shortfallDays || 0;
+  const below = summary.belowBufferDays || 0;
+  if (shortfall === 0 && below === 0) return '';
+  const low = summary.lowest.availableCapital;
+  const amt = low < 0 ? `−${formatCurrency(Math.abs(low))}` : formatCurrency(low);
+  const when = formatDateMedium(summary.lowest.date);
+  // Post-run: only claim a fix when a feasible reschedule actually exists.
+  let feasible = false;
+  if (plan && !plan.tooMany) {
+    try { feasible = optimizerProposalModel(plan).list.some(p => p && p.valid && (p.includedIds || []).length); } catch (_) {}
+  }
+  const tail = !plan
+    ? 'run the optimizer to fix it'
+    : (feasible
+        ? 'this proposal reschedules to stay above your buffer'
+        : 'no feasible reschedule was found — free up capital or drop an offer');
+  return `
+    <div class="banner opt-current-danger" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div>Your current schedule dips to <strong>${amt}</strong> on ${when} — ${tail}.</div>
+    </div>`;
 }
 
 function renderOptimizerProposal(topPlan) {
@@ -946,7 +982,7 @@ function renderOfferCard(o) {
               if (ct) return `<span class="offer-stat-value" title="Amount-weighted average days each direct deposit is tied up (Σ amount×days ÷ Σ amount). Each DD's round trip accounts for weekends/holidays.">${Math.round(ct.weightedDays)} <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">wtd avg</span></span>`;
               return `<span class="offer-stat-value muted">—</span>`;
             }
-            return `<span class="offer-stat-value" title="Actual days your cash is unavailable: from funded date to withdrawal-eligible date.${o.lockStartsFrom === 'open date' ? ' Bank requires ' + o.daysFundsMustRemain + ' days from account open.' : ''}">${(start && end) ? daysBetween(parseDate(start), parseDate(end)) : (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && start && end ? ` <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">/ ${o.daysFundsMustRemain}</span>` : ''}</span>`;
+            return `<span class="offer-stat-value" title="Actual days your cash is unavailable: from funded date to the capital-back (landing) date — the hold-release date plus the return-transfer lag.${o.lockStartsFrom === 'open date' ? ' Bank requires ' + o.daysFundsMustRemain + ' days from account open.' : ''}">${(start && end) ? daysBetween(parseDate(start), parseDate(end)) : (o.daysFundsMustRemain ?? '—')}${o.lockStartsFrom === 'open date' && start && end ? ` <span style="font-weight:500;color:var(--text-tertiary);font-size:12px;">/ ${o.daysFundsMustRemain}</span>` : ''}</span>`;
           })()}
         </div>
         <div class="offer-stat">
@@ -956,7 +992,7 @@ function renderOfferCard(o) {
       </div>
       <div class="offer-dates">
         ${start ? `<span><strong>Fund date:</strong> ${formatDateMedium(start)}</span>` : ''}
-        ${end ? `<span><strong>Withdrawal date:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
+        ${end ? `<span><strong>Capital back:</strong> ${formatDateMedium(end)}${o.lockStartsFrom === 'open date' ? ` <span style="color:var(--text-tertiary);">(${o.daysFundsMustRemain}d from open)</span>` : ''}</span>` : ''}
       </div>
       ${(o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd') && pathState(o).ddActive && Array.isArray(o.directDeposits) && o.directDeposits.length > 0 ? `
         <div class="offer-dds">
@@ -1321,7 +1357,7 @@ function renderOffersTable(offers) {
             <th class="num">Bonus</th>
             <th class="num">Lock days</th>
             <th>Fund date</th>
-            <th>Withdrawal date</th>
+            <th>Capital back</th>
             <th class="num">APY</th>
             <th>Offer status</th>
             <th>Entity</th>
