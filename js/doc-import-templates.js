@@ -112,6 +112,25 @@ function _docWireDdModel() {
   if (typeof generateDdDatesFromRequirement === 'function') generateDdDatesFromRequirement();
 }
 
+// Pure decision helper (2026-07-14 hold-vs-spend generalization) for the
+// requirementLogic apply path below. The importer's either/or apply used to
+// FORCE the DD-family offer type unconditionally whenever the current type
+// was new-funds-held — which can never surface the 'hold' path for a held
+// offer whose either/or is actually hold-vs-spend (e.g. Brex: hold new funds
+// 1 day OR meet card spend), because the DD offer type it forces excludes
+// 'hold' as a choosable family (docs/assessments/2026-07-13-requirements-driven-paths.md
+// §2). Distinguish the two shapes the parser can emit for requirementLogic:
+// 'any' on a held-type offer: a genuine DD-vs-spend disjunction (a "Direct
+// deposit required" row was actually parsed → ddParsed true) still forces the
+// DD-family type (existing behavior, unchanged); a hold-vs-spend disjunction
+// (held-type offer, no DD requirement parsed) must NOT force it, so the offer
+// stays new-funds-held and the requirements-derived chooser can surface
+// Hold funds vs Card spend. An explicit Held+DD offer type is never touched
+// either way (curOfferType !== 'new-funds-held').
+function _docEitherOrForceDdFamily(curOfferType, ddParsed) {
+  return curOfferType === 'new-funds-held' && !!ddParsed;
+}
+
 const DOC_FIELD_MAP = [
   { key: 'bankName', label: 'Bank name', format: v => v, current: () => _docCurrentInput('#f-bank'), apply: v => _docSetInput('#f-bank', v) },
   { key: 'offerName', label: 'Offer name', format: v => v, current: () => _docCurrentInput('#f-offer'), apply: v => _docSetInput('#f-offer', v) },
@@ -167,23 +186,31 @@ const DOC_FIELD_MAP = [
   // Row-only requirement types (no legacy field): land in #f-user-reqs.
   { key: 'spendAmount', label: 'Spend requirement', format: v => formatDollarInput(v), current: () => '', apply: v => _docAddUserReq('spend', { amount: v, label: 'Spend' }) },
   { key: 'transactionsCount', label: 'Transactions requirement', format: v => v + '×', current: () => '', apply: v => _docAddUserReq('transactions', { count: v, label: 'Transactions' }) },
-  // EITHER/OR (2026-07-11): the bonus is met by a direct deposit OR a card spend.
-  // Applying flips the form to "Either way", ensures BOTH requirement blocks exist
-  // (DD-family offer type + debit=Yes), and reveals the path selector — which the
-  // user picks at review time (left at "Decide later" = null; never auto-picked).
-  { key: 'requirementLogic', label: 'Qualify either way (DD or card spend)',
-    format: v => v === 'any' ? 'Yes — choose DD or card spend' : 'No',
+  // EITHER/OR (2026-07-11, generalized 2026-07-14): the bonus is met by ONE of
+  // several alternative paths — DD-vs-spend OR (for a held offer with no DD
+  // requirement parsed) hold-vs-spend. Applying flips the form to "Either
+  // way", ensures the alternative requirement blocks exist, and reveals the
+  // path selector — which the user picks at review time (left at "Decide
+  // later" = null; never auto-picked).
+  { key: 'requirementLogic', label: 'Qualify either way (multiple paths)',
+    format: v => v === 'any' ? 'Yes — choose a qualifying path at review' : 'No',
     current: () => { const r = _docEl('[name="requirementLogic"]:checked'); return r ? (r.value === 'any' ? 'Either way' : 'All required') : ''; },
     apply: v => {
       if (v !== 'any') return;
       // Order matters with the DYNAMIC chooser (2026-07-13): the "Either way"
       // radio only EXISTS once both paths are present, so establish the
-      // DD-family offer type + debit block FIRST (their change events rebuild
-      // the section), THEN flip the revealed radio.
-      // The DD path needs a DD-family offer type; leave an explicit Held+DD alone.
+      // required families FIRST (their change events rebuild the section),
+      // THEN flip the revealed radio.
       const cur = (_docEl('[name="offerType"]:checked') || {}).value;
-      if (cur === 'new-funds-held') { const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }
-      // The card-spend path needs the debit block present.
+      // A genuine DD-vs-spend disjunction needs a DD-family offer type; a
+      // hold-vs-spend disjunction (held offer, no DD requirement parsed) must
+      // NOT be forced to DD-family — see _docEitherOrForceDdFamily above.
+      // Leave an explicit Held+DD offer type alone either way.
+      const ddParsed = !!(_docLastParse && _docLastParse.fields && _docLastParse.fields.ddRequired && _docLastParse.fields.ddRequired.value);
+      if (_docEitherOrForceDdFamily(cur, ddParsed)) {
+        const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
+      // The card-spend path needs the debit block present either way.
       const dy = _docEl('#debit-yes'); if (dy && !dy.checked) { dy.checked = true; dy.dispatchEvent(new Event('change', { bubbles: true })); }
       const any = _docEl('#reqlogic-any'); if (any) { any.checked = true; any.dispatchEvent(new Event('change', { bubbles: true })); }
       // plannedPath deliberately left at "Decide later" (null) — P2-3 no auto-pick.
@@ -1036,6 +1063,18 @@ function testDocParserRegressions() {
     { name: 'R70 waiver: colon + bullet list appended',
       html: '<article><p>Fee is waived for smaller companies for the first 12 months, otherwise you must:</p><ul><li>Maintain a $5,000 combined average balance, or</li><li>Spend at least $500 in new net purchases on your business debit card, or</li><li>Become a member of Preferred Rewards for Business</li></ul></article>',
       key: 'fee_waiver_condition', want: 'Fee is waived for smaller companies for the first 12 months, otherwise you must: maintain a $5,000 combined average balance; or spend at least $500 in new net purchases on your business debit card; or become a member of Preferred Rewards for Business' },
+    // HOLD-vs-SPEND either/or (2026-07-14, Step 2d) — a held-type disjunction
+    // names no direct deposit at all (Brex: hold new funds OR meet card
+    // spend), so it needs its own bridge in docDetectEitherOr — the pre-existing
+    // DD-literal bridge can never fire for this shape.
+    { name: 'HoldVsSpend either/or: "either hold new funds ... or ... spend" → requirementLogic any',
+      html: '<article><p>To qualify for the bonus, either hold new funds in your account for 1 business day or meet a $2,000 card spend requirement.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'requirementLogic', want: 'any' },
+    // CONTROL — the same terms stated CONJUNCTIVELY (no or/either connective)
+    // must NOT fire; conservative-by-design like the DD bridge's own control.
+    { name: 'HoldVsSpend CONTROL conjunctive "hold new funds ... and ... spend" → requirementLogic absent',
+      html: '<article><p>To earn the bonus, hold new funds in your account for 1 business day and meet a $2,000 card spend requirement.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'requirementLogic', want: undefined },
   ];
   let pass = 0, fail = 0; const failures = [];
   for (const c of cases) {
@@ -1207,4 +1246,4 @@ function deleteTemplate(tplId) {
   toast('Template deleted');
 }
 
-export { _docForm, _docEl, _docCapFirst, _docSetInput, _docCurrentInput, _docAddUserReq, _docAppendNote, _docWireDdModel, DOC_FIELD_MAP, DOC_FIELD_BY_KEY, _docConfDot, _docHasTiers, _docTierKindNoun, _docTierThresholdLabel, _docTierThresholdTargetDesc, _docTierReqDescriptor, _docEffectiveFields, _docFmtPct, _docRenderTierGroup, renderDocPreview, docTierSelect, docImportUpdateApplyCount, _docLastParse, _docTierSel, _docUserChecks, _docCaptureUserChecks, docImportParse, _docNormForQuote, _docMergeLlmFields, _docSlugTitle, docWorkerFetchParse, docImportFetch, docImportApply, docImportClear, docImportToggle, DOC_TEST_EXPECT, testDocParser, testDocParserRegressions, templateRequirementChipText, templateRowChips, renderTemplateRow, renderTemplateList, renderTemplatePicker, toggleTemplatePicker, filterTemplateList, useTemplate, deleteTemplate };
+export { _docForm, _docEl, _docCapFirst, _docSetInput, _docCurrentInput, _docAddUserReq, _docAppendNote, _docWireDdModel, _docEitherOrForceDdFamily, DOC_FIELD_MAP, DOC_FIELD_BY_KEY, _docConfDot, _docHasTiers, _docTierKindNoun, _docTierThresholdLabel, _docTierThresholdTargetDesc, _docTierReqDescriptor, _docEffectiveFields, _docFmtPct, _docRenderTierGroup, renderDocPreview, docTierSelect, docImportUpdateApplyCount, _docLastParse, _docTierSel, _docUserChecks, _docCaptureUserChecks, docImportParse, _docNormForQuote, _docMergeLlmFields, _docSlugTitle, docWorkerFetchParse, docImportFetch, docImportApply, docImportClear, docImportToggle, DOC_TEST_EXPECT, testDocParser, testDocParserRegressions, templateRequirementChipText, templateRowChips, renderTemplateRow, renderTemplateList, renderTemplatePicker, toggleTemplatePicker, filterTemplateList, useTemplate, deleteTemplate };

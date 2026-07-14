@@ -1275,13 +1275,17 @@ function parseDocPost(raw) {
   return out;
 }
 
-// EITHER/OR detector (2026-07-11). Fires requirementLogic:'any' ONLY on a
-// high-confidence disjunction that bridges a direct-deposit term and a
-// spend/debit term with an "either / or / one of the following" connective, in a
-// bonus-QUALIFICATION context and NOT a fee-waiver context. Conservative by
-// design: the bridge requires both terms in proximity to the connective, so
-// conjunctive SUB prose (the entire gold corpus) never matches. PURE; only calls
-// `put('requirementLogic', …)` — no scored field is read or written.
+// EITHER/OR detector (2026-07-11, generalized 2026-07-14). Fires
+// requirementLogic:'any' ONLY on a high-confidence disjunction that bridges
+// EITHER a direct-deposit term OR a hold-new-funds/maintain-balance term with
+// a spend/debit term, via an "either / or / one of the following" connective,
+// in a bonus-QUALIFICATION context and NOT a fee-waiver context. Conservative
+// by design: the bridge requires both terms in proximity to the connective,
+// so conjunctive SUB prose (the entire gold corpus) never matches. The hold
+// bridge exists because a held-type offer's either/or (e.g. Brex: hold new
+// funds 1 day OR meet card spend) names no direct deposit at all — the DD
+// bridge alone can never fire for it, silently dropping the disjunction. PURE;
+// only calls `put('requirementLogic', …)` — no scored field is read or written.
 function docDetectEitherOr(text, put) {
   if (!text || typeof put !== 'function') return;
   const T = String(text);
@@ -1291,7 +1295,14 @@ function docDetectEitherOr(text, put) {
     + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?direct\\s+deposit[\\s\\S]{0,160}?(?:spend|debit|purchase)'
     + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?(?:spend|debit|purchase)[\\s\\S]{0,160}?direct\\s+deposit',
     'i');
-  const m = T.match(bridge);
+  const HOLD_TERM = '(?:hold(?:ing)?\\s+(?:new\\s+)?funds|maintain(?:ing)?\\s+(?:an?\\s+)?(?:average\\s+)?balance)';
+  const holdBridge = new RegExp(
+    HOLD_TERM + '[\\s\\S]{0,120}?(?:\\bor\\b|either|one of the following)[\\s\\S]{0,60}?(?:spend|debit|purchase)'
+    + '|(?:spend|debit|purchase)[\\s\\S]{0,120}?(?:\\bor\\b|either|one of the following)[\\s\\S]{0,60}?' + HOLD_TERM
+    + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?' + HOLD_TERM + '[\\s\\S]{0,160}?(?:spend|debit|purchase)'
+    + '|(?:either|one of the following|any of the following)[\\s\\S]{0,160}?(?:spend|debit|purchase)[\\s\\S]{0,160}?' + HOLD_TERM,
+    'i');
+  const m = T.match(bridge) || T.match(holdBridge);
   if (!m) return;
   // Reject fee-waiver prose ("avoid the monthly fee with a DD or debit purchase")
   // — that names a fee-avoidance path, not a bonus qualification path.
