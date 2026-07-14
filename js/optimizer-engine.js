@@ -1319,12 +1319,14 @@ function rankAlternatives(plans, limit, capOutput = true, keepFn = null) {
 // list representative is kept.
 const ALT_DOMINANCE_APY_EPSILON = 1e-9;   // FP tolerance on the APY axis
 
-// Axis accessors — higher gross/low-cash/APY is better; an EARLIER capital-back
-// ISO is better. Missing APY sorts worst (−∞, matching championRate); missing
-// completion sorts latest ('9999-12-31', matching compareByFastest). Gross and
-// low cash round to whole dollars (matches comparePlans / the card display).
+// Axis accessors — higher gross/APY is better; an EARLIER capital-back ISO is
+// better. Missing APY sorts worst (−∞, matching championRate); missing
+// completion sorts latest ('9999-12-31', matching compareByFastest). Gross
+// rounds to whole dollars (matches comparePlans / the card display). Low cash is
+// NOT a survival axis (owner-directed 2026-07-14): the buffer is the hard
+// feasibility gate, and cushion no longer keeps a plan alive or annotates a
+// surviving alternative — it stays only as an informational card metric.
 function altMetricGross(p) { return Math.round(((p && p.objective) || {}).grossBonus || 0); }
-function altMetricLowCash(p) { return Math.round(((p && p.capitalCurveSummary) || {}).lowestAvailable || 0); }
 function altMetricApy(p) {
   const r = ((p && p.objective) || {}).blendedAnnReturn;
   return (r == null) ? -Infinity : r;
@@ -1338,7 +1340,6 @@ function altOfferCount(p) { return (((p && p.includedIds) || []).length); }
 // isn't misread as a loss; capital-back compares ISO lexically (earlier = better).
 function altWeaklyDominates(A, B) {
   return altMetricGross(A) >= altMetricGross(B)
-    && altMetricLowCash(A) >= altMetricLowCash(B)
     && altMetricApy(A) >= altMetricApy(B) - ALT_DOMINANCE_APY_EPSILON
     && byteCompare(altMetricBack(A), altMetricBack(B)) <= 0;
 }
@@ -1355,7 +1356,6 @@ function altWeaklyDominates(A, B) {
 function altEdgeVsHeadline(headline, B) {
   if (!headline || !B || headline === B) return null;
   const grossDelta = altMetricGross(B) - altMetricGross(headline);
-  const lowCashDelta = altMetricLowCash(B) - altMetricLowCash(headline);
   const apyRaw = altMetricApy(B) - altMetricApy(headline);
   const apyDelta = (Number.isFinite(apyRaw) && apyRaw > ALT_DOMINANCE_APY_EPSILON) ? apyRaw : 0;
   const hBack = altMetricBack(headline), bBack = altMetricBack(B);
@@ -1364,14 +1364,13 @@ function altEdgeVsHeadline(headline, B) {
     const bd = parseDate(bBack), hd = parseDate(hBack);
     daysSooner = (bd && hd) ? Math.max(0, daysBetween(bd, hd)) : 0;
   }
-  return { grossDelta, lowCashDelta, apyDelta, daysSooner };
+  return { grossDelta, apyDelta, daysSooner };
 }
 
 // A is strictly better than B on at least one axis (the "strictly worse on at
 // least one", read from the dominator's side).
 function altStrictlyBetterSomewhere(A, B) {
   return altMetricGross(A) > altMetricGross(B)
-    || altMetricLowCash(A) > altMetricLowCash(B)
     || altMetricApy(A) > altMetricApy(B) + ALT_DOMINANCE_APY_EPSILON
     || byteCompare(altMetricBack(A), altMetricBack(B)) < 0;
 }
@@ -2445,12 +2444,14 @@ function testOptimizerPins() {
     // ── Pareto-dominance filter for "Other feasible plans" (ISSUE 1, owner-
     // directed 2026-07-10) ─────────────────────────────────────────────────────
     // Modeled on the owner's real screenshot: seven plans, all with the SAME
-    // capital-back date (2026-10-08). The $1,800 / $1,750 / $1,400 / $1,350 cards
-    // are strictly dominated (the $1,950 or $1,550 plan beats-or-ties them on
-    // gross, low cash, AND blended APY at the same capital-back), so they must be
-    // hidden. The three genuine trade-offs ($2,150 = best gross / thin cushion;
-    // $1,950 = high APY + mid cushion; $1,550 = fattest cushion) each win an axis
-    // and SURVIVE.
+    // capital-back date (2026-10-08). Survival axes are gross / APY / capital-back
+    // ONLY — low cash is NOT a survival axis (owner-directed 2026-07-14). A plan is
+    // hidden when another displayed plan beats-or-ties it on gross AND APY at the
+    // same capital-back. The $1,800 / $1,750 / $1,400 / $1,350 cards are dominated
+    // by the $1,950 (higher gross AND APY). The $1,550 = fattest-cushion plan —
+    // which ONLY won on low cash and loses on both gross and APY to the $1,950 — is
+    // NOW dominated too (its cushion no longer keeps it alive). Only the two genuine
+    // trade-offs survive: $2,150 = best gross (headline) and $1,950 = best APY.
     const domPlan = (cv, gross, low, apy, backISO) => ({
       valid: true, canonicalVector: cv, includedIds: [cv],
       capitalCurveSummary: { lowestAvailable: low },
@@ -2458,26 +2459,38 @@ function testOptimizerPins() {
     });
     const BACK = '2026-10-08';
     const pA = domPlan('v_2150', 2150, 11945, 0.145, BACK);   // best gross (headline)
-    const pB = domPlan('v_1950', 1950, 32945, 0.203, BACK);   // best APY + mid cushion
-    const pC = domPlan('v_1800', 1800, 22945, 0.149, BACK);   // dominated by B
-    const pD = domPlan('v_1750', 1750, 27945, 0.161, BACK);   // dominated by B
-    const pE = domPlan('v_1550', 1550, 36945, 0.180, BACK);   // fattest cushion
-    const pF = domPlan('v_1400', 1400, 26945, 0.126, BACK);   // dominated by B and E
-    const pG = domPlan('v_1350', 1350, 31945, 0.137, BACK);   // dominated by B and E
+    const pB = domPlan('v_1950', 1950, 32945, 0.203, BACK);   // best APY (survives)
+    const pC = domPlan('v_1800', 1800, 22945, 0.149, BACK);   // dominated by B (gross+APY)
+    const pD = domPlan('v_1750', 1750, 27945, 0.161, BACK);   // dominated by B (gross+APY)
+    const pE = domPlan('v_1550', 1550, 36945, 0.180, BACK);   // cushion-only → NOW dominated by B
+    const pF = domPlan('v_1400', 1400, 26945, 0.126, BACK);   // dominated by A and B
+    const pG = domPlan('v_1350', 1350, 31945, 0.137, BACK);   // dominated by A and B
     const ownerAlts = [pA, pB, pC, pD, pE, pF, pG];
     const kept = filterDominatedAlternatives(ownerAlts, [{ plan: pA }]);
     const keptVecs = kept.map(p => p.canonicalVector).join(',');
-    check('dominance: four strictly-dominated owner plans hidden, three trade-offs survive',
-      keptVecs === 'v_2150,v_1950,v_1550', keptVecs || '(empty)');
-    // Boundary: two plans equal on ALL four metrics (a cross-set duplicate) → the
-    // later representative is hidden; the earlier one (and the headline) survive.
-    // headline is a genuine trade-off vs the dups (best gross, thinnest cushion),
+    check('dominance: cushion-only + strictly-dominated plans hidden, two gross/APY trade-offs survive',
+      keptVecs === 'v_2150,v_1950', keptVecs || '(empty)');
+    // ── Low cash is NOT a survival axis (owner-directed 2026-07-14) ─────────────
+    // A plan that wins ONLY on cash cushion — ties/loses on gross, APY, AND
+    // capital-back — is dominated and hidden; a genuine trade-off that wins an axis
+    // the filter still ranks (APY here) survives. The buffer remains the hard
+    // feasibility gate elsewhere; cushion alone no longer keeps a plan alive.
+    const lcHead = domPlan('v_lc_head', 2000, 5000, 0.15, BACK);     // headline: best gross, thin cushion
+    const lcCushion = domPlan('v_lc_cush', 1500, 90000, 0.10, BACK); // huge cushion but worse gross+APY → dominated
+    const lcApy = domPlan('v_lc_apy', 1400, 8000, 0.30, BACK);       // wins APY → genuine trade-off, survives
+    const lcKept = filterDominatedAlternatives([lcHead, lcCushion, lcApy], [{ plan: lcHead }])
+      .map(p => p.canonicalVector);
+    check('low cash: a cushion-only plan is dominated while an APY trade-off survives',
+      !lcKept.includes('v_lc_cush') && lcKept.includes('v_lc_apy'), lcKept.join(','));
+    // Boundary: two plans equal on ALL survival metrics (a cross-set duplicate) →
+    // the later representative is hidden; the earlier one (and the headline)
+    // survive. headline is a genuine trade-off vs the dups (best gross, lower APY),
     // so it does NOT itself dominate them — isolating the duplicate rule.
-    const hL = domPlan('v_head', 3000, 2000, 0.10, BACK);      // headline (exempt)
-    const dupP = domPlan('v_dup_p', 1000, 5000, 0.10, BACK);
-    const dupQ = domPlan('v_dup_q', 1000, 5000, 0.10, BACK);   // byte-identical metrics
+    const hL = domPlan('v_head', 3000, 2000, 0.05, BACK);      // headline (exempt): best gross, low APY
+    const dupP = domPlan('v_dup_p', 1000, 5000, 0.20, BACK);   // higher APY trade-off
+    const dupQ = domPlan('v_dup_q', 1000, 5000, 0.20, BACK);   // byte-identical survival metrics
     const dedup = filterDominatedAlternatives([hL, dupP, dupQ], [{ plan: hL }]);
-    check('dominance: exact-tie duplicate (equal on all four) is hidden as a duplicate',
+    check('dominance: exact-tie duplicate (equal on all survival metrics) is hidden as a duplicate',
       dedup.map(p => p.canonicalVector).join(',') === 'v_head,v_dup_p',
       dedup.map(p => p.canonicalVector).join(','));
     // The headline (alts[0]) and champion plans are NEVER hidden even when strictly
@@ -2493,11 +2506,13 @@ function testOptimizerPins() {
     check('dominance: filter is deterministic across runs', run1 === run2, run1);
     // [Codex P2] An INVALID (infeasible) plan with superior metrics must NOT hide
     // a valid, displayed trade-off — the renderer never shows the invalid plan, so
-    // it cannot dominate. Here vInvalid beats vValid on every axis but is invalid;
-    // vValid must survive (only the headline + vValid remain).
-    const invHead = domPlan('v_ih', 2000, 5000, 0.15, BACK);       // headline: best gross, thin cushion
-    const vInvalid = Object.assign(domPlan('v_inv', 1900, 45000, 0.25, '2026-09-01'), { valid: false });
-    const vValid = domPlan('v_val', 900, 42000, 0.05, '2026-12-01'); // high-cushion trade-off; beaten ONLY by the invalid plan
+    // it cannot dominate. vValid is a genuine APY trade-off vs the headline (higher
+    // APY, lower gross → headline does NOT dominate it); vInvalid beats vValid on
+    // gross AND APY but is invalid. vValid must survive (only the headline + vValid
+    // are displayed).
+    const invHead = domPlan('v_ih', 2000, 5000, 0.15, BACK);       // headline: best gross
+    const vInvalid = Object.assign(domPlan('v_inv', 1900, 45000, 0.35, BACK), { valid: false }); // dominates vValid but infeasible
+    const vValid = domPlan('v_val', 900, 42000, 0.30, BACK);       // high-APY trade-off; beaten ONLY by the invalid plan
     const survivors = filterDominatedAlternatives([invHead, vInvalid, vValid], [{ plan: invHead }]).map(p => p.canonicalVector);
     check('dominance: an infeasible plan never hides a displayed feasible trade-off',
       survivors.includes('v_val'), survivors.join(','));
@@ -2507,13 +2522,14 @@ function testOptimizerPins() {
     // Every surviving non-headline plan must carry an edgeVsHeadline whose
     // POSITIVE axes are EXACTLY the axes on which it strictly beats the headline
     // (same altMetric* comparison the filter uses), and it must be non-empty
-    // (survival guarantees ≥1 edge). Reuse the owner-numbers survivors: headline
-    // pA=v_2150 (gross 2150, low 11945, apy 0.145), survivors v_1950 / v_1550.
+    // (survival guarantees ≥1 edge). Survival axes are gross / APY / capital-back
+    // ONLY — low cash is NOT an edge axis (owner-directed 2026-07-14). Reuse the
+    // owner-numbers survivors: headline pA=v_2150 (gross 2150, apy 0.145), sole
+    // surviving trade-off v_1950 (best APY; the cushion-only v_1550 is now hidden).
     const edgeAxes = (p) => {
       const e = (p && p.edgeVsHeadline) || {};
       const s = [];
       if (e.apyDelta > 0) s.push('apy');
-      if (e.lowCashDelta > 0) s.push('lowCash');
       if (e.grossDelta > 0) s.push('gross');
       if (e.daysSooner > 0) s.push('sooner');
       return s.sort();
@@ -2521,7 +2537,6 @@ function testOptimizerPins() {
     const strictAxes = (p) => {
       const s = [];
       if (altMetricApy(p) > altMetricApy(pA) + ALT_DOMINANCE_APY_EPSILON) s.push('apy');
-      if (altMetricLowCash(p) > altMetricLowCash(pA)) s.push('lowCash');
       if (altMetricGross(p) > altMetricGross(pA)) s.push('gross');
       if (altMetricBack(p) !== '9999-12-31' && altMetricBack(pA) !== '9999-12-31'
         && byteCompare(altMetricBack(p), altMetricBack(pA)) < 0) s.push('sooner');
@@ -2534,12 +2549,13 @@ function testOptimizerPins() {
         return a === b && a.length > 0;
       }),
       nonHead.map(p => p.canonicalVector + '=' + edgeAxes(p).join('+')).join(' | '));
-    // Deltas are the exact metric differences (low-cash cushion vs the headline).
+    // Deltas are the exact metric differences (APY / gross vs the headline); low
+    // cash is no longer carried on the edge object (owner-directed 2026-07-14).
     check('edge: survivor deltas equal the exact metric differences',
-      pB.edgeVsHeadline.lowCashDelta === (32945 - 11945)
-      && pE.edgeVsHeadline.lowCashDelta === (36945 - 11945)
-      && pB.edgeVsHeadline.grossDelta === (1950 - 2150),
-      `${pB.edgeVsHeadline.lowCashDelta}/${pE.edgeVsHeadline.lowCashDelta}/${pB.edgeVsHeadline.grossDelta}`);
+      pB.edgeVsHeadline.apyDelta === (0.203 - 0.145)
+      && pB.edgeVsHeadline.grossDelta === (1950 - 2150)
+      && pB.edgeVsHeadline.lowCashDelta === undefined,
+      `${pB.edgeVsHeadline.apyDelta}/${pB.edgeVsHeadline.grossDelta}/${pB.edgeVsHeadline.lowCashDelta}`);
     // Determinism: the annotation is byte-stable across repeated runs.
     const edgeSig = (alts) => filterDominatedAlternatives(alts, [{ plan: pA }])
       .map(p => p.canonicalVector + ':' + edgeAxes(p).join('+')).join(',');

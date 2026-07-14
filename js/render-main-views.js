@@ -511,14 +511,15 @@ function formatChampionTrade(trade, axes) {
 // Pareto filter guarantees a displayed alternative beats the headline on ≥1 of
 // these axes, and this reads the SAME comparison, so the label can never
 // disagree with the dominance that kept the card. Axis names match the card
-// cells (blended APY / low cash / gross / capital back); full comma dollars per
-// the owner rule. Order mirrors the owner's example (APY, cushion, …). Empty
-// only in the pathological no-edge case (e.g. an invalid headline) → no line.
+// cells (blended APY / gross / capital back); full comma dollars per the owner
+// rule. Low cash is NOT an edge axis (owner-directed 2026-07-14): cushion no
+// longer keeps a plan alive, so it never justifies a card's survival — it stays
+// only as the informational "low cash" metric line. Empty only in the
+// pathological no-edge case (e.g. an invalid headline) → no line.
 function formatAltEdge(edge) {
   if (!edge) return '';
   const parts = [];
   if (edge.apyDelta > 0) parts.push(`+${formatPercent(edge.apyDelta)} APY`);
-  if (edge.lowCashDelta > 0) parts.push(`+${formatCurrency(edge.lowCashDelta)} low cash`);
   if (edge.grossDelta > 0) parts.push(`+${formatCurrency(edge.grossDelta)} gross`);
   if (edge.daysSooner > 0) parts.push(`capital back ${edge.daysSooner} day${edge.daysSooner === 1 ? '' : 's'} sooner`);
   if (!parts.length) return '';
