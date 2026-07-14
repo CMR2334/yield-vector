@@ -44,6 +44,24 @@ const REQUIREMENT_TYPE_META = {
   promo_code:           { label: 'Enter Promo Code',     money: false, count: false },
   custom:               { label: 'Custom',               money: true,  count: true  }
 };
+// Path FAMILY each requirement TYPE belongs to (2026-07-13 requirements-driven
+// qualification paths). 'dd' | 'debit' | 'hold' are the three qualification paths
+// an either/or offer can be met by; any type NOT listed is PATH-NEUTRAL (always
+// active regardless of the chosen path — e-statements, promo code, etc.).
+// Colocated with REQUIREMENT_TYPES so the two can't drift; offer-model.js imports
+// requirementPathFamily to derive path availability from the live requirement
+// rows. DISPLAY label for 'debit' is "Card spend" (see modals-forms).
+// Design: docs/assessments/2026-07-13-requirements-driven-paths.md.
+const REQUIREMENT_PATH_FAMILY = {
+  direct_deposit_amt: 'dd', direct_deposit_count: 'dd',
+  spend: 'debit', debit_txns: 'debit', transactions: 'debit',
+  deposit: 'hold', maintain_balance: 'hold'
+};
+// The path family for a requirement type, or null when the type is path-neutral.
+function requirementPathFamily(type) {
+  return REQUIREMENT_PATH_FAMILY[type] || null;
+}
+
 const REQUIREMENT_FREQUENCIES = ['total', 'monthly', 'per_statement'];
 const REQUIREMENT_FREQ_LABELS = { total: 'Total', monthly: 'Monthly', per_statement: 'Per statement' };
 
@@ -130,13 +148,14 @@ function deriveRequirementsFromLegacy(offer) {
   const rows = [];
   if (!offer) return rows;
 
-  // EITHER/OR (2026-07-11): when requirementLogic is 'any', only the CHOSEN
-  // path's obligation rows are derived (else the card checklist would show a
-  // suppressed path — Codex P1). Computed inline (no offer-model import — that
-  // would cycle). 'all' (default/absent) keeps every row exactly as before.
-  const eoLogic = offer.requirementLogic === 'any' ? 'any' : 'all';
-  const ddRowsActive = eoLogic === 'all' || offer.plannedPath === 'dd';
-  const debitRowActive = eoLogic === 'all' || offer.plannedPath === 'debit';
+  // QUALIFICATION PATHS (2026-07-13, generalizing the 2026-07-11 either/or):
+  // derivation emits the FULL obligation set for every path family regardless of
+  // requirementLogic/plannedPath. Path-awareness (excluding non-chosen-family
+  // rows from checklist counts / deadlines / reminders under logic 'any') now
+  // lives at the CONSUMERS via requirementActive(), so offer.requirements holds
+  // the complete set that pathState reads to detect which families are present.
+  // 'all' (default) is unaffected — it always derived every row. See
+  // docs/assessments/2026-07-13-requirements-driven-paths.md §3.
 
   // requiredFundingAmount → a single `deposit` obligation. deadline_days is
   // the funding window (daysAfterSignupAllowedBeforeDeposit); hold_days is the
@@ -167,7 +186,7 @@ function deriveRequirementsFromLegacy(offer) {
   // to be one of them before deriving the row. (Per-DD rows below are naturally
   // gated — a non-DD offer has no directDeposits[] entries.)
   const isDdFamily = offer.offerType === 'direct-deposit' || offer.offerType === 'held-and-dd';
-  const ddReq = (isDdFamily && ddRowsActive) ? offer.ddRequirement : null;
+  const ddReq = isDdFamily ? offer.ddRequirement : null;
   if (ddReq) {
     if (ddReq.mode === 'frequency') {
       const periods = Number(ddReq.freqPeriods) || null;
@@ -195,7 +214,7 @@ function deriveRequirementsFromLegacy(offer) {
   // id reusing the DD's own persisted id (minted by migrateDdIds) so it stays
   // stable across reorders. deadline_days derived from the DD's plannedDate vs
   // the sign-up date when both exist.
-  if (ddRowsActive && Array.isArray(offer.directDeposits)) {
+  if (Array.isArray(offer.directDeposits)) {
     const signup = parseDate(offer.plannedSignupDate);
     for (const dd of offer.directDeposits) {
       if (!dd || !dd.id) continue; // ids are guaranteed by migrateDdIds on load
@@ -215,7 +234,7 @@ function deriveRequirementsFromLegacy(offer) {
   // is the relative withinDays (migrateDebitRequirement already converted any
   // legacy absolute byDate to withinDays).
   const dr = offer.debitRequirement;
-  if (dr && dr.required && debitRowActive) {
+  if (dr && dr.required) {
     rows.push(makeRequirementRow({
       id: 'req-debit', type: 'debit_txns', source: 'derived',
       label: 'Debit transactions',
@@ -516,4 +535,4 @@ function templateToOffer(tpl) {
 // (only if that key is absent) for the Settings restore path; a quota failure
 // is logged and must NOT block the app. Does NOT save()/schedulePush — leaves
 // persistence to the next genuine user save (like the other init migrations).
-export { REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, requirementDisplayLabel, displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementSummary, makeRequirementRow, deriveRequirementsFromLegacy, syncRequirementsWithLegacy, schemaV2Defaults, offerToTemplate, templateToOffer };
+export { REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, REQUIREMENT_PATH_FAMILY, requirementPathFamily, REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, requirementDisplayLabel, displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementSummary, makeRequirementRow, deriveRequirementsFromLegacy, syncRequirementsWithLegacy, schemaV2Defaults, offerToTemplate, templateToOffer };

@@ -1,6 +1,6 @@
 import { TODAY, addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, nextBusinessDay, parseDate } from './date-format-core.js';
 import { ddRoundTrip, ddTransferConfig, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
-import { requirementDeadlineISO } from './requirements-templates.js';
+import { requirementDeadlineISO, requirementPathFamily } from './requirements-templates.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 /* ============================================================
    OFFER DERIVED FIELDS
@@ -46,35 +46,152 @@ function debitDeadlineISO(offer) {
   return isoDate(addDays(signup, days));
 }
 
-// EITHER/OR qualification paths (2026-07-11). THE single source of truth for
-// "which requirement path is active on this offer". Every capital / qualification
-// / reminder consumer routes through this so the backward-compat rail is
-// structural, not scattered. PURE; absent-safe.
+// Offer types that model a HELD LUMP (requiredFundingAmount tied up over a hold).
+// 'other' is a legacy catch-all normalized to 'new-funds-held' at every write
+// path (and unavailable in the offer-type radio); it is kept here purely so a raw
+// stored 'other' offer's held-lump modeling stays byte-identical under logic
+// 'all'. Direct-deposit is the only type WITHOUT a held lump (its capital is the
+// DD round-trips), so this set is exactly "not direct-deposit".
+const HELD_LUMP_TYPES = new Set(['new-funds-held', 'held-and-dd', 'other']);
+
+// Which qualification-path families (dd | debit | hold) are present on an offer,
+// as three booleans — the raw "what could this bonus be met by" signal, from the
+// family map over its requirement ROWS PLUS legacy-field fallbacks (so detection
+// is robust even before syncRequirementsWithLegacy has materialized the derived
+// rows — raw import / pin / pre-sync offers). The derived rows mirror exactly
+// these legacy obligations, so the fallback can only AGREE with a synced offer's
+// rows, never contradict them. Returns flat booleans (no Set/array allocation)
+// because pathState is a beam-search hot path. PURE.
+function pathFamilyFlags(offer) {
+  const o = offer || {};
+  let dd = false, debit = false, hold = false;
+  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  for (let i = 0; i < reqs.length; i++) {
+    const fam = reqs[i] && requirementPathFamily(reqs[i].type);
+    if (fam === 'dd') dd = true;
+    else if (fam === 'debit') debit = true;
+    else if (fam === 'hold') hold = true;
+  }
+  const isDdType = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  const hasDdObligation = (Array.isArray(o.directDeposits) && o.directDeposits.length > 0)
+    || (o.ddRequirement && (o.ddRequirement.mode === 'frequency' || Number(o.ddRequirement.count) > 0));
+  if (isDdType && hasDdObligation) dd = true;
+  if (o.debitRequirement && o.debitRequirement.required) debit = true;
+  if (HELD_LUMP_TYPES.has(o.offerType) && Number(o.requiredFundingAmount) > 0) hold = true;
+  return { dd, debit, hold };
+}
+
+// The present path families as a Set (external convenience wrapper over
+// pathFamilyFlags). Cold callers only.
+function offerPathFamilies(offer) {
+  const f = pathFamilyFlags(offer);
+  const set = new Set();
+  if (f.dd) set.add('dd');
+  if (f.debit) set.add('debit');
+  if (f.hold) set.add('hold');
+  return set;
+}
+
+// The path families the owner can CHOOSE between for an either/or offer, in
+// canonical order (dd, debit, hold). A family is choosable when a row of that
+// family is present AND the offerType permits it as a choice:
+//   • dd    → present + DD-family offerType
+//   • debit → present (a debit-family row; ties up no capital either way)
+//   • hold  → present + offerType === 'new-funds-held' (ONLY new-funds-held can
+//             put hold in the either/or; held-and-dd's hold is unconditional and
+//             therefore never a choice — decision 7).
+// Shared by pathState and the modal "How is this bonus met?" chooser so the two
+// can never disagree. PURE. Design: 2026-07-13-requirements-driven-paths.md.
+function choosablePaths(offer) {
+  const o = offer || {};
+  const fams = pathFamilyFlags(o);
+  const hasDdType = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  const out = [];
+  if (fams.dd && hasDdType) out.push('dd');
+  if (fams.debit) out.push('debit');
+  if (fams.hold && o.offerType === 'new-funds-held') out.push('hold');
+  return out;
+}
+
+// QUALIFICATION PATHS (2026-07-13, generalizing the 2026-07-11 either/or). THE
+// single source of truth for "which requirement path(s) are active on this
+// offer". Every capital / qualification / reminder consumer routes through this
+// so the backward-compat rail is structural, not scattered. PURE; absent-safe.
+// Availability derives from the offer's requirement ROWS via the family map
+// (choosablePaths); plannedPath picks which choosable path is modeled.
 //   requirementLogic 'all' (default/absent) → today's conjunctive semantics:
-//     ddActive = the offer is a DD-family type, debitActive = debit is required.
-//     This reduces EXACTLY to the raw offerType/debitRequirement.required tests
-//     every existing site already used, so 'all' offers behave identically.
-//   requirementLogic 'any' → the bonus is met by EITHER path; plannedPath picks
-//     which one is modeled. A chosen path activates only itself (and is guarded
-//     so an impossible path — e.g. 'dd' with no DD obligation — activates
-//     nothing rather than lying). plannedPath null → needsPath (not modeled).
-// Design: docs/assessments/2026-07-11-either-or-requirements.md.
+//     ddActive = DD-family offerType, debitActive = debitRequirement.required,
+//     holdActive = held-lump offerType. This reduces EXACTLY to the raw tests
+//     every existing site used, so 'all' offers behave BYTE-IDENTICALLY.
+//   requirementLogic 'any' → the bonus is met by ANY ONE choosable path:
+//     with <2 choosable paths it degenerates to 'all' (never drops capital);
+//     with ≥2, the chosen path activates only itself. held-and-dd's hold is
+//     ALWAYS active (footprint, not a choice); only new-funds-held can activate
+//     'hold' via the choice. plannedPath null (with ≥2 paths) → needsPath.
+// Returns { logic, path, ddActive, debitActive, holdActive, needsPath, families }
+// (families = present path families as a canonical-order array).
+// Design: docs/assessments/2026-07-13-requirements-driven-paths.md.
 function pathState(offer) {
   const o = offer || {};
-  const hasDdPath = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
-  const hasDebitPath = !!(o.debitRequirement && o.debitRequirement.required);
+  const hasDdType = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  const hasDebitReq = !!(o.debitRequirement && o.debitRequirement.required);
+  const hasHeldLump = HELD_LUMP_TYPES.has(o.offerType);
   const logic = o.requirementLogic === 'any' ? 'any' : 'all';
+  // 'all' fast path (the overwhelming majority, and the entire beam-search hot
+  // path): the active flags come straight from offerType/debitRequirement, so no
+  // requirement-row scan is needed. `families` is only meaningful for the path
+  // CHOOSER, which never renders for an 'all' offer — cold callers that want the
+  // present set on an 'all' offer use offerPathFamilies() directly — so it is
+  // intentionally left empty here to keep this path allocation-free.
   if (logic === 'all') {
-    return { logic, path: null, ddActive: hasDdPath, debitActive: hasDebitPath, needsPath: false };
+    return {
+      logic, path: null,
+      ddActive: hasDdType, debitActive: hasDebitReq, holdActive: hasHeldLump,
+      needsPath: false, families: []
+    };
   }
-  const path = (o.plannedPath === 'dd' || o.plannedPath === 'debit') ? o.plannedPath : null;
+  const fams = pathFamilyFlags(o);
+  const familyArr = [];
+  if (fams.dd) familyArr.push('dd');
+  if (fams.debit) familyArr.push('debit');
+  if (fams.hold) familyArr.push('hold');
+  const choosable = choosablePaths(o);
+  // Degenerate 'any' (fewer than two real choices) → fall back to 'all' semantics
+  // so a mis-set flag can never spuriously strip a hold/DD from the capital model.
+  if (choosable.length < 2) {
+    return {
+      logic, path: null,
+      ddActive: hasDdType, debitActive: hasDebitReq, holdActive: hasHeldLump,
+      needsPath: false, families: familyArr
+    };
+  }
+  const path = choosable.includes(o.plannedPath) ? o.plannedPath : null;
+  const holdUnconditional = o.offerType === 'held-and-dd' || o.offerType === 'other';
   return {
-    logic,
-    path,
-    ddActive: path === 'dd' && hasDdPath,
-    debitActive: path === 'debit' && hasDebitPath,
-    needsPath: path === null
+    logic, path,
+    ddActive: path === 'dd',
+    debitActive: path === 'debit',
+    holdActive: holdUnconditional || (o.offerType === 'new-funds-held' && path === 'hold'),
+    needsPath: path === null,
+    families: familyArr
   };
+}
+
+// Is this requirement ROW active for the offer's chosen qualification path?
+// Neutral rows (no family) and every row under logic 'all' are ALWAYS active.
+// Under logic 'any', a dd/debit/hold row is active iff the matching path flag is.
+// Drives the path-aware lifecycle filtering (checklist counts, requirement
+// deadlines, reminders, allRequirementsDone). Byte-identical for 'all'. PURE.
+function requirementActive(offer, row) {
+  if (!row) return false;
+  const fam = requirementPathFamily(row.type);
+  if (!fam) return true;                       // neutral → always counts
+  const ps = pathState(offer);
+  if (ps.logic === 'all') return true;
+  if (fam === 'dd') return ps.ddActive;
+  if (fam === 'debit') return ps.debitActive;
+  if (fam === 'hold') return ps.holdActive;
+  return true;
 }
 
 // The bank WITHDRAWAL-ELIGIBILITY / hold-release date — the day the account
@@ -121,6 +238,12 @@ function withdrawalInitiateDate(offer, cfg) {
     if (rets.length === 0) return '';
     return isoDate(new Date(Math.max(...rets)));
   }
+  // QUALIFICATION PATHS: the held lump models capital only when the hold path is
+  // active. For logic='all' holdActive reduces to the held-lump offerType test,
+  // so held/held-and-dd/other are unchanged; a debit-path new-funds-held (Brex
+  // "hold OR card spend", card spend chosen) has holdActive=false → no hold, no
+  // tied-up capital.
+  if (!pathState(offer).holdActive) return '';
   const rel = _heldReleaseDate(offer);
   return rel ? isoDate(rel) : null;
 }
@@ -150,6 +273,9 @@ function withdrawalEligibleDate(offer, cfg) {
   // in), so capital-back == withdrawalInitiateDate — no double lag. Returns ''
   // for a debit-path / no-DD offer.
   if (offer.offerType === 'direct-deposit') return withdrawalInitiateDate(offer, cfg);
+  // QUALIFICATION PATHS: no held lump when the hold path isn't active (debit-path
+  // new-funds-held ties up no capital). Byte-identical for logic='all'.
+  if (!pathState(offer).holdActive) return '';
   // Held/other: bank hold-release Date PLUS the return-transfer lag (backDays
   // business days). Compute the release as a Date directly (no string round-trip
   // — this is a beam-search hot path) and add the lag. Read cfg.backDays directly
@@ -182,7 +308,10 @@ function lockStartDate(offer) {
   // HELD + DD and NEW FUNDS HELD: the held lump sum is unavailable from when
   // the bank PROCESSES the deposit (the planned funding date; Saturday-planned
   // funding won't post until Monday). The qualifying DDs are tracked
-  // separately and don't move this date.
+  // separately and don't move this date. QUALIFICATION PATHS: no lump start when
+  // the hold path isn't active (debit-path new-funds-held); '' so the projection
+  // lump block gets start=null and skips. Byte-identical for logic='all'.
+  if (!pathState(offer).holdActive) return '';
   return bizDayISO(effectiveFundingDate(offer));
 }
 
@@ -369,8 +498,12 @@ function reconcileClosedDate(offer, priorAccountStatus) {
 // never nudge an offer that has no tracked obligations.
 function allRequirementsDone(offer) {
   const reqs = Array.isArray(offer && offer.requirements) ? offer.requirements : [];
-  if (reqs.length === 0) return false;
-  return reqs.every(r => r && r.done);
+  // QUALIFICATION PATHS: under logic 'any' only the CHOSEN path's rows (plus
+  // neutral rows) count — a non-chosen-family obligation you never intend to do
+  // must not block "all requirements met". Byte-identical for 'all' (all active).
+  const active = reqs.filter(r => requirementActive(offer, r));
+  if (active.length === 0) return false;
+  return active.every(r => r && r.done);
 }
 
 // Should the "mark as Waiting for Bonus?" suggestion show for this offer?
@@ -481,6 +614,9 @@ function safeToCloseDate(offer, cfg, today = TODAY) {
   const reqs = Array.isArray(offer.requirements) ? offer.requirements : [];
   for (const r of reqs) {
     if (!r || r.done) continue;
+    // QUALIFICATION PATHS: a non-chosen-path obligation's deadline doesn't
+    // constrain close-safety (you're not doing it). Byte-identical for 'all'.
+    if (!requirementActive(offer, r)) continue;
     const dlISO = requirementDeadlineISO(offer, r);
     if (dlISO) candidates.push(dlISO);
   }
@@ -685,6 +821,9 @@ function annualizedReturn(offer, cfg) {
   // NEW FUNDS HELD: annualize on actual days unavailable (business-day
   // aware lockStart → withdrawalEligible), matching the "Days tied up"
   // card stat. Fall back to the stated hold count when dates are absent.
+  // QUALIFICATION PATHS: a debit-path new-funds-held ties up no held capital, so
+  // an annualized-on-hold figure is meaningless → null. Byte-identical for 'all'.
+  if (!pathState(offer).holdActive) return null;
   const r = simpleReturn(offer);
   if (r == null) return null;
   let days = null;
@@ -776,4 +915,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, isPreAccountOffer, effectiveOfferForToday, mapEffectiveOffers, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, choosablePaths, offerPathFamilies, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, isPreAccountOffer, effectiveOfferForToday, mapEffectiveOffers, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

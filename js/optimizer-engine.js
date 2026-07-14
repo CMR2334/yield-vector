@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -511,7 +511,12 @@ function validateDdCadence(offer, constraints, ctx) {
   const postISO = dd => { const rt = ddRoundTrip(dd, cfg); return rt ? isoDate(rt.post) : ''; };
   const cutoffCandidates = [];
   if (offer.offerExpirationDate) cutoffCandidates.push(offer.offerExpirationDate);
+  // QUALIFICATION PATHS: a non-chosen-path requirement doesn't cut off DDs. The
+  // `logic==='all'` short-circuit keeps this loop allocation-free on the beam hot
+  // path (every row active — byte-identical to before).
+  const eoAny = pathState(offer).logic === 'any';
   for (const row of offer.requirements || []) {
+    if (eoAny && !requirementActive(offer, row)) continue;
     const dl = localRequirementDeadlineISO(offer, row);
     if (dl) cutoffCandidates.push(dl);
   }
@@ -576,8 +581,12 @@ function validateOfferQualification(offer, ctx) {
     const dd = debitDeadlineISO(offer);
     if (!dd || dd < ctx.todayISO) constraints.push({ offerId: offer.id, kind: 'debit-deadline', dateISO: dd || '' });
   }
+  const eoAny = ps.logic === 'any';
   for (const row of offer.requirements || []) {
     if (!row || row.done || row.source !== 'user') continue;
+    // QUALIFICATION PATHS: skip non-chosen-path rows (byte-identical for 'all',
+    // short-circuited so the hot path never calls requirementActive there).
+    if (eoAny && !requirementActive(offer, row)) continue;
     const dl = localRequirementDeadlineISO(offer, row);
     if (dl && dl < ctx.todayISO) constraints.push({ offerId: offer.id, kind: 'requirement-deadline', dateISO: dl });
   }
@@ -645,7 +654,11 @@ function horizonDatesForOffer(offer, ctx) {
   if (ps.ddActive) push(ddWindowEndDate(offer, ctx.ddTransfer));
   const win = expectedBonusWindow(offer, ctx.todayDate);
   if (win) push(win.endISO);
-  for (const row of offer.requirements || []) push(localRequirementDeadlineISO(offer, row));
+  // QUALIFICATION PATHS: only active-path requirement deadlines extend the
+  // horizon (byte-identical for 'all' — every row active; short-circuited so the
+  // hot path skips requirementActive under 'all').
+  const eoAny = ps.logic === 'any';
+  for (const row of offer.requirements || []) if (!eoAny || requirementActive(offer, row)) push(localRequirementDeadlineISO(offer, row));
   if (ps.ddActive) for (const dd of offer.directDeposits || []) {
     const rt = ddRoundTrip(dd, ctx.ddTransfer);
     if (rt) push(isoDate(rt.returnDate));
@@ -773,10 +786,16 @@ function objectiveForOffers(offers, cfg) {
       const ct = ddCapitalTime(offer, cfg);
       weight = ct ? ct.dollarDays : 0;
     } else {
-      const ls = parseDate(lockStartDate(offer));
-      const we = parseDate(withdrawalEligibleDate(offer, cfg));
-      const days = ls && we ? Math.max(0, daysBetween(ls, we)) : Number(offer.daysFundsMustRemain || 0);
-      weight = Number(offer.requiredFundingAmount || 0) * days;
+      // QUALIFICATION PATHS: a debit-path new-funds-held ties up no held capital,
+      // so it carries zero objective weight. The daysFundsMustRemain fallback
+      // below would otherwise weight it off a hold it isn't doing; gate on
+      // holdActive (byte-identical for logic='all' — held types stay weighted).
+      if (pathState(offer).holdActive) {
+        const ls = parseDate(lockStartDate(offer));
+        const we = parseDate(withdrawalEligibleDate(offer, cfg));
+        const days = ls && we ? Math.max(0, daysBetween(ls, we)) : Number(offer.daysFundsMustRemain || 0);
+        weight = Number(offer.requiredFundingAmount || 0) * days;
+      }
     }
     if (ar != null && weight > 0) {
       annNum += ar * weight;

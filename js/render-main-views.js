@@ -3,7 +3,7 @@ import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrenc
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
 import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, effectiveOfferForToday, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, offerIssues, pathState, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, effectiveOfferForToday, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, offerIssues, pathState, requirementActive, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
 import { APP_VERSION, PRE_ACCOUNT_SUB_STATUSES, STATUS_LABELS, SUB_STATUSES, SUB_STATUS_CHIP_CLASS, SUB_STATUS_LABELS, readDiagLog, storageHealth } from './runtime-status.js';
@@ -637,7 +637,10 @@ function renderDdMethodPanel(o) {
 // {done, total} requirement counts for an offer — drives the card checklist
 // header and the offers-table met/total chip.
 function requirementChecklistCounts(o) {
-  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  // QUALIFICATION PATHS: under logic 'any' only the chosen path's rows (+ neutral)
+  // count toward the checklist — a non-chosen-family obligation isn't yours to do.
+  // Byte-identical for 'all' (every row active).
+  const reqs = (Array.isArray(o.requirements) ? o.requirements : []).filter(r => requirementActive(o, r));
   const total = reqs.length;
   const done = reqs.filter(r => r && r.done).length;
   return { done, total };
@@ -649,7 +652,10 @@ function requirementChecklistCounts(o) {
 // date first, undated last), then done rows. Renders nothing when the offer has
 // no requirement rows.
 function renderRequirementChecklist(o) {
-  const reqs = Array.isArray(o.requirements) ? o.requirements : [];
+  // QUALIFICATION PATHS: render only the active path's rows (+ neutral). The
+  // non-chosen path's obligations are kept on the offer but not shown as to-dos.
+  // Byte-identical for 'all'.
+  const reqs = (Array.isArray(o.requirements) ? o.requirements : []).filter(r => requirementActive(o, r));
   if (reqs.length === 0) return '';
   // Item 1: each date renders ONCE on the card. The legacy .offer-dates block
   // (Fund / Withdrawal date) and the .offer-dds block already print these dates
@@ -852,7 +858,7 @@ const OFFER_NEEDS_INFO_COPY = {
   'needs-fund-date':   { label: 'Needs fund date', title: 'This held + DD offer has no funding date — the optimizer skips it until the held lump sum is dated.' },
   'needs-signup-date': { label: 'Needs date',      title: 'This open account has no planned sign-up date — add one so the plan can include it.' },
   'needs-churn-date':  { label: 'Needs re-run date', title: 'Churnable, but its re-run anchor date is not set yet — add it to schedule the next cycle.' },
-  'needs-path':        { label: 'Choose path', title: 'This bonus can be met by EITHER a direct deposit OR a card spend — choose which one you plan to do so it can be modeled (the optimizer never picks for you).' }
+  'needs-path':        { label: 'Choose path', title: 'This bonus can be met more than one way — choose which qualification path you plan to do so it can be modeled (the optimizer never picks for you).' }
 };
 function offerNeedsInfoChip(o) {
   const reason = offerNeedsInfoReason(o);
@@ -867,9 +873,13 @@ function offerNeedsInfoChip(o) {
 function eitherOrChip(o) {
   if (!o || o.requirementLogic !== 'any') return '';
   const ps = pathState(o);
-  if (ps.path === 'dd') return `<span class="chip chip-muted" title="Met by EITHER a direct deposit OR a card spend — you chose the direct-deposit path.">Either · via DD</span>`;
-  if (ps.path === 'debit') return `<span class="chip chip-muted" title="Met by EITHER a direct deposit OR a card spend — you chose the card-spend path.">Either · via card spend</span>`;
-  return '';
+  const meta = {
+    dd:    { label: 'via DD',         title: 'Met more than one way — you chose the direct-deposit path.' },
+    debit: { label: 'via card spend', title: 'Met more than one way — you chose the card-spend path.' },
+    hold:  { label: 'via hold',       title: 'Met more than one way — you chose the hold-funds path.' }
+  }[ps.path];
+  if (!meta) return '';
+  return `<span class="chip chip-muted" title="${meta.title}">Either · ${meta.label}</span>`;
 }
 
 // Expiration/freshness chip for an offer card (display only — the offer-expires

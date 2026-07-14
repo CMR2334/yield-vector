@@ -225,6 +225,12 @@ function generateProjection(state, options = {}) {
     // New funds held: single block from the funding date to the CAPITAL-BACK
     // (landing) date — the hold-release date plus the return-transfer lag, so the
     // lump is spendable the day it lands back, not the day the hold lifts.
+    // QUALIFICATION PATHS: only when the hold path is active. For logic='all'
+    // holdActive reduces to the held-lump offerType test, so new-funds-held/other
+    // are unchanged; a debit-path new-funds-held (Brex, card spend chosen) ties up
+    // NO capital (lockStart/withdrawalEligible already return '' → start/end null,
+    // but gate explicitly for clarity + safety).
+    if (!ps.holdActive) continue;
     const start = parseDate(lockStartDate(o));
     const end = parseDate(withdrawalEligibleDate(o, cfg));
     if (!start || !end || start >= end) continue;
@@ -674,6 +680,32 @@ function testFeasibilityPins() {
     const debitLow = low('debit');
     check('Ceo either/or debit path ties up no capital; dd path ties up its DD',
       true, debitLow === 50000 && ddLow != null && ddLow < 50000, `dd=${ddLow} debit=${debitLow}`);
+  }
+
+  // ---- Ceo2: BREX — a NEW-FUNDS-HELD hold-OR-card-spend either/or. The same
+  // requirementLogic:'any' offer ties up its 30k HELD LUMP on the 'hold' path but
+  // ZERO capital on the 'debit' (card-spend) path (2026-07-13 requirements-driven
+  // qualification paths). Both feasible; only the hold path dips the curve. This
+  // is the owner's exact Brex case: hold funds OR spend on the card, do one.
+  {
+    const brex = (path) => _fpOffer({
+      id: 'off_brex_feas', offerType: 'new-funds-held', includeInScenario: true,
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      debitRequirement: { required: true, count: 5, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirementLogic: 'any', plannedPath: path,
+      plannedSignupDate: _fpIso(start, 10), optionalPlannedFundingDate: _fpIso(start, 10)
+    });
+    const low = (path) => {
+      const o = brex(path);
+      const st = _fpState({ offers: [o] });
+      const proj = generateProjection(st, { includedOfferIds: [o.id], horizonDays: 120 });
+      const s = summarizeProjection(proj, st.settings);
+      return s.lowest ? s.lowest.availableCapital : null;
+    };
+    const holdLow = low('hold');
+    const debitLow = low('debit');
+    check('Ceo2 Brex hold-or-spend: hold path ties up the 30k lump, card-spend path ties up ZERO',
+      true, debitLow === 50000 && holdLow != null && holdLow <= 20000, `hold=${holdLow} debit=${debitLow}`);
   }
 
   // ---- HOLD-RELEASE TRANSFER LAG (2026-07-13). The day model must treat held

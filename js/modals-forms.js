@@ -3,7 +3,7 @@ import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, f
 import { ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
 import { _docUserChecks, docImportUpdateApplyCount, docTierSelect, filterTemplateList, renderTemplatePicker } from './doc-import-templates.js';
 import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
-import { debitDeadlineISO, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
+import { debitDeadlineISO, choosablePaths, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
 import { renderLifecycleInfo, renderPipelineStrip } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
 import { REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, offerDisplayLabel, makeRequirementRow, requirementDeadlineISO, schemaV2Defaults, syncRequirementsWithLegacy } from './requirements-templates.js';
@@ -14,45 +14,72 @@ import { escapeAttr, escapeHtml } from './ui-utils.js';
    MODAL: ADD/EDIT OFFER
    ============================================================ */
 
-// "How is this bonus met?" — the EITHER/OR chooser. It's only a real choice when
-// the offer has TWO independent qualifying paths: a DD path (DD-family
-// offerType) AND a card-spend path (debit required). For everything else — e.g.
-// a new-funds-held bonus with no DD component, like Brex — there's nothing to
-// pick between, so the whole block is omitted rather than showing an
-// inapplicable "Direct deposit" option. `reqMetPaths` returns the inner markup
-// (or '' when it shouldn't render); `reqMetSectionField` wraps it in the field
-// and is rebuilt live by syncReqMetSection as offerType / debit-required change.
-function reqMetPaths(hasDd, hasDebit, logic, plannedPath) {
-  if (!(hasDd && hasDebit)) return '';
+// "How is this bonus met?" — the qualification-path chooser. It's a real choice
+// only when the offer has TWO OR MORE distinct qualifying paths among its LIVE
+// requirement rows — a direct-deposit path, a card-spend path, and/or a hold-
+// funds path (via choosablePaths, the same helper the model uses, so the UI and
+// the capital model can never disagree). For everything with a single path there
+// is nothing to pick between, so the whole block is omitted. `reqMetPaths` takes
+// the choosable path-key array and returns the inner markup (or '' when <2
+// paths); `reqMetSectionField` derives the paths from the offer's requirements
+// and wraps it; syncReqMetSection rebuilds it live as requirement rows / legacy
+// offerType / debit-required change. Design: 2026-07-13-requirements-driven-paths.
+const PLANNED_PATH_LABELS = { dd: 'Direct deposit', debit: 'Card spend', hold: 'Hold funds' };
+function reqMetPaths(paths, logic, plannedPath) {
+  if (!Array.isArray(paths) || paths.length < 2) return '';
   const isAny = logic === 'any';
-  const pp = (plannedPath === 'dd' || plannedPath === 'debit') ? plannedPath : '';
+  const pp = paths.includes(plannedPath) ? plannedPath : '';
+  const eitherLabel = paths.map(p => PLANNED_PATH_LABELS[p].toLowerCase()).join(' or ');
+  const pathRadios = paths.map(p => `
+                <input type="radio" id="path-${p}" name="plannedPath" value="${p}" ${pp === p ? 'checked' : ''} />
+                <label for="path-${p}">${PLANNED_PATH_LABELS[p]}</label>`).join('');
   return `
             <label>How is this bonus met?</label>
             <div class="radio-group" style="max-width:520px;flex-wrap:wrap;">
               <input type="radio" id="reqlogic-all" name="requirementLogic" value="all" ${isAny ? '' : 'checked'} />
               <label for="reqlogic-all">All requirements</label>
               <input type="radio" id="reqlogic-any" name="requirementLogic" value="any" ${isAny ? 'checked' : ''} />
-              <label for="reqlogic-any">Either way (DD or card spend)</label>
+              <label for="reqlogic-any">Either way (${eitherLabel})</label>
             </div>
-            <span class="field-hint">Pick "Either way" for offers (e.g. Brex) where a direct deposit <strong>OR</strong> a card-spend minimum qualifies — you only do one. Fill in <strong>both</strong> the direct-deposit and the debit sections above, then choose which one you plan to do.</span>
+            <span class="field-hint">Pick "Either way" when any <strong>one</strong> of these paths qualifies on its own — you only do one (a Brex-style hold-or-card-spend offer, or a direct-deposit-or-card-spend offer). This chooser appears automatically once an offer's requirements above cover two or more qualifying paths.</span>
             <div id="planned-path-wrap" style="margin-top:8px;${isAny ? '' : 'display:none;'}">
               <label>Which will you do? *</label>
-              <div class="radio-group" id="f-planned-path" style="max-width:440px;flex-wrap:wrap;">
-                <input type="radio" id="path-dd" name="plannedPath" value="dd" ${pp === 'dd' ? 'checked' : ''} />
-                <label for="path-dd">Direct deposit</label>
-                <input type="radio" id="path-debit" name="plannedPath" value="debit" ${pp === 'debit' ? 'checked' : ''} />
-                <label for="path-debit">Card spend</label>
+              <div class="radio-group" id="f-planned-path" style="max-width:440px;flex-wrap:wrap;">${pathRadios}
                 <input type="radio" id="path-none" name="plannedPath" value="" ${pp === '' ? 'checked' : ''} />
                 <label for="path-none">Decide later</label>
               </div>
-              <span class="field-hint">Only the chosen path is scheduled, modeled, and reminded — the other is ignored. "Decide later" leaves the offer un-modeled until you pick (the optimizer never chooses the path for you).</span>
+              <span class="field-hint">Only the chosen path is scheduled, modeled, and reminded — the others are ignored. "Decide later" leaves the offer un-modeled until you pick (the optimizer never chooses the path for you).</span>
             </div>`;
 }
 function reqMetSectionField(o) {
-  const hasDd = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
-  const hasDebit = !!(o.debitRequirement && o.debitRequirement.required);
-  const inner = reqMetPaths(hasDd, hasDebit, o.requirementLogic, o.plannedPath);
+  // Derive the choosable paths from a fully-SYNCED snapshot so the derived
+  // requirement rows (funding/DD/debit) are present even on first open. Clone the
+  // rows so the in-place derived-row refresh never mutates the live offer.
+  const snap = Object.assign({}, o, {
+    requirements: (Array.isArray(o.requirements) ? o.requirements : []).map(r => Object.assign({}, r))
+  });
+  syncRequirementsWithLegacy(snap);
+  const inner = reqMetPaths(choosablePaths(snap), o.requirementLogic, o.plannedPath);
   return `<div class="field" style="grid-column: 1 / -1;${inner ? '' : 'display:none;'}" id="req-met-section">${inner}</div>`;
+}
+
+// Rebuild the "How is this bonus met?" block in place from the LIVE requirement
+// rows (derived + user) via choosablePaths — the SINGLE source both the modal
+// change-listener and refreshRequirementsSection call, so an added/removed/
+// retyped requirement row and a legacy offerType/debit toggle all re-derive the
+// chooser identically. Preserves the in-progress logic/plannedPath by reading
+// them from the DOM. When <2 choosable paths remain the radios are removed
+// outright → readOfferForm falls back to 'all'/no-path.
+function rebuildReqMetSection() {
+  const form = document.getElementById('offer-form');
+  if (!form) return;
+  const sec = form.querySelector('#req-met-section');
+  if (!sec) return;
+  const logic = (form.querySelector('[name="requirementLogic"]:checked') || {}).value || 'all';
+  const plannedPath = (form.querySelector('[name="plannedPath"]:checked') || {}).value || '';
+  const inner = reqMetPaths(choosablePaths(buildLiveRequirementsOffer()), logic, plannedPath);
+  sec.innerHTML = inner;
+  sec.style.display = inner ? '' : 'none';
 }
 
 function showOfferModal(offerId = null, seed = null) {
@@ -590,23 +617,14 @@ function showOfferModal(offerId = null, seed = null) {
         generateDdDatesFromRequirement();
       }
     };
-    // Rebuild the "How is this bonus met?" block from the LIVE offerType +
-    // debit-required selections. Reads the current logic/plannedPath from the
-    // DOM first so a user's in-progress choice survives the rebuild; when the
-    // block no longer applies (fewer than two paths) its radios are removed
-    // outright, so readOfferForm falls back to 'all' / no planned path.
-    const syncReqMetSection = () => {
-      const sec = form.querySelector('#req-met-section');
-      if (!sec) return;
-      const type = (form.querySelector('[name="offerType"]:checked') || {}).value;
-      const hasDd = type === 'direct-deposit' || type === 'held-and-dd';
-      const hasDebit = (form.querySelector('[name="debitRequired"]:checked') || {}).value === 'yes';
-      const logic = (form.querySelector('[name="requirementLogic"]:checked') || {}).value || 'all';
-      const plannedPath = (form.querySelector('[name="plannedPath"]:checked') || {}).value || '';
-      const inner = reqMetPaths(hasDd, hasDebit, logic, plannedPath);
-      sec.innerHTML = inner;
-      sec.style.display = inner ? '' : 'none';
-    };
+    // Rebuild the "How is this bonus met?" block from the LIVE requirement rows
+    // (derived + user) via choosablePaths — the SAME helper the capital model
+    // uses. Reads the current logic/plannedPath from the DOM first so a user's
+    // in-progress choice survives the rebuild; when fewer than two paths remain
+    // the radios are removed outright, so readOfferForm falls back to 'all' / no
+    // planned path. Called on requirement-row add/remove/type change AND legacy
+    // offerType/debit-required toggles (all of which change the family set).
+    const syncReqMetSection = () => rebuildReqMetSection();
     const syncReqMode = () => {
       const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
       const cf = form.querySelector('#ddreq-count-fields');
@@ -1062,16 +1080,16 @@ function buildLiveRequirementsOffer() {
   const offerType = (form.querySelector('[name="offerType"]:checked') || {}).value || 'new-funds-held';
   const debitRequired = (form.querySelector('[name="debitRequired"]:checked') || {}).value === 'yes';
   const ddReqMode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value === 'frequency' ? 'frequency' : 'count';
-  // EITHER/OR: carry the live requirementLogic/plannedPath so the derived
-  // requirement rows reflect the active path (deriveRequirementsFromLegacy gates
-  // DD/debit rows on them). Absent → 'all'/null (unchanged derivation).
+  // QUALIFICATION PATHS: carry the live requirementLogic/plannedPath so path-aware
+  // consumers (pathState/requirementActive) see the in-progress choice. Absent →
+  // 'all'/null. plannedPath may be 'dd' | 'debit' | 'hold'.
   const reqLogic = (form.querySelector('[name="requirementLogic"]:checked') || {}).value === 'any' ? 'any' : 'all';
   const plannedPathVal = (form.querySelector('[name="plannedPath"]:checked') || {}).value;
   const numOrNull = (v) => (v === '' || v == null) ? null : Number(v);
   const offer = {
     offerType,
     requirementLogic: reqLogic,
-    plannedPath: (reqLogic === 'any' && (plannedPathVal === 'dd' || plannedPathVal === 'debit')) ? plannedPathVal : null,
+    plannedPath: (reqLogic === 'any' && (plannedPathVal === 'dd' || plannedPathVal === 'debit' || plannedPathVal === 'hold')) ? plannedPathVal : null,
     plannedSignupDate: parseDateInput(qv('#f-signup')) || '',
     requiredFundingAmount: parseMoneyInput(qv('#f-funding')),
     daysAfterSignupAllowedBeforeDeposit: numOrNull(qv('#f-days-deposit')),
@@ -1106,6 +1124,10 @@ function refreshRequirementsSection() {
   if (!host) return;
   const offer = buildLiveRequirementsOffer();
   host.innerHTML = renderRequirementRows(offer);
+  // The set of qualification path families can change with any requirement-row
+  // add/remove/type edit, so re-derive the "How is this bonus met?" chooser from
+  // the same live state (preserving the in-progress logic/path choice).
+  rebuildReqMetSection();
 }
 
 // Live re-render of the modal's slim lifecycle strip + info block when the
@@ -1421,12 +1443,14 @@ function readOfferForm(idArg, isEdit) {
     offerType,
     ddRequirement,
     debitRequirement,
-    // EITHER/OR (2026-07-11): requirementLogic is 'all' (conjunctive, default)
-    // unless the user picks "Either way". plannedPath is only meaningful under
-    // 'any' — a blank/absent selection ("Decide later") stores null so the offer
-    // is not silently modeled (the optimizer never picks the path — P2-3).
+    // QUALIFICATION PATHS: requirementLogic is 'all' (conjunctive, default) unless
+    // the user picks "Either way". plannedPath ('dd'|'debit'|'hold') is only
+    // meaningful under 'any' — a blank/absent selection ("Decide later") stores
+    // null so the offer is not silently modeled (the optimizer never picks the
+    // path — P2-3). The value is re-validated against the offer's actually-present
+    // path families after the derived sync below (must be in choosablePaths).
     requirementLogic: data.requirementLogic === 'any' ? 'any' : 'all',
-    plannedPath: (data.requirementLogic === 'any' && (data.plannedPath === 'dd' || data.plannedPath === 'debit')) ? data.plannedPath : null,
+    plannedPath: (data.requirementLogic === 'any' && (data.plannedPath === 'dd' || data.plannedPath === 'debit' || data.plannedPath === 'hold')) ? data.plannedPath : null,
     color: data.color || '',
     directDeposits: readDdRowsFromForm()
       .filter(dd => dd.plannedDate || (dd.amount != null && dd.amount > 0)),
@@ -1506,6 +1530,13 @@ function readOfferForm(idArg, isEdit) {
   // Refresh the derived rows from the freshly-read legacy fields (preserving
   // done/done_date/notes on survivors); user rows are left untouched.
   syncRequirementsWithLegacy(offer);
+  // QUALIFICATION PATHS: now that requirements[] is materialized, keep plannedPath
+  // ONLY when it is an actually-present, choosable path family (else the chooser
+  // no longer offers it — e.g. a debit path was removed). Otherwise null it so a
+  // stale choice can't silently model a path the offer no longer has.
+  if (offer.requirementLogic === 'any' && offer.plannedPath && !choosablePaths(offer).includes(offer.plannedPath)) {
+    offer.plannedPath = null;
+  }
   return offer;
 }
 

@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, formatCompactCurrency, formatCurrency, formatDateDisplay, isoDate, nextEventInstance, parseDate, relativeDays } from './date-format-core.js';
 import { ddWindowEndDate } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, offerColorHex } from './migrations-catalogs.js';
-import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, pathState, safeToCloseDate, withdrawalInitiateDate } from './offer-model.js';
+import { CHURN_ANCHOR_LABELS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, churnEligibleDate, churnSnoozeActive, debitDeadlineISO, depositDeadline, expectedBonusWindow, lifecycleStage, pathState, requirementActive, safeToCloseDate, withdrawalInitiateDate } from './offer-model.js';
 import { displayOfferName, requirementDeadlineISO, requirementDisplayLabel, requirementSummary } from './requirements-templates.js';
 import { ErrCode, WORKING_SUB_STATUSES, logError } from './runtime-status.js';
 import { escapeAttr, escapeHtml } from './ui-utils.js';
@@ -92,7 +92,11 @@ function buildReminderItems(state) {
     // absent/'other' — which the app defaults to new-funds-held) funds a lump,
     // so gate on "not standard direct-deposit" rather than an allow-list that
     // would wrongly drop the undefined-offerType legacy/seed case.
-    const fundsLump = o.offerType !== 'direct-deposit';
+    // QUALIFICATION PATHS: the lump is owed only when the hold path is active —
+    // holdActive reduces to exactly "not standard direct-deposit" for logic='all'
+    // (byte-identical), and drops the fund-a-lump nag for a debit-path
+    // new-funds-held (Brex, card spend chosen — no lump to fund).
+    const fundsLump = pathState(o).holdActive;
     const dd = fundsLump ? depositDeadline(o) : null;
     if (dd && committed) {
       const due = isoDateOnly(dd);
@@ -183,6 +187,9 @@ function buildReminderItems(state) {
     if (committed && Array.isArray(o.requirements)) {
       for (const r of o.requirements) {
         if (!r || r.source !== 'user' || !r.id) continue;
+        // QUALIFICATION PATHS: no nag for a non-chosen-path requirement (a card-
+        // spend row on the hold path, etc.). Byte-identical for logic='all'.
+        if (!requirementActive(o, r)) continue;
         // DONE rows are NO LONGER skipped — they emit ANNOTATED (done:true) so
         // the Upcoming-actions list can linger them greyed for a few days. The
         // machine feed still excludes done items (computeReminderFeed filters
