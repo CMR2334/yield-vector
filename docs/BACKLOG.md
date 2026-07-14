@@ -139,9 +139,14 @@ URL pasted into a new Settings field (localStorage-only, like the Gist token).
   (A+B) held-vs-spend model gating + requirements-derived chooser + generalized
   all/any — IN FLIGHT in run 2026-07-13-capital-event-picker-chart-bonusmet
   (owner chose to expand that run; design pinned in its Key decisions 1–10);
-  (C) footprint auto-suggest + "none" footprint + N-of-M logic — STILL PARKED
-  here; design doc: docs/assessments/2026-07-13-requirements-driven-paths.md
-  (written by that run) + 2026-07-11-either-or-requirements.md.
+  (C) — SUPERSEDED 2026-07-14 by the owner-directed **"Custom (from
+  requirements)" 4th offer type**: multiple pick-one requirement GROUPS
+  (rows always-required or group members; groups AND together), capital
+  derived from hold-implying rows, requirements editor surfacing under the
+  offer-type banner. WORKSHOP doc (owner wants to iterate — decisions so far
+  + open questions): docs/assessments/2026-07-14-custom-offer-type-workshop.md.
+  Foundation designs: 2026-07-13-requirements-driven-paths.md +
+  2026-07-11-either-or-requirements.md.
 
 ## Owner-action pending (blocked on Collin, not code)
 - **Apple Shortcut v2 executor build** — build the minimal reminders executor
