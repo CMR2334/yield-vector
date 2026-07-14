@@ -1305,8 +1305,20 @@ function docDetectEitherOr(text, put) {
   const m = T.match(bridge) || T.match(holdBridge);
   if (!m) return;
   // Reject fee-waiver prose ("avoid the monthly fee with a DD or debit purchase")
-  // — that names a fee-avoidance path, not a bonus qualification path.
-  if (/waiv|avoid[\s\S]{0,40}?fee|monthly (?:maintenance )?fee/i.test(T)) return;
+  // — that names a fee-avoidance path, not a bonus qualification path. SCOPED
+  // (2026-07-14 fix-up) to the matched disjunction's own sentence/line, not the
+  // whole post: nearly every real DoC post carries an unrelated "Monthly fees:
+  // $0" glance row elsewhere in the text, and a whole-post guard let that row
+  // suppress an otherwise-legitimate hold-vs-spend (or DD-vs-spend) detection.
+  // Boundary convention matches the R70 span-anchor sentence window above
+  // (line ~1018): '.' or '\n' on either side of the match.
+  const mi = m.index || 0;
+  const snipStart = Math.max(T.lastIndexOf('.', mi), T.lastIndexOf('\n', mi)) + 1;
+  let snipEnd = mi + m[0].length;
+  const snipPeriod = T.indexOf('.', snipEnd), snipNewline = T.indexOf('\n', snipEnd);
+  snipEnd = Math.min(snipPeriod < 0 ? T.length : snipPeriod, snipNewline < 0 ? T.length : snipNewline);
+  const snippet = T.slice(snipStart, snipEnd);
+  if (/waiv|avoid[\s\S]{0,40}?fee|monthly (?:maintenance )?fee/i.test(snippet)) return;
   // Require a bonus-qualification context so the disjunction is about EARNING the
   // bonus, not some unrelated "or".
   if (!/qualif|to earn|to receive|to get|\bbonus\b|requirement|meet the/i.test(T)) return;

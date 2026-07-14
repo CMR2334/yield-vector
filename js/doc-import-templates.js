@@ -121,9 +121,11 @@ function _docWireDdModel() {
 // 'hold' as a choosable family (docs/assessments/2026-07-13-requirements-driven-paths.md
 // §2). Distinguish the two shapes the parser can emit for requirementLogic:
 // 'any' on a held-type offer: a genuine DD-vs-spend disjunction (a "Direct
-// deposit required" row was actually parsed → ddParsed true) still forces the
-// DD-family type (existing behavior, unchanged); a hold-vs-spend disjunction
-// (held-type offer, no DD requirement parsed) must NOT force it, so the offer
+// deposit required" row was actually parsed AND left checked in the preview
+// → ddParsed true; an unchecked/absent row is no DD signal — preview
+// checkboxes are authoritative) still forces the DD-family type (existing
+// behavior, unchanged); a hold-vs-spend disjunction (held-type offer, no DD
+// requirement parsed/checked) must NOT force it, so the offer
 // stays new-funds-held and the requirements-derived chooser can surface
 // Hold funds vs Card spend. An explicit Held+DD offer type is never touched
 // either way (curOfferType !== 'new-funds-held').
@@ -206,7 +208,17 @@ const DOC_FIELD_MAP = [
       // hold-vs-spend disjunction (held offer, no DD requirement parsed) must
       // NOT be forced to DD-family — see _docEitherOrForceDdFamily above.
       // Leave an explicit Held+DD offer type alone either way.
-      const ddParsed = !!(_docLastParse && _docLastParse.fields && _docLastParse.fields.ddRequired && _docLastParse.fields.ddRequired.value);
+      // ddParsed signal (2026-07-14 fix-up, Step 2d POST-REVIEW M1): preview
+      // checkboxes are authoritative in this UI (docImportApply below only
+      // applies CHECKED rows) — reading the raw parse (fields.ddRequired.value)
+      // regardless of checked state let a user UNCHECK the "Direct deposit
+      // required" row while keeping requirementLogic checked, and still get
+      // forced to DD-family. Require the ddRequired preview row to exist AND
+      // be checked, on top of its parsed value, so an unchecked/absent DD row
+      // means ddParsed=false.
+      const ddRow = document.querySelector('#doc-import-preview .doc-field[data-doc-key="ddRequired"] .doc-check');
+      const ddField = _docLastParse && _docLastParse.fields && _docLastParse.fields.ddRequired;
+      const ddParsed = !!(ddRow && ddRow.checked && ddField && ddField.value);
       if (_docEitherOrForceDdFamily(cur, ddParsed)) {
         const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
       }
@@ -1074,6 +1086,20 @@ function testDocParserRegressions() {
     // must NOT fire; conservative-by-design like the DD bridge's own control.
     { name: 'HoldVsSpend CONTROL conjunctive "hold new funds ... and ... spend" → requirementLogic absent',
       html: '<article><p>To earn the bonus, hold new funds in your account for 1 business day and meet a $2,000 card spend requirement.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'requirementLogic', want: undefined },
+    // 2026-07-14 fix-up (Step 2d POST-REVIEW H1) — the fee-waiver guard used to
+    // be WHOLE-POST scoped, so a post's unrelated "Monthly fees: $0" glance row
+    // (present on nearly every real DoC post) silently suppressed a legitimate
+    // hold-vs-spend detection elsewhere in the same post. Guard is now scoped to
+    // the matched disjunction's own sentence/line — this pin fails on the old
+    // whole-post guard and passes on the fix.
+    { name: 'HoldVsSpend WITH unrelated "Monthly fees: $0" row → requirementLogic still any',
+      html: '<article><p>Offer at a glance</p><ul><li>Monthly fees: $0</li></ul><p>To qualify for the bonus, either hold new funds in your account for 1 business day or meet a $2,000 card spend requirement.</p><p>Open a Foo Business account to earn your bonus.</p></article>',
+      key: 'requirementLogic', want: 'any' },
+    // CONTROL for the scoped guard — genuine fee-waiver prose (the fee-avoidance
+    // path itself, not the bonus-qualification path) must still be rejected.
+    { name: 'HoldVsSpend fee-waiver phrasing ("avoid the monthly fee by maintaining a balance or making purchases") stays absent',
+      html: '<article><p>Avoid the monthly fee by maintaining a balance or making purchases on your debit card each statement cycle.</p><p>Open a Foo account to earn your bonus.</p></article>',
       key: 'requirementLogic', want: undefined },
   ];
   let pass = 0, fail = 0; const failures = [];
