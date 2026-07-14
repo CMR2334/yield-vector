@@ -1196,6 +1196,11 @@ function renderTimeline() {
             const sPct = pctFor(r.start);
             const ePct = pctFor(r.end);
             const w = ePct - sPct;
+            // Text shown on the bar (owner ask 2026-07-14: too-narrow bars were
+            // clipping this). Computed once so the same value drives both the
+            // rendered label and the `has-label` class the CSS keys its
+            // content-driven min-width off (.tl-bar.has-label in index.html).
+            const barText = w > 1 ? (r.offerType === 'direct-deposit' ? 'DD' : formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })())) : '';
             return `
               <div class="timeline-row">
                 <div class="timeline-row-label">
@@ -1209,8 +1214,8 @@ function renderTimeline() {
                     const right = (b.to / totalDays) * 100;
                     return `<div class="tl-shortfall-band" style="left:${left}%;right:${100 - right}%;"></div>`;
                   }).join('')}
-                  <div class="tl-bar ${r.status} ${r.color ? 'has-color' : ''}" style="left:${sPct}%;width:${w}%;${r.color ? `--offer-color:${r.color};` : ''}" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
-                    ${w > 1 ? (r.offerType === 'direct-deposit' ? 'DD' : formatCompactCurrency((function(){ if (r.isVirtual) { const o = App.state.offers.find(x=>x.id===r.id); return o ? o.requiredFundingAmount : 0; } const c = App.state.commitments.find(x=>x.id===r.id); return c ? c.amount : 0; })())) : ''}
+                  <div class="tl-bar ${r.status} ${r.color ? 'has-color' : ''} ${barText ? 'has-label' : ''}" style="left:${sPct}%;width:${w}%;${r.color ? `--offer-color:${r.color};` : ''}" title="${escapeHtml(r.label)}: ${formatDateMedium(r.start)} → ${formatDateMedium(r.end)}">
+                    ${barText}
                   </div>
                   ${todayPct != null ? `<div class="tl-today" style="left:${todayPct}%;"></div>` : ''}
                 </div>

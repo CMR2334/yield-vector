@@ -1832,6 +1832,18 @@ a { color: inherit; text-decoration: none; }
 .tl-bar.completed { background: var(--bg); border-color: var(--border-strong); color: var(--text-tertiary); }
 .tl-bar.cancelled { opacity: 0.4; }
 
+/* Owner ask 2026-07-14: short commitments on a long horizon render so narrow
+   the on-bar label ($ amount / "DD") clips. `.has-label` is only applied by
+   renderTimeline when a label is actually shown (w > 1%, same gate that
+   decides the text) — content-driven max-content lets each bar grow to
+   exactly its own label's width, nothing more: "DD" needs ~28px (unchanged
+   from the old flat floor below) while a longer currency label grows just
+   enough to clear it. `left` (start edge) is untouched, so only the right
+   edge shifts — a small overrun of the true end date on tiny bars only.
+   Textless slivers (w <= 1%, no label rendered) keep the old flat 28px floor
+   so they don't shrink. */
+.tl-bar.has-label { min-width: max-content; }
+
 /* Per-offer color: override the bar's left border with the offer's
    identity color. Keeps the status fill intact (so confirmed vs
    hypothetical vs completed still reads) but adds a vertical color
