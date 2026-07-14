@@ -46,12 +46,15 @@ function debitDeadlineISO(offer) {
   return isoDate(addDays(signup, days));
 }
 
-// Offer types that model a HELD LUMP (requiredFundingAmount tied up over a hold).
-// 'other' is a legacy catch-all normalized to 'new-funds-held' at every write
-// path (and unavailable in the offer-type radio); it is kept here purely so a raw
-// stored 'other' offer's held-lump modeling stays byte-identical under logic
-// 'all'. Direct-deposit is the only type WITHOUT a held lump (its capital is the
-// DD round-trips), so this set is exactly "not direct-deposit".
+// Offer types that seed the HELD LUMP family in pathFamilyFlags (the family map's
+// legacy-field fallback: an enumerated held type + requiredFundingAmount>0 → hold
+// family present). 'other' is a legacy catch-all normalized to 'new-funds-held'
+// at every write path (and unavailable in the offer-type radio); it is kept here
+// so a raw stored 'other' offer still registers the hold family.
+// NOTE: this allow-list is NO LONGER used to derive pathState().holdActive — that
+// is the literal predicate `offerType !== 'direct-deposit'` (see pathState), so a
+// MISSING/unknown offerType keeps its pre-87ff38c held-lump modeling. This set is
+// only the FAMILY-DETECTION allow-list (which enumerated types can seed 'hold').
 const HELD_LUMP_TYPES = new Set(['new-funds-held', 'held-and-dd', 'other']);
 
 // Which qualification-path families (dd | debit | hold) are present on an offer,
@@ -121,8 +124,10 @@ function choosablePaths(offer) {
 // (choosablePaths); plannedPath picks which choosable path is modeled.
 //   requirementLogic 'all' (default/absent) → today's conjunctive semantics:
 //     ddActive = DD-family offerType, debitActive = debitRequirement.required,
-//     holdActive = held-lump offerType. This reduces EXACTLY to the raw tests
-//     every existing site used, so 'all' offers behave BYTE-IDENTICALLY.
+//     holdActive = (offerType !== 'direct-deposit') — the literal predicate every
+//     held-lump consumer used pre-87ff38c (so a MISSING/unknown offerType still
+//     takes the held branch). This reduces EXACTLY to the raw tests every existing
+//     site used, so 'all' offers behave BYTE-IDENTICALLY.
 //   requirementLogic 'any' → the bonus is met by ANY ONE choosable path:
 //     with <2 choosable paths it degenerates to 'all' (never drops capital);
 //     with ≥2, the chosen path activates only itself. held-and-dd's hold is
@@ -135,7 +140,16 @@ function pathState(offer) {
   const o = offer || {};
   const hasDdType = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
   const hasDebitReq = !!(o.debitRequirement && o.debitRequirement.required);
-  const hasHeldLump = HELD_LUMP_TYPES.has(o.offerType);
+  // Under logic 'all' every consumer that gated a held lump used the literal
+  // predicate `offerType !== 'direct-deposit'` (withdrawal/hold dates, projection
+  // lump block, reminders' fundsLump reminders.js:91-95, safe-to-close). That
+  // predicate — NOT the HELD_LUMP_TYPES allow-list — is the byte-identity anchor:
+  // a MISSING/unknown offerType (the legacy/seed case) took the held branch
+  // pre-87ff38c, but the allow-list would drop it to holdActive:false. So compute
+  // holdActive directly from the predicate. HELD_LUMP_TYPES stays the family-
+  // detection allow-list (pathFamilyFlags) — only the enumerated types can seed
+  // the hold family — but is deliberately NOT used to derive holdActive here.
+  const hasHeldLump = o.offerType !== 'direct-deposit';
   const logic = o.requirementLogic === 'any' ? 'any' : 'all';
   // 'all' fast path (the overwhelming majority, and the entire beam-search hot
   // path): the active flags come straight from offerType/debitRequirement, so no
@@ -498,9 +512,14 @@ function reconcileClosedDate(offer, priorAccountStatus) {
 // never nudge an offer that has no tracked obligations.
 function allRequirementsDone(offer) {
   const reqs = Array.isArray(offer && offer.requirements) ? offer.requirements : [];
-  // QUALIFICATION PATHS: under logic 'any' only the CHOSEN path's rows (plus
-  // neutral rows) count — a non-chosen-family obligation you never intend to do
-  // must not block "all requirements met". Byte-identical for 'all' (all active).
+  // QUALIFICATION PATHS: an 'any' offer with NO path chosen (needsPath) has not
+  // committed to how it's being met — only neutral rows are active, so completing
+  // just those must NOT read as "all requirements met" and advance to met-waiting.
+  // The owner must pick a path first. Byte-identical for 'all' (needsPath false).
+  if (pathState(offer).needsPath) return false;
+  // Under logic 'any' only the CHOSEN path's rows (plus neutral rows) count — a
+  // non-chosen-family obligation you never intend to do must not block "all
+  // requirements met". Byte-identical for 'all' (all active).
   const active = reqs.filter(r => requirementActive(offer, r));
   if (active.length === 0) return false;
   return active.every(r => r && r.done);
@@ -532,6 +551,12 @@ function bonusWindowAnchor(offer, today = TODAY) {
   if (reqs.length === 0) return { iso: isoDate(today), estimated: true };
   let latest = null;
   for (const r of reqs) {
+    // QUALIFICATION PATHS: a completed row on a NON-chosen ('any') path must not
+    // anchor the expected-bonus window — its done_date is irrelevant to the path
+    // actually being met, and a later dormant done_date would push the window /
+    // safe-to-close months out. Only requirementActive rows anchor (neutral rows
+    // stay active per decision 8). Byte-identical for 'all' (every row active).
+    if (!requirementActive(offer, r)) continue;
     const d = r && r.done_date ? parseDate(r.done_date) : null;
     if (d && (!latest || d.getTime() > latest.getTime())) latest = d;
   }

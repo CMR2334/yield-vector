@@ -570,7 +570,13 @@ function validateOfferQualification(offer, ctx) {
   if (offer.offerExpirationDate && offer.plannedSignupDate && offer.plannedSignupDate > offer.offerExpirationDate) {
     constraints.push({ offerId: offer.id, kind: 'expiry', dateISO: offer.offerExpirationDate });
   }
-  if (offer.offerType !== 'direct-deposit' && offer.daysAfterSignupAllowedBeforeDeposit != null) {
+  // QUALIFICATION PATHS: the deposit deadline is a HELD-LUMP funding constraint —
+  // it binds only when the hold path is ACTIVE. A debit-path (dormant-hold)
+  // new-funds-held offer requires no funding on the chosen path, so a stale
+  // optionalPlannedFundingDate must NOT exclude it with 'deposit-deadline'. Gate
+  // on ps.holdActive (byte-identical for 'all': holdActive === offerType !==
+  // 'direct-deposit', exactly the predicate this test used before).
+  if (ps.holdActive && offer.daysAfterSignupAllowedBeforeDeposit != null) {
     const deadline = depositDeadline(offer);
     const funding = bizDayISO(offer.optionalPlannedFundingDate || offer.plannedSignupDate);
     if (deadline && funding && funding > deadline) constraints.push({ offerId: offer.id, kind: 'deposit-deadline', dateISO: deadline });
@@ -649,7 +655,11 @@ function horizonDatesForOffer(offer, ctx) {
   const ps = pathState(offer);
   push(lockStartDate(offer));                          // already '' for a debit-path DD offer
   push(withdrawalEligibleDate(offer, ctx.ddTransfer)); // idem
-  push(depositDeadline(offer));
+  // QUALIFICATION PATHS: the held-lump deposit deadline extends the horizon only
+  // when the hold path is active — a dormant-hold (debit-path) offer's stale
+  // funding deadline must not leak into the plan horizon. Byte-identical for 'all'
+  // (holdActive === offerType !== 'direct-deposit').
+  if (ps.holdActive) push(depositDeadline(offer));
   if (ps.debitActive) push(debitDeadlineISO(offer));
   if (ps.ddActive) push(ddWindowEndDate(offer, ctx.ddTransfer));
   const win = expectedBonusWindow(offer, ctx.todayDate);
@@ -694,6 +704,7 @@ function computePlanHorizon(ctx, evaluatedOffers) {
 }
 
 function scheduleForOffer(offer, op, cfg) {
+  const ps = pathState(offer);
   return {
     op,
     plannedSignupDate: offer.plannedSignupDate || '',
@@ -704,13 +715,16 @@ function scheduleForOffer(offer, op, cfg) {
     bonus: Math.round(Number(offer.signupBonusAmount) || 0),
     // EITHER/OR: a debit-path offer schedules no DDs (its stored rows are kept
     // for reference but are not part of the plan identity — canonical vector).
-    directDeposits: (pathState(offer).ddActive ? (offer.directDeposits || []) : [])
+    directDeposits: (ps.ddActive ? (offer.directDeposits || []) : [])
       .map(dd => ({ id: dd.id || '', plannedDate: dd.plannedDate || '' }))
       .sort((a, b) => byteCompare(a.id, b.id)),
     derived: {
       lockStart: lockStartDate(offer) || '',
       withdrawalEligible: withdrawalEligibleDate(offer, cfg) || '',
-      depositDeadline: depositDeadline(offer) || ''
+      // QUALIFICATION PATHS: no held-lump deposit deadline in the schedule row (a
+      // plan-identity field) when the hold path is dormant — the debit-path offer
+      // funds nothing. Byte-identical for 'all' (holdActive === not direct-deposit).
+      depositDeadline: ps.holdActive ? (depositDeadline(offer) || '') : ''
     }
   };
 }
@@ -2718,6 +2732,39 @@ function testOptimizerPins() {
     const noSkip = rankAlternatives(pool, 8, false, null).map(p => p.canonicalVector);
     check('parity: control — without the skip the valid trade-offs are starved (regression guard)',
       valid.every(v => !noSkip.includes(v.canonicalVector)), `starved=${valid.filter(v => !noSkip.includes(v.canonicalVector)).length}/5`);
+  }
+
+  {
+    // ---- H2 (2026-07-14 fix-up): the deposit deadline is a HELD-LUMP funding
+    // constraint — it must NOT be enforced or emitted when the hold path is
+    // DORMANT. A new-funds-held 'any' offer on the CARD-SPEND path funds nothing,
+    // so a stale optionalPlannedFundingDate PAST the deposit deadline must not
+    // exclude it (validateOfferQualification) nor emit a schedule-row deposit
+    // deadline. The HOLD-path control still fires — this is a gate, not a dead
+    // branch. (The chart deposit-deadline MARKER is gated on the same holdActive in
+    // render-main-views.js; a DOM assertion is owed in Step 3.)
+    const brexH2 = (path) => _pinOffer({
+      id: 'off_h2', offerType: 'new-funds-held', requirementLogic: 'any', plannedPath: path,
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      daysAfterSignupAllowedBeforeDeposit: 5,
+      plannedSignupDate: '2026-07-10', optionalPlannedFundingDate: '2026-07-25',
+      debitRequirement: { required: true, count: 5, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirements: [
+        { id: 'r_hold', type: 'deposit', done: false, done_date: '', source: 'derived' },
+        { id: 'r_debit', type: 'spend', done: false, done_date: '', source: 'derived' }
+      ]
+    });
+    const ctxH2 = normalizeOptimizerInput(_pinState({ offers: [] }));
+    const debitCons = validateOfferQualification(brexH2('debit'), ctxH2);
+    const holdCons = validateOfferQualification(brexH2('hold'), ctxH2);
+    const debitSched = scheduleForOffer(brexH2('debit'), 'new', ctxH2.ddTransfer);
+    const holdSched = scheduleForOffer(brexH2('hold'), 'new', ctxH2.ddTransfer);
+    check('H2 debit-path dormant-hold: no deposit-deadline exclusion + no schedule-row deadline',
+      !debitCons.some(c => c.kind === 'deposit-deadline') && debitSched.derived.depositDeadline === '',
+      `debitDepDL="${debitSched.derived.depositDeadline}" cons=${debitCons.map(c => c.kind).join(',')}`);
+    check('H2 hold-path control: deposit-deadline still enforced + emitted when hold active',
+      holdCons.some(c => c.kind === 'deposit-deadline') && holdSched.derived.depositDeadline !== '',
+      `holdDepDL="${holdSched.derived.depositDeadline}"`);
   }
 
   const pass = results.filter(r => r.ok).length;

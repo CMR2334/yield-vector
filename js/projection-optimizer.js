@@ -1,7 +1,7 @@
 import { TODAY, addDays, daysBetween, expandEventInstances, isoDate, parseDate, startOfDay, uid } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES } from './runtime-status.js';
-import { annualizedReturn, ddCapitalTime, effectiveOfferForToday, isOfferComplete, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, pathState, safeToCloseDate, withdrawalEligibleDate, withdrawalInitiateDate } from './offer-model.js';
+import { allRequirementsDone, annualizedReturn, bonusWindowAnchor, ddCapitalTime, effectiveOfferForToday, isOfferComplete, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, pathState, safeToCloseDate, shouldSuggestWaiting, withdrawalEligibleDate, withdrawalInitiateDate } from './offer-model.js';
 import { offerDisplayLabel, offerToTemplate, templateToOffer } from './requirements-templates.js';
 /* ============================================================
    PROJECTION ENGINE
@@ -906,6 +906,76 @@ function testFeasibilityPins() {
         true, sameDates && twice[0].plannedSignupDate === once[0].plannedSignupDate && twice[0].plannedSignupDate === T,
         `once=${once[0].plannedSignupDate} twice=${twice[0].plannedSignupDate}`);
     }
+  }
+
+  // ---- H1 (2026-07-14 fix-up): a MISSING/unknown offerType keeps its pre-87ff38c
+  // HELD-LUMP modeling. Every held consumer gated on the literal predicate
+  // `offerType !== 'direct-deposit'`, so a legacy/seed offer with an ABSENT
+  // offerType took the held branch (holdActive, tied-up capital). The 87ff38c
+  // allow-list regressed it to holdActive:false; this pins the restoration — its
+  // capital dates + projection block are UNCHANGED from the held modeling.
+  {
+    const noType = _fpOffer({
+      id: 'off_h1_notype', offerType: undefined, includeInScenario: true,
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      plannedSignupDate: _fpIso(start, 10), optionalPlannedFundingDate: _fpIso(start, 10)
+    });
+    const st = _fpState({ offers: [noType] });
+    const proj = generateProjection(st, { includedOfferIds: [noType.id], horizonDays: 120 });
+    const s = summarizeProjection(proj, st.settings);
+    const low = s.lowest ? s.lowest.availableCapital : null;
+    const we = withdrawalEligibleDate(noType);
+    check('H1 undefined offerType keeps held-lump modeling (holdActive + capital tied up)',
+      true,
+      pathState(noType).holdActive === true
+      && lockStartDate(noType) !== '' && !!we
+      && low != null && low <= 20000,
+      `holdActive=${pathState(noType).holdActive} lockStart=${lockStartDate(noType)} we=${we} low=${low}`);
+  }
+
+  // ---- M1 (2026-07-14 fix-up): bonusWindowAnchor ignores DORMANT-path done_dates.
+  // An 'any' offer with a CHOSEN (hold) path row done EARLIER and a non-chosen
+  // (card-spend) path row done LATER must anchor the expected-bonus window on the
+  // CHOSEN path's latest done_date — a completed row you're NOT using can't push
+  // the window (and safe-to-close) months out. Neutral rows still count (dec. 8).
+  {
+    const m1 = _fpOffer({
+      id: 'off_m1', offerType: 'new-funds-held', requirementLogic: 'any', plannedPath: 'hold',
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      requirements: [
+        { id: 'r_hold', type: 'deposit', done: true, done_date: _fpIso(start, 30), source: 'derived' },
+        { id: 'r_debit', type: 'spend', done: true, done_date: _fpIso(start, 60), source: 'derived' }
+      ]
+    });
+    const anchor = bonusWindowAnchor(m1, start);
+    check('M1 bonusWindowAnchor uses chosen-path done_date, not the later dormant row',
+      true, !!anchor && anchor.iso === _fpIso(start, 30) && anchor.estimated === false,
+      `iso=${anchor && anchor.iso} estimated=${anchor && anchor.estimated}`);
+  }
+
+  // ---- M2 (2026-07-14 fix-up): an 'any' offer with NO path chosen (needsPath) must
+  // not read as "all requirements met" just because its NEUTRAL rows are done — the
+  // owner hasn't committed to a qualifying path yet. allRequirementsDone (and
+  // shouldSuggestWaiting) must be false while needsPath, so lifecycle can't advance
+  // to met-waiting despite an unmade choice.
+  {
+    const m2 = _fpOffer({
+      id: 'off_m2', offerType: 'new-funds-held', requirementLogic: 'any', plannedPath: null,
+      status: 'funded', accountStatus: 'open', subStatus: 'on-track',
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      plannedSignupDate: _fpIso(start, 10), optionalPlannedFundingDate: _fpIso(start, 10),
+      requirements: [
+        { id: 'r_hold', type: 'deposit', done: false, done_date: '', source: 'derived' },
+        { id: 'r_debit', type: 'spend', done: false, done_date: '', source: 'derived' },
+        { id: 'r_neutral', type: 'estatements', done: true, done_date: _fpIso(start, 20), source: 'derived' }
+      ]
+    });
+    check('M2 allRequirementsDone/shouldSuggestWaiting false while needsPath (only neutral rows done)',
+      true,
+      pathState(m2).needsPath === true
+      && allRequirementsDone(m2) === false
+      && shouldSuggestWaiting(m2) === false,
+      `needsPath=${pathState(m2).needsPath} allDone=${allRequirementsDone(m2)} suggest=${shouldSuggestWaiting(m2)}`);
   }
 
   const pass = results.filter(r => r.ok).length;

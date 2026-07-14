@@ -73,12 +73,19 @@ row-id-keyed. A path = **every** row in that family (decision 9). Saved
 `requirementLogic` semantics by branch:
 
 - **`'all'` (default/absent):** `ddActive = DD-family offerType`,
-  `debitActive = debitRequirement.required`, `holdActive = held-lump offerType`
-  (`new-funds-held` | `held-and-dd` | legacy `other`). `path=null`,
-  `needsPath=false`, and rows are never filtered. **Byte-identical to today.**
-  ('other' is a legacy catch-all normalized to `new-funds-held` at every write
-  path and unavailable in the offer-type radio; it is included in the held-lump
-  set purely so a raw stored 'other' offer's held-lump modeling stays byte-stable.)
+  `debitActive = debitRequirement.required`,
+  **`holdActive = (offerType !== 'direct-deposit')`** — the literal predicate every
+  held-lump consumer used pre-87ff38c. `path=null`, `needsPath=false`, and rows are
+  never filtered. **Byte-identical to today.**
+  (H1 fix-up, 2026-07-14: the initial commit derived `holdActive` from the
+  `HELD_LUMP_TYPES` allow-list `{new-funds-held, held-and-dd, other}`, which dropped
+  a **MISSING/unknown** `offerType` to `holdActive:false` — but the legacy/seed case
+  with an absent `offerType` took the held branch before, and `reminders.js:91-95`
+  explicitly guarded on `offerType !== 'direct-deposit'`. `holdActive` is now that
+  literal predicate, so a typeless offer keeps its held-lump modeling. `HELD_LUMP_TYPES`
+  survives ONLY as the family-detection allow-list in `pathFamilyFlags` — which
+  enumerated types seed the `hold` family — and no longer derives `holdActive`.
+  'other' is a legacy catch-all normalized to `new-funds-held` at every write path.)
 - **`'any'` with <2 choosable paths (degenerate):** falls back to the `'all'`
   active flags so capital is never spuriously dropped (the chooser never renders
   in this case anyway). `needsPath=false`.
@@ -126,8 +133,9 @@ on `offerType`, and how each changes. **No-op for `'all'`** unless noted.
 | `lockStartDate` (held branch) | Same `holdActive` gate → `''` when hold inactive, so the projection's lump block gets `start=null` and skips. |
 | `ddCapitalTime` | Already `ddActive`-gated (DD legs). held-and-dd lump path unchanged (holdActive always true). |
 | `annualizedReturn` (new-funds-held/other branch) | Gate on `holdActive` → `null` for a debit-path new-funds-held (no held capital). |
-| `allRequirementsDone` | Count only `requirementActive` rows; empty active set → false. |
-| `safeToCloseDate` | (a) `withdrawalEligibleDate` already gated; (d) unmet-deadline loop skips inactive rows via `requirementActive`. |
+| `allRequirementsDone` | Count only `requirementActive` rows; empty active set → false. **(M2 fix-up 2026-07-14: also returns `false` while `pathState(offer).needsPath` — an `'any'` offer with no path chosen must not read "all met" from neutral rows alone and advance to met-waiting. Byte-identical for `'all'`: `needsPath` always false.)** |
+| `bonusWindowAnchor` | **(M1 fix-up 2026-07-14: the latest-`done_date` scan now skips non-`requirementActive` rows — a completed DORMANT-path row can no longer anchor the expected-bonus window / safe-to-close months late. Neutral rows still anchor. Byte-identical for `'all'`.)** |
+| `safeToCloseDate` | (a) `withdrawalEligibleDate` already gated; (b) expected-bonus window END now via the M1-fixed `bonusWindowAnchor`; (d) unmet-deadline loop skips inactive rows via `requirementActive`. |
 | `isOfferComplete` / `offerIssues` | Already `ddActive`-gated for DD/funding; unchanged (held-lump requirement still keyed on offerType, which is correct — a hold-path or all offer still needs its funding). |
 
 ### requirements-templates.js
@@ -145,9 +153,9 @@ on `offerType`, and how each changes. **No-op for `'all'`** unless noted.
 | Consumer | Change |
 |---|---|
 | `validateDdCadence` | Already `ddActive`-gated; its requirement-cutoff scan skips inactive rows via `requirementActive`. |
-| `validateOfferQualification` | `needsPath` binding already emitted; requirement-deadline loop skips inactive rows. |
-| `horizonDatesForOffer` | Requirement-deadline pushes skip inactive rows; DD/debit already path-gated; held dates via the gated lockStart/withdrawalEligible. |
-| `scheduleForOffer` / `offerReleaseWeights` | DD already `ddActive`-gated; held lump via gated withdrawalEligible/lockStart. |
+| `validateOfferQualification` | `needsPath` binding already emitted; requirement-deadline loop skips inactive rows. **(H2 fix-up 2026-07-14: the `deposit-deadline` constraint is now gated on `ps.holdActive`, not the raw `offerType !== 'direct-deposit'` — a debit-path/dormant-hold offer funds nothing on its chosen path, so a stale `optionalPlannedFundingDate` no longer excludes it. Byte-identical for `'all'`: `holdActive === offerType !== 'direct-deposit'`.)** |
+| `horizonDatesForOffer` | Requirement-deadline pushes skip inactive rows; DD/debit already path-gated; held dates via the gated lockStart/withdrawalEligible. **(H2 fix-up: the `depositDeadline` horizon push is now gated on `ps.holdActive` so a dormant-hold deadline can't extend the plan horizon.)** |
+| `scheduleForOffer` / `offerReleaseWeights` | DD already `ddActive`-gated; held lump via gated withdrawalEligible/lockStart. **(H2 fix-up: the schedule row's `derived.depositDeadline` — a plan-identity field — is now gated on `ps.holdActive`; a dormant-hold offer emits `''`.)** |
 | `objectiveForOffers` capital weight | new-funds-held/other else-branch weight gated on `holdActive` (its daysFundsMustRemain fallback would otherwise weight a debit-path offer). |
 
 ### reminders.js
@@ -164,7 +172,7 @@ on `offerType`, and how each changes. **No-op for `'all'`** unless noted.
 | `requirementChecklistCounts` / `renderRequirementChecklist` | Count/render only `requirementActive` rows. |
 | `eitherOrChip` | Generalized to name the chosen path (DD / card spend / hold), truthful per family. |
 | `OFFER_NEEDS_INFO_COPY['needs-path']` | Copy generalized (no longer "DD or card spend" only). |
-| DD block / debit chip / chart markers | Already `ddActive`/`debitActive`-gated. |
+| DD block / debit chip / chart markers | Already `ddActive`/`debitActive`-gated. **(H2 fix-up 2026-07-14: the hero-chart `deposit-deadline` MARKER for a held type is now gated on `psO.holdActive` — a dormant-hold (debit-path) new-funds-held offer renders no deposit-deadline dot. held-and-dd still excluded separately; direct-deposit still gated on `ddActive`.)** |
 
 ### modals-forms.js
 | Consumer | Change |
@@ -186,3 +194,27 @@ on `offerType`, and how each changes. **No-op for `'all'`** unless noted.
   ties up `requiredFundingAmount` across the hold, exactly like the `'all'` case.
 - **`'all'` unchanged:** the existing battery stays green with no pin edits
   (byte-identity rail).
+
+### 6a. Fix-up pins (2026-07-14 adversarial-review findings H1/H2/M1/M2)
+
+Added to the SAME harnesses (`testFeasibilityPins` in projection-optimizer.js;
+`testOptimizerPins` in optimizer-engine.js). Batteries after fix-up:
+**optimizer 85/85, feasibility 21/21, parser 20/20, fidelity 67/67, dd-matrix PASS,
+p2b PASS; beam wall-clock 2071 ms < 2200 ms budget.**
+
+- **H1 (feasibility):** an offer with `offerType` **undefined** keeps its held-lump
+  modeling — `holdActive === true`, a real `lockStartDate`/`withdrawalEligibleDate`,
+  and its projection ties up `requiredFundingAmount` (curve dips) — restoring
+  pre-87ff38c behavior for the legacy/seed typeless case.
+- **H2 (optimizer):** a new-funds-held `'any'` + `plannedPath='debit'` offer with a
+  stale `optionalPlannedFundingDate` past the deposit deadline is **NOT** excluded by
+  `deposit-deadline` and its schedule row emits **no** `derived.depositDeadline`;
+  the `plannedPath='hold'` control **still** enforces + emits the deadline (gate, not
+  a dead branch). (The chart-marker gate shares the same `holdActive`; a DOM
+  assertion is owed in Step 3.)
+- **M1 (feasibility):** an `'any'` offer with the chosen (hold) row done earlier and a
+  dormant (card-spend) row done later anchors `bonusWindowAnchor` on the **chosen**
+  path's `done_date`, not the later dormant one.
+- **M2 (feasibility):** an `'any'` offer with `plannedPath=null` (needsPath) whose only
+  done rows are **neutral** yields `allRequirementsDone === false` and
+  `shouldSuggestWaiting === false`.

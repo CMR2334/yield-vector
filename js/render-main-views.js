@@ -2069,9 +2069,13 @@ function renderHeroChart(svg) {
     // a deadline set, except held-and-dd where the held funding deadline
     // is the same date and would double up.
     // EITHER/OR [review-after P2]: a direct-deposit offer's deadline is a DD-window
-    // deadline — suppress it on the debit path (no DD to complete). A new-funds-held
-    // funding deadline always applies (not a direct-deposit type).
-    if (ddl && o.offerType !== 'held-and-dd' && (o.offerType !== 'direct-deposit' || psO.ddActive)) {
+    // deadline — suppress it on the debit path (no DD to complete). A held funding
+    // deadline (new-funds-held) applies only when the HOLD path is active — a
+    // debit-path (dormant-hold) Brex funds nothing, so its stale deposit deadline
+    // must not render a chart marker. Byte-identical for 'all' (holdActive ===
+    // offerType !== 'direct-deposit', and held-and-dd is excluded separately).
+    const depositMarkerActive = o.offerType === 'direct-deposit' ? psO.ddActive : psO.holdActive;
+    if (ddl && o.offerType !== 'held-and-dd' && depositMarkerActive) {
       const i = Math.round((ddl - start) / 86400000);
       const label = o.offerType === 'direct-deposit' ? `DD deadline: ${name}` : `Deposit deadline: ${name}`;
       if (i >= 0 && i < proj.length) markers.push({ i, type: 'deposit-deadline', label, name, bankName: o.bankName, color: '#e87171', offerColor, amount: Number(o.requiredFundingAmount) || 0 });
