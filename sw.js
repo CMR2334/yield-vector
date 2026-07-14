@@ -24,7 +24,7 @@
 */
 'use strict';
 
-const APP_VERSION = '2026.07.13b';
+const APP_VERSION = '2026.07.14a';
 const CACHE_PREFIX = 'yv-precache-';
 const CACHE_NAME = CACHE_PREFIX + APP_VERSION;
 

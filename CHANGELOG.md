@@ -17,6 +17,13 @@ Significant changes to this project, in reverse chronological order.
 
 ---
 
+## 2026-07-14 — Owner UX batch: neutral event picker, "Dec Dec 11" DST fix, dynamic bonus-met chooser, posting-window hint (v2026.07.14a)
+**Commit:** (release commit; run `.claude/orchestrator/runs/2026-07-13-capital-event-picker-chart-bonusmet.md`, INTERIM release — step 2 requirements-derived paths still pending)
+**Files:** `js/dd-widgets.js`, `js/modals-forms.js`, `js/render-main-views.js`, `js/doc-import-templates.js`, `js/events-actions-data.js`, `js/runtime-status.js`, `sw.js`, `index.html`, `docs/BACKLOG.md`, `docs/assessments/2026-07-13-bank-data-aggregation-research.md` (new), `HANDOFF.md`
+**What changed:** **[i]** Capital-event Date/Ends fields now use the custom DatePicker in a new `neutral` mode — aligned popover formatting WITHOUT the date-optimization color schema (owner request); values round-trip M-D-YYYY ↔ ISO. **[ii]** Fixed the hero chart's "Dec Dec 11" duplicated horizon label — a DST bug: `start + i*86400000` date reconstruction drifted the last month-tick into the prior month, defeating the same-month suppression; ticks now carry real `Date`s. **[iii]** "How is this bonus met?" renders only when a DD path AND a card-spend path both exist, rebuilding live with the form (a held-only offer like Brex no longer shows a Direct-deposit chooser). **[iv]** Bonus-posting-window field-hint now explains the anchor (latest requirement done_date), the interpolated 90–105-day defaults, and what it drives (expected-bonus window, reminders, safe-to-close end; overridden by an actual received date). Codex review pre-release fixed: DoC-import either/or apply ordering vs the now-dynamic section; invalid recurrence end dates no longer silently save as repeat-forever.
+**Verification:** `node --check` all touched modules; Codex read-only diff review (2 findings fixed above); DST suppression logic verified against the Nov-2026 boundary by inspection. Full rendered-DOM behavioral pass deliberately deferred to the run's verification step (covers the pending requirements-derived-paths work too).
+**Revert:** `git revert` the release commit; data-safe (no schema/storage changes — event dates store the same ISO strings).
+
 ## 2026-07-13 — Airtable mirror: daily GitHub Actions sync of applied-or-beyond offers
 **Commit:** `8c47225`
 **Files:** `.github/workflows/airtable-sync.yml` (new), `scripts/airtable-sync.mjs` (new)

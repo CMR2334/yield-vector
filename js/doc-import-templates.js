@@ -176,12 +176,16 @@ const DOC_FIELD_MAP = [
     current: () => { const r = _docEl('[name="requirementLogic"]:checked'); return r ? (r.value === 'any' ? 'Either way' : 'All required') : ''; },
     apply: v => {
       if (v !== 'any') return;
-      const any = _docEl('#reqlogic-any'); if (any) { any.checked = true; any.dispatchEvent(new Event('change', { bubbles: true })); }
+      // Order matters with the DYNAMIC chooser (2026-07-13): the "Either way"
+      // radio only EXISTS once both paths are present, so establish the
+      // DD-family offer type + debit block FIRST (their change events rebuild
+      // the section), THEN flip the revealed radio.
       // The DD path needs a DD-family offer type; leave an explicit Held+DD alone.
       const cur = (_docEl('[name="offerType"]:checked') || {}).value;
       if (cur === 'new-funds-held') { const r = _docEl('#ot-dd'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }
       // The card-spend path needs the debit block present.
       const dy = _docEl('#debit-yes'); if (dy && !dy.checked) { dy.checked = true; dy.dispatchEvent(new Event('change', { bubbles: true })); }
+      const any = _docEl('#reqlogic-any'); if (any) { any.checked = true; any.dispatchEvent(new Event('change', { bubbles: true })); }
       // plannedPath deliberately left at "Decide later" (null) — P2-3 no auto-pick.
     } },
   // Notes-only (points bonus, quirk 1): appended to the Notes textarea.

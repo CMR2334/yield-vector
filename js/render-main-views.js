@@ -1965,6 +1965,11 @@ function renderHeroChart(svg) {
       const showYear = cursor.getMonth() === 0 && cursor.getFullYear() !== start.getFullYear();
       xTicks.push({
         i: dayOffset,
+        // Keep the tick's true first-of-month Date so downstream month/year
+        // comparisons don't reconstruct it from start+i*86400000 — that ms
+        // arithmetic drifts an hour across a DST boundary and can land the
+        // date in the previous month (the "Dec Dec 11" horizon-label bug).
+        date: new Date(cursor),
         label: cursor.toLocaleDateString('en-US', showYear ? { month: 'short', year: 'numeric' } : { month: 'short' })
       });
     }
@@ -2208,8 +2213,11 @@ function renderHeroChart(svg) {
     ${(() => {
       if (xTicks.length === 0) return `<text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>`;
       const lastTick = xTicks[xTicks.length - 1];
-      const lastTickDate = new Date(start.getTime() + lastTick.i * 86400000);
-      const horizonDate = new Date(start.getTime() + (proj.length - 1) * 86400000);
+      // DST-safe dates: the tick carries its true first-of-month Date, and the
+      // horizon comes straight from the last projection day — never from
+      // start+i*86400000 arithmetic (see the tick-build note above).
+      const lastTickDate = lastTick.date || new Date(start.getTime() + lastTick.i * 86400000);
+      const horizonDate = parseDate(proj[proj.length - 1].date) || new Date(start.getTime() + (proj.length - 1) * 86400000);
       const sameMonth = lastTickDate.getFullYear() === horizonDate.getFullYear() && lastTickDate.getMonth() === horizonDate.getMonth();
       const tooClose = xFor(proj.length - 1) - xFor(lastTick.i) <= 32;
       return (sameMonth || tooClose) ? '' : `<text x="${(W - padR).toFixed(1)}" y="${(padT + innerH + 20).toFixed(1)}" fill="#9099a8" font-size="12" text-anchor="end" font-weight="500">${formatDateShort(proj[proj.length - 1].date)}</text>`;

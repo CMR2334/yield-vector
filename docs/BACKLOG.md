@@ -107,6 +107,51 @@ Timeline+chart review and project-wide review both by Codex read-only passes (lo
 migrations/templates; pre-migration "download state bundle" safety snapshot; a small pure
 analytics layer so History/exports/dashboard share one totals implementation.
 
+## Integrations — live bank data (researched 2026-07-13; owner parked, do not self-dispatch)
+Full research + comparison: docs/assessments/2026-07-13-bank-data-aggregation-research.md.
+Owner prerequisite when picked up: SimpleFIN Bridge subscription ($15/yr) + access
+URL pasted into a new Settings field (localStorage-only, like the Gist token).
+- **SimpleFIN live balances + auto-reconciliation** (L) — real per-account
+  balances replace manual `currentLiquidCapital`; transaction matching
+  auto-detects DD postings (check requirement rows), bonus credits (stamp
+  `bonus_received_date`), funding transfers, hold releases. Browser-direct
+  (CORS verified) — no Worker needed. The highest-impact item: closes the
+  plan-vs-reality loop.
+- **Obligations layer — CC due dates + payment amounts** (M/L) — SimpleFIN has
+  NO due-date data; phase 1 infers statement cycle + payment amount from
+  transaction history (manual-entry fallback), feeding recurring capital events
+  automatically. Phase 2 (only if inference insufficient): Plaid Liabilities
+  behind the dormant Cloudflare Worker (~$0.20/acct/mo; 10-item lifetime cap on
+  the free Trial — poor churn fit).
+- **Idle-cash yield allocation** (M) — with live balances + the projection's
+  forward funding needs, flag slack cash sitting below best-available APY and
+  suggest transfers that never break an upcoming commitment.
+
+## Offer model — Requirements-driven qualification (owner direction 2026-07-13; design before build)
+- **Offer Type ↔ Requirements dynamic interaction** (L) — direction: Requirements
+  becomes the single source of truth for QUALIFICATION; the "How is this bonus
+  met?" chooser derives its options dynamically from the requirement rows
+  present (each row has a type), with a generalized all / either-or (later
+  N-of-M) logic selector across them. Offer Type shrinks to its true job —
+  CAPITAL FOOTPRINT (hold / DD round-trip / both / none) — auto-suggested from
+  requirements with manual override; a "none" footprint covers off-case bonuses
+  (bill-pay-only, trial-deposit) without a 4th ad-hoc enum value. Phasing:
+  (A+B) held-vs-spend model gating + requirements-derived chooser + generalized
+  all/any — IN FLIGHT in run 2026-07-13-capital-event-picker-chart-bonusmet
+  (owner chose to expand that run; design pinned in its Key decisions 1–10);
+  (C) footprint auto-suggest + "none" footprint + N-of-M logic — STILL PARKED
+  here; design doc: docs/assessments/2026-07-13-requirements-driven-paths.md
+  (written by that run) + 2026-07-11-either-or-requirements.md.
+
+## Owner-action pending (blocked on Collin, not code)
+- **Apple Shortcut v2 executor build** — build the minimal reminders executor
+  per docs/SHORTCUT_BUILD_GUIDE.md (~15 min on iPhone; root SHORTCUT_SETUP.md is
+  superseded/historical).
+- **Cloudflare Worker deploy** — DoC-import v2 scaffold (`cloudflare/`) still
+  needs Collin's deploy + ANTHROPIC_API_KEY/WORKER_SECRET/ALLOWED_ORIGIN. Also a
+  prerequisite for the Plaid-Liabilities phase above, if ever picked.
+- **SimpleFIN Bridge subscription** — gate for the live-bank-data section.
+
 ## Features
 - **Opt-in dark mode** — fresh implementation against the module structure. Idea
   preserved from closed PR #2 (2026-07-02 audit branch; its diff targeted the
@@ -116,6 +161,25 @@ analytics layer so History/exports/dashboard share one totals implementation.
   import Worker on save (parity with the Gist "Save & test"). Offered 2026-07-08.
 
 ## UI polish
+- **Wealthfront-style typography** (M) — PARKED 2026-07-13 (owner choice: stay
+  on SF for now). Do NOT re-pitch free lookalikes — owner rejected ALL FIVE:
+  General Sans, Hanken Grotesk, Figtree, Schibsted Grotesk, Instrument Sans,
+  plus the "SF-but-heavier" metric-only variant. He wants actual **Calibre**
+  (confirmed as Wealthfront's UI font by fetching their woff2s; Klim,
+  commercial, pay-once ~$50-60/style, Reg 400 + Med 500 = his target weights).
+  Current YV font = system stack (`--font-sans`, index.html:121) → SF Pro.
+  RESOLUTION PATH when revived: owner buys Calibre Reg+Med web license
+  (klim.co.nz/buy/calibre), fonts served from his Cloudflare account (free;
+  the pending DoC-Worker deploy account) with CORS to the Pages origin — repo
+  stays public and license-clean (committing licensed woff2s to the public
+  repo = redistribution, forbidden). Alt: private repo via GitHub Pro $4/mo.
+  Owner's target metrics (from WF css): headers 500 / body 400, 18px / 23px
+  line-height, ink #161338. Tabular numerals required (money columns). Mind
+  AGENTS.md locked design values.
+- **Sleeker select/dropdown styling** (S/M) — native-looking selects read cheap;
+  restyle to match the app's chip/card language, and fix dropdown-arrow
+  placement (Requirements dropdown arrow sits too far toward the right border).
+  Requested 2026-07-13.
 - **Plan-tab stat color-system unification** — Plan's non-shortfall amber mirrors
   Overview via a documented hardcode; unify both tabs on one token if
   `.stat-value.lighten` ever changes. Context: v2026.07.09b batch report.

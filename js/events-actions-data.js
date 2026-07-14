@@ -1004,6 +1004,13 @@ function saveEventFromForm(id, isEdit) {
   if (!ev) return;
   if (!ev.eventName) { toast('Name required', 'danger'); return; }
   if (!ev.date || !parseDate(ev.date)) { toast('Date required', 'danger'); return; }
+  // A non-empty but unparsable recurrence end date must not silently save as
+  // "no end" — that would run the recurrence through the whole projection
+  // horizon. Blank stays valid (repeat-forever is the documented meaning).
+  const recEndEl = document.getElementById('e-recur-end');
+  if (recEndEl && recEndEl.value.trim() && !parseDateInput(recEndEl.value)) {
+    toast('Recurrence end date invalid — use M-D-YYYY', 'danger'); return;
+  }
   // Bonus-payout events must link to an offer so the chart marker name
   // and the offer-color dot stay in sync with the underlying offer card.
   if (ev.category === 'bonus payout' && !ev.sourceBonusOfferId) {

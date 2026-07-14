@@ -3,7 +3,7 @@ import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, f
 import { ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
 import { _docUserChecks, docImportUpdateApplyCount, docTierSelect, filterTemplateList, renderTemplatePicker } from './doc-import-templates.js';
 import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
-import { debitDeadlineISO, reconcileClosedDate } from './offer-model.js';
+import { debitDeadlineISO, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
 import { renderLifecycleInfo, renderPipelineStrip } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
 import { REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, offerDisplayLabel, makeRequirementRow, requirementDeadlineISO, schemaV2Defaults, syncRequirementsWithLegacy } from './requirements-templates.js';
@@ -13,6 +13,48 @@ import { escapeAttr, escapeHtml } from './ui-utils.js';
 /* ============================================================
    MODAL: ADD/EDIT OFFER
    ============================================================ */
+
+// "How is this bonus met?" — the EITHER/OR chooser. It's only a real choice when
+// the offer has TWO independent qualifying paths: a DD path (DD-family
+// offerType) AND a card-spend path (debit required). For everything else — e.g.
+// a new-funds-held bonus with no DD component, like Brex — there's nothing to
+// pick between, so the whole block is omitted rather than showing an
+// inapplicable "Direct deposit" option. `reqMetPaths` returns the inner markup
+// (or '' when it shouldn't render); `reqMetSectionField` wraps it in the field
+// and is rebuilt live by syncReqMetSection as offerType / debit-required change.
+function reqMetPaths(hasDd, hasDebit, logic, plannedPath) {
+  if (!(hasDd && hasDebit)) return '';
+  const isAny = logic === 'any';
+  const pp = (plannedPath === 'dd' || plannedPath === 'debit') ? plannedPath : '';
+  return `
+            <label>How is this bonus met?</label>
+            <div class="radio-group" style="max-width:520px;flex-wrap:wrap;">
+              <input type="radio" id="reqlogic-all" name="requirementLogic" value="all" ${isAny ? '' : 'checked'} />
+              <label for="reqlogic-all">All requirements</label>
+              <input type="radio" id="reqlogic-any" name="requirementLogic" value="any" ${isAny ? 'checked' : ''} />
+              <label for="reqlogic-any">Either way (DD or card spend)</label>
+            </div>
+            <span class="field-hint">Pick "Either way" for offers (e.g. Brex) where a direct deposit <strong>OR</strong> a card-spend minimum qualifies — you only do one. Fill in <strong>both</strong> the direct-deposit and the debit sections above, then choose which one you plan to do.</span>
+            <div id="planned-path-wrap" style="margin-top:8px;${isAny ? '' : 'display:none;'}">
+              <label>Which will you do? *</label>
+              <div class="radio-group" id="f-planned-path" style="max-width:440px;flex-wrap:wrap;">
+                <input type="radio" id="path-dd" name="plannedPath" value="dd" ${pp === 'dd' ? 'checked' : ''} />
+                <label for="path-dd">Direct deposit</label>
+                <input type="radio" id="path-debit" name="plannedPath" value="debit" ${pp === 'debit' ? 'checked' : ''} />
+                <label for="path-debit">Card spend</label>
+                <input type="radio" id="path-none" name="plannedPath" value="" ${pp === '' ? 'checked' : ''} />
+                <label for="path-none">Decide later</label>
+              </div>
+              <span class="field-hint">Only the chosen path is scheduled, modeled, and reminded — the other is ignored. "Decide later" leaves the offer un-modeled until you pick (the optimizer never chooses the path for you).</span>
+            </div>`;
+}
+function reqMetSectionField(o) {
+  const hasDd = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
+  const hasDebit = !!(o.debitRequirement && o.debitRequirement.required);
+  const inner = reqMetPaths(hasDd, hasDebit, o.requirementLogic, o.plannedPath);
+  return `<div class="field" style="grid-column: 1 / -1;${inner ? '' : 'display:none;'}" id="req-met-section">${inner}</div>`;
+}
+
 function showOfferModal(offerId = null, seed = null) {
   const isEdit = Boolean(offerId);
   // Auto-assign the first unused palette color on new offers so the
@@ -211,28 +253,7 @@ function showOfferModal(offerId = null, seed = null) {
             </div>
             <span class="field-hint">Some SUBs require N qualifying debit-card purchases within a set number of days of signing up. Counts toward "Actions required" on the Overview.</span>
           </div>
-          <div class="field" style="grid-column: 1 / -1;">
-            <label>How is this bonus met?</label>
-            <div class="radio-group" style="max-width:520px;flex-wrap:wrap;">
-              <input type="radio" id="reqlogic-all" name="requirementLogic" value="all" ${o.requirementLogic === 'any' ? '' : 'checked'} />
-              <label for="reqlogic-all">All requirements</label>
-              <input type="radio" id="reqlogic-any" name="requirementLogic" value="any" ${o.requirementLogic === 'any' ? 'checked' : ''} />
-              <label for="reqlogic-any">Either way (DD or card spend)</label>
-            </div>
-            <span class="field-hint">Pick "Either way" for offers (e.g. Brex) where a direct deposit <strong>OR</strong> a card-spend minimum qualifies — you only do one. Fill in <strong>both</strong> the direct-deposit and the debit sections above, then choose which one you plan to do.</span>
-            <div id="planned-path-wrap" style="margin-top:8px;${o.requirementLogic === 'any' ? '' : 'display:none;'}">
-              <label>Which will you do? *</label>
-              <div class="radio-group" id="f-planned-path" style="max-width:440px;flex-wrap:wrap;">
-                <input type="radio" id="path-dd" name="plannedPath" value="dd" ${o.plannedPath === 'dd' ? 'checked' : ''} />
-                <label for="path-dd">Direct deposit</label>
-                <input type="radio" id="path-debit" name="plannedPath" value="debit" ${o.plannedPath === 'debit' ? 'checked' : ''} />
-                <label for="path-debit">Card spend</label>
-                <input type="radio" id="path-none" name="plannedPath" value="" ${(o.plannedPath !== 'dd' && o.plannedPath !== 'debit') ? 'checked' : ''} />
-                <label for="path-none">Decide later</label>
-              </div>
-              <span class="field-hint">Only the chosen path is scheduled, modeled, and reminded — the other is ignored. "Decide later" leaves the offer un-modeled until you pick (the optimizer never chooses the path for you).</span>
-            </div>
-          </div>
+          ${reqMetSectionField(o)}
           <div class="field">
             <div class="field-box">
               <label for="f-funding">Required funding *</label>
@@ -461,7 +482,7 @@ function showOfferModal(offerId = null, seed = null) {
                     <input id="f-bonus-post-max" class="input" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="max" aria-label="Bonus posting max days" value="${o.bonus_post_max_days == null || o.bonus_post_max_days === '' ? '' : escapeAttr(o.bonus_post_max_days)}" name="bonus_post_max_days" />
                   </div>
                 </div>
-                <span class="field-hint">Typical range the bonus posts after you meet requirements. Drives the expected-bonus window and safe-to-close date.</span>
+                <span class="field-hint">Min–max days counted from the <strong>last completed requirement's</strong> done date (estimated from today until one is recorded). Blank fields fall back to ${DEFAULT_BONUS_POST_MIN_DAYS}–${DEFAULT_BONUS_POST_MAX_DAYS} days; once requirements are met this drives the expected-bonus window on the card and reminders, and the account isn't safe to close until the window's <strong>end</strong> passes — an actual bonus received date overrides the estimate.</span>
               </div>
             </div>
             <span class="field-hint">Optional account economics — monthly fee (shows as $N/mo on the card), waiver condition, enrollment promo code, and the early-termination-fee window.</span>
@@ -569,6 +590,23 @@ function showOfferModal(offerId = null, seed = null) {
         generateDdDatesFromRequirement();
       }
     };
+    // Rebuild the "How is this bonus met?" block from the LIVE offerType +
+    // debit-required selections. Reads the current logic/plannedPath from the
+    // DOM first so a user's in-progress choice survives the rebuild; when the
+    // block no longer applies (fewer than two paths) its radios are removed
+    // outright, so readOfferForm falls back to 'all' / no planned path.
+    const syncReqMetSection = () => {
+      const sec = form.querySelector('#req-met-section');
+      if (!sec) return;
+      const type = (form.querySelector('[name="offerType"]:checked') || {}).value;
+      const hasDd = type === 'direct-deposit' || type === 'held-and-dd';
+      const hasDebit = (form.querySelector('[name="debitRequired"]:checked') || {}).value === 'yes';
+      const logic = (form.querySelector('[name="requirementLogic"]:checked') || {}).value || 'all';
+      const plannedPath = (form.querySelector('[name="plannedPath"]:checked') || {}).value || '';
+      const inner = reqMetPaths(hasDd, hasDebit, logic, plannedPath);
+      sec.innerHTML = inner;
+      sec.style.display = inner ? '' : 'none';
+    };
     const syncReqMode = () => {
       const mode = (form.querySelector('[name="ddReqMode"]:checked') || {}).value || 'count';
       const cf = form.querySelector('#ddreq-count-fields');
@@ -601,7 +639,7 @@ function showOfferModal(offerId = null, seed = null) {
       // DoC-import tier radio chosen → re-render the preview from the new
       // selection (updates bonus/funding rows + their checked state live).
       if (ev.target.classList && ev.target.classList.contains('doc-tier-radio')) { docTierSelect(Number(ev.target.value)); return; }
-      if (ev.target.name === 'offerType') syncDdSectionUI();
+      if (ev.target.name === 'offerType') { syncDdSectionUI(); syncReqMetSection(); }
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
       // Auto-set account status from the offer status, BOTH directions:
@@ -619,6 +657,9 @@ function showOfferModal(offerId = null, seed = null) {
       if (ev.target.name === 'debitRequired') {
         const wrap = form.querySelector('#debit-fields-wrap');
         if (wrap) wrap.style.display = ev.target.value === 'yes' ? '' : 'none';
+        // A debit path appearing/disappearing changes whether the EITHER/OR
+        // chooser applies, so rebuild it too.
+        syncReqMetSection();
       }
       // EITHER/OR: show the planned-path selector only when "Either way" is on.
       if (ev.target.name === 'requirementLogic') {
@@ -1602,7 +1643,7 @@ function showEventModal(eventId = null) {
       <form class="modal-body" id="event-form">
         <div class="form-grid">
           <div class="field"><div class="field-box"><label for="e-cat">Category</label><select id="e-cat" class="select" name="category">${EVENT_CATEGORIES.map(c => `<option value="${c.value}" ${e.category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div></div>
-          <div class="field"><div class="field-box"><label for="e-date">Date *</label><input id="e-date" class="input" type="date" required value="${e.date}" name="date" /></div></div>
+          <div class="field"><div class="field-box"><label for="e-date">Date *</label><input id="e-date" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" required placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(e.date))}" name="date" data-picker-mode="neutral" /></div></div>
           <!-- Linked-offer selector: required when category = bonus payout
                (visibility toggled via JS on the change event below). Auto-
                fills the Name field with the offer's bank/offer name on
@@ -1659,7 +1700,7 @@ function showEventModal(eventId = null) {
           <div class="field" id="e-recur-end-field" style="grid-column:1/-1;${(e.recurrence?.kind && e.recurrence.kind !== 'none') ? '' : 'display:none;'}">
             <div class="field-box">
               <label for="e-recur-end">Ends (optional)</label>
-              <input id="e-recur-end" class="input" type="date" name="recurrenceEndDate" value="${escapeAttr(e.recurrence?.endDate || '')}" />
+              <input id="e-recur-end" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(e.recurrence?.endDate || ''))}" name="recurrenceEndDate" data-picker-mode="neutral" />
             </div>
             <span class="field-hint">Leave blank to repeat through the projection horizon.</span>
           </div>
@@ -1735,20 +1776,21 @@ function readEventForm(idArg) {
   // sign is wrong. Categories with no implied sign (Correction, Other)
   // pass through untouched.
   // Amount renders with commas and may be negative/decimal; strip to a
-  // plain Number before applying the category sign. Date fields here are
-  // native <input type="date"> (already ISO) so they need no parsing.
+  // plain Number before applying the category sign. Date fields are custom
+  // yv-date pickers holding an M-D-YYYY display string; parseDateInput
+  // normalizes them back to canonical ISO for storage.
   const signedAmount = applyCategorySign(parseMoneyInput(data.amount), data.category);
   return {
     id: idArg,
     eventName: (data.eventName || '').trim(),
-    date: data.date,
+    date: parseDateInput(data.date),
     amount: signedAmount,
     category: data.category,
     sourceBonusOfferId: data.sourceBonusOfferId || null,
     recurrence: {
       kind: recKind,
       everyDays: Math.max(1, Math.min(365, Number(data.recurrenceEveryDays) || 7)),
-      endDate: data.recurrenceEndDate || ''
+      endDate: parseDateInput(data.recurrenceEndDate) || ''
     },
     includeInProjection: form.querySelector('[name="includeInProjection"]').checked,
     showOnChart: form.querySelector('[name="showOnChart"]').checked,

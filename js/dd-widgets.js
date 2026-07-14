@@ -153,7 +153,13 @@ const DatePicker = {
       const biz = isBusinessDay(date), holi = isUsBankHoliday(date);
       let cls = 'yv-dp-day';
       let badge = '';
-      if (!biz) {
+      if (this.mode === 'neutral') {
+        // 'neutral' — same grid/layout/formatting as the color-coded pickers
+        // but WITHOUT the date-optimization colorization (no green/amber/hold
+        // shading, no weekend/holiday tint). Only selection + blocked states
+        // carry any visual weight. Used where the date has no optimality
+        // meaning (e.g. capital-event dates).
+      } else if (!biz) {
         cls += this.mode === 'plain' ? ' amber' : ' muted';
       } else if (this.mode === 'dd') {
         const h = stats.held[d];
@@ -166,7 +172,7 @@ const DatePicker = {
       } else {
         cls += ' good';
       }
-      if (holi) cls += ' holiday';
+      if (holi && this.mode !== 'neutral') cls += ' holiday';
       if (selected && selected.getFullYear() === y && selected.getMonth() === m && selected.getDate() === d) cls += ' sel';
       cells += `<button type="button" class="${cls}" data-day="${isoDate(date)}"><b>${d}</b>${badge}</button>`;
     }
@@ -180,7 +186,10 @@ const DatePicker = {
     const blockedLegend = (this.floorISO || this.ceilingISO) ? `<span><i class="s blocked"></i>unavailable</span>` : '';
     const legend = this.mode === 'dd'
       ? `<div class="yv-dp-legend"><span><i class="s good"></i>shortest</span><span><i class="s mid"></i>mid</span><span><i class="s bad"></i>longest</span>${blockedLegend}</div>`
-      : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span>${blockedLegend}</div>`;
+      : this.mode === 'neutral'
+        // No optimality legend in neutral mode — only the (rare) blocked key.
+        ? (blockedLegend ? `<div class="yv-dp-legend">${blockedLegend}</div>` : '')
+        : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span>${blockedLegend}</div>`;
     this.el.innerHTML =
       `<div class="yv-dp-head"><button type="button" data-nav="-1">‹</button><span>${monthName}</span><button type="button" data-nav="1">›</button></div>`
       + `<div class="yv-dp-dow">${['S','M','T','W','T','F','S'].map(x => `<span>${x}</span>`).join('')}</div>`
