@@ -137,6 +137,7 @@ const DatePicker = {
     const firstPad = new Date(y, m, 1).getDay();
     const dim = new Date(y, m + 1, 0).getDate();
     let cells = '';
+    let blockedCount = 0;
     for (let i = 0; i < firstPad; i++) cells += '<span></span>';
     for (let d = 1; d <= dim; d++) {
       const date = new Date(y, m, d);
@@ -147,6 +148,7 @@ const DatePicker = {
       // functionally unavailable. Blocking wins over the optimality shading.
       const blocked = (this.floorISO && dayISO < this.floorISO) || (this.ceilingISO && dayISO > this.ceilingISO);
       if (blocked) {
+        blockedCount++;
         cells += `<button type="button" class="yv-dp-day blocked" disabled aria-disabled="true"><b>${d}</b></button>`;
         continue;
       }
@@ -181,9 +183,11 @@ const DatePicker = {
     // relying on min-height stretching (which caused the overflow bug).
     const totalCells = firstPad + dim;
     for (let i = totalCells; i < 42; i++) cells += '<span></span>';
-    // Feature 1: show the "unavailable" key only when this field is actually
-    // constrained, so unconstrained pickers stay uncluttered.
-    const blockedLegend = (this.floorISO || this.ceilingISO) ? `<span><i class="s blocked"></i>unavailable</span>` : '';
+    // Feature 1: show the "unavailable" key only when the month ON SCREEN
+    // actually rendered blocked days. Keying it off "this field has a bound"
+    // put the legend on every month of a constrained field, including the
+    // ones where nothing is grayed and the key explains nothing.
+    const blockedLegend = blockedCount ? `<span><i class="s blocked"></i>unavailable</span>` : '';
     const legend = this.mode === 'dd'
       ? `<div class="yv-dp-legend"><span><i class="s good"></i>shortest</span><span><i class="s mid"></i>mid</span><span><i class="s bad"></i>longest</span>${blockedLegend}</div>`
       : this.mode === 'neutral'

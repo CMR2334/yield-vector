@@ -274,6 +274,18 @@ function onChange(e) {
   // Setting fields
   if (el.dataset.setting) {
     const key = el.dataset.setting;
+    // Date settings render as .yv-date fields holding an M-D-YYYY DISPLAY
+    // string; every consumer expects canonical ISO, so normalize here.
+    // Cleared → today (the field's documented "auto-advances to today"
+    // meaning); typed-but-unreadable → keep the stored value rather than
+    // wipe the date the whole projection is anchored on.
+    if (el.classList && el.classList.contains('yv-date')) {
+      const raw = (el.value || '').trim();
+      const iso = raw ? parseDateInput(raw) : isoDate(TODAY);
+      if (!iso) return;
+      App.update(s => { s.settings[key] = iso; });
+      return;
+    }
     // Money settings render as comma-grouped text inputs; parse via the
     // money helper. Other numerics stay type=number. Checkboxes/selects
     // pass through as before.
@@ -1010,6 +1022,14 @@ function saveEventFromForm(id, isEdit) {
   const recEndEl = document.getElementById('e-recur-end');
   if (recEndEl && recEndEl.value.trim() && !parseDateInput(recEndEl.value)) {
     toast('Recurrence end date invalid — use M-D-YYYY', 'danger'); return;
+  }
+  // An end date before the first occurrence yields a recurrence that never
+  // repeats — the form warns inline while typing; reject it here too so the
+  // incoherent pair can't be saved (both are canonical ISO, so a string
+  // compare is a date compare).
+  if (ev.recurrence && ev.recurrence.kind !== 'none' && ev.recurrence.endDate
+      && ev.date && ev.recurrence.endDate < ev.date) {
+    toast('Recurrence ends before the first occurrence', 'danger'); return;
   }
   // Bonus-payout events must link to an offer so the chart marker name
   // and the offer-color dot stay in sync with the underlying offer card.

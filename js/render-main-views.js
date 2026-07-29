@@ -1331,12 +1331,13 @@ function renderOffers() {
 
   const sorted = sortOffersList(filtered, App.filters.offersSort);
   const advanced = App.filters.offersAdvanced;
+  const draftCount = all.filter(o => !isOfferComplete(o)).length;
 
   return `
     <div class="section-header">
       <div>
         <h2>Offers</h2>
-        <p>${all.length} total · ${all.filter(o => isOfferComplete(o)).length} complete · ${all.filter(o => !isOfferComplete(o)).length} drafts</p>
+        <p>${all.length} total · ${all.filter(o => isOfferComplete(o)).length} complete · ${draftCount} draft${draftCount === 1 ? '' : 's'}</p>
       </div>
       <div style="display:flex;gap:var(--space-2);">
         <button class="btn btn-secondary" data-action="toggle-advanced">${advanced ? 'Card view' : 'Table view'}</button>
@@ -1474,7 +1475,10 @@ function renderSettings() {
         <div class="field">
           <div class="field-box">
             <label for="s-start">Projection start date</label>
-            <input id="s-start" type="date" class="input" value="${s.projectionStartDate}" data-setting="projectionStartDate" />
+            <!-- Custom yv-date field (neutral mode) — the same input + popover
+                 every other date in the app uses. It was the last native
+                 <input type="date"> outside the commitment modal. -->
+            <input id="s-start" class="input yv-date" type="text" inputmode="numeric" autocomplete="off" placeholder="M-D-YYYY" value="${escapeAttr(formatDateDisplay(s.projectionStartDate))}" data-setting="projectionStartDate" data-picker-mode="neutral" />
           </div>
           <span class="field-hint">Auto-advances to today each day.</span>
         </div>

@@ -568,7 +568,7 @@ function showOfferModal(offerId = null, seed = null) {
   modal.classList.add('open');
   modal.dataset.strictClose = '1'; // Require explicit X — don't close on backdrop click or Escape
   setTimeout(() => {
-    document.getElementById('f-bank')?.focus();
+    focusFirstFieldUnlessTouch('f-bank');
     // F5: live-filter the template picker list as the user types. Bound here
     // (local DOM target) rather than via the global dispatcher, mirroring the
     // DD-section wiring below. Present only when the picker rendered (templates
@@ -842,34 +842,52 @@ function applyDateConstraints(form) {
   const nDays = daysEl ? Number(daysEl.value) : NaN;
   const depositDeadlineISO = (signupISO && Number.isFinite(nDays) && nDays > 0)
     ? isoDate(addDays(parseDate(signupISO), nDays)) : '';
-  // planned sign-up: NO floor (historical allowed); ceiling = expiration
-  setFieldConstraint(form.querySelector('#f-signup'), '', expiresISO, 'the offer expiration');
-  // planned funding: floor = sign-up; ceiling = deposit deadline
-  setFieldConstraint(form.querySelector('#f-funded'), signupISO, depositDeadlineISO, 'the deposit deadline');
-  // DD initiation dates: floor = sign-up; no ceiling
-  form.querySelectorAll('[data-dd-field="plannedDate"]').forEach(inp => setFieldConstraint(inp, signupISO, '', ''));
+  // Constrained fields in DOM order:
+  //   planned sign-up — NO floor (historical allowed); ceiling = expiration
+  //   planned funding — floor = sign-up; ceiling = deposit deadline
+  //   DD initiation   — floor = sign-up; no ceiling
+  const targets = [
+    [form.querySelector('#f-signup'), '', expiresISO, 'the offer expiration'],
+    [form.querySelector('#f-funded'), signupISO, depositDeadlineISO, 'the deposit deadline']
+  ].concat([...form.querySelectorAll('[data-dd-field="plannedDate"]')].map(inp => [inp, signupISO, '', '']));
+  // The violation hint is DEDUPED BY MESSAGE. One late sign-up date puts the
+  // funding date and every DD row out of bounds at once, and repeating the
+  // identical sentence under four fields read as four separate errors; the
+  // topmost offending field carries it, the rest stay quiet.
+  const seen = new Set();
+  for (const [inp, floorISO, ceilingISO, ceilingLabel] of targets) {
+    if (!inp) continue;
+    setFieldConstraint(inp, floorISO, ceilingISO, ceilingLabel);
+    const msg = dateViolationMessage(inp);
+    const duplicate = msg && seen.has(msg);
+    if (msg) seen.add(msg);
+    renderDateViolationHint(inp, duplicate ? '' : msg);
+  }
 }
 function setFieldConstraint(inp, floorISO, ceilingISO, ceilingLabel) {
   if (!inp) return;
   if (floorISO) inp.dataset.floor = floorISO; else delete inp.dataset.floor;
   if (ceilingISO) inp.dataset.ceiling = ceilingISO; else delete inp.dataset.ceiling;
   if (ceilingLabel) inp.dataset.ceilingLabel = ceilingLabel; else delete inp.dataset.ceilingLabel;
-  updateDateViolationHint(inp);
 }
-// Gentle inline hint when the TYPED/pasted value violates the field's bound.
-// Finds-or-creates a .yv-date-warn field-hint in the field (or the DD row); an
-// in-range or empty value removes it. Never blocks saving — it's advisory,
-// mirroring how the picker grays rather than hard-rejects.
-function updateDateViolationHint(inp) {
-  if (!inp) return;
+// The gentle message for a TYPED/pasted value that violates the field's
+// bound — '' when the value is empty, unparsable, or in range. Pure: the
+// caller decides whether this field is the one that shows it.
+function dateViolationMessage(inp) {
+  if (!inp) return '';
   const iso = parseDateInput(inp.value || '');
   const floor = inp.dataset.floor || '';
   const ceil = inp.dataset.ceiling || '';
-  let msg = '';
-  if (iso) {
-    if (floor && iso < floor) msg = `That's before the sign-up date (${formatDateMedium(parseDate(floor))}) — a later action can't come before sign-up.`;
-    else if (ceil && iso > ceil) msg = `That's after ${inp.dataset.ceilingLabel || 'the allowed window'} (${formatDateMedium(parseDate(ceil))}).`;
-  }
+  if (!iso) return '';
+  if (floor && iso < floor) return `That's before the sign-up date (${formatDateMedium(parseDate(floor))}) — a later action can't come before sign-up.`;
+  if (ceil && iso > ceil) return `That's after ${inp.dataset.ceilingLabel || 'the allowed window'} (${formatDateMedium(parseDate(ceil))}).`;
+  return '';
+}
+// Finds-or-creates a .yv-date-warn field-hint in the field (or the DD row);
+// an empty message removes it. Never blocks saving — it's advisory,
+// mirroring how the picker grays rather than hard-rejects.
+function renderDateViolationHint(inp, msg) {
+  if (!inp) return;
   const row = inp.closest('.dd-row');
   const container = row || inp.closest('.field') || inp.parentElement;
   if (!container) return;
@@ -1613,7 +1631,18 @@ function showCommitmentModal(commitmentId = null) {
     </div>
   `;
   modal.classList.add('open');
-  setTimeout(() => document.getElementById('c-name')?.focus(), 50);
+  setTimeout(() => focusFirstFieldUnlessTouch('c-name'), 50);
+}
+
+// Autofocus the first field of a modal on desktop only. On a touch device the
+// software keyboard opens with the sheet and covers roughly the bottom 60% of
+// it, so the user's first sight of the form is a keyboard — the field is
+// focused when they tap it instead. Coarse pointer is the touch signal.
+function focusFirstFieldUnlessTouch(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  if (!coarse) el.focus();
 }
 
 function readCommitmentForm(idArg) {
@@ -1746,7 +1775,7 @@ function showEventModal(eventId = null) {
   `;
   modal.classList.add('open');
   setTimeout(() => {
-    document.getElementById('e-name')?.focus();
+    focusFirstFieldUnlessTouch('e-name');
     // Show/hide the linked-offer field based on category; auto-fill the
     // Name when an offer is picked under "bonus payout" so the chart
     // marker and the offer card stay name-consistent without the user
@@ -1792,8 +1821,37 @@ function showEventModal(eventId = null) {
         if (everyField) everyField.style.display = kind === 'custom' ? '' : 'none';
         if (endField) endField.style.display = kind !== 'none' ? '' : 'none';
       }
+      updateRecurrenceEndWarning(form);
     });
+    // The date picker dispatches input + change, and typing fires input, so
+    // the recurrence-end warning tracks both entry paths.
+    form.addEventListener('input', () => updateRecurrenceEndWarning(form));
+    updateRecurrenceEndWarning(form);
   }, 50);
+}
+
+// Inline warning when the recurrence "Ends" date can't produce a repeat —
+// either it's unreadable or it lands before the first occurrence. Uses the
+// same advisory .yv-date-warn idiom as the offer form's typed-date violation
+// hint; saveEventFromForm rejects both conditions, this is the live nudge.
+function updateRecurrenceEndWarning(form) {
+  if (!form) return;
+  const endInp = form.querySelector('#e-recur-end');
+  const dateInp = form.querySelector('#e-date');
+  if (!endInp || !dateInp) return;
+  const kindEl = form.querySelector('#e-recur');
+  const kind = kindEl ? kindEl.value : 'none';
+  const raw = (endInp.value || '').trim();
+  const endISO = raw ? parseDateInput(raw) : '';
+  const startISO = parseDateInput(dateInp.value || '');
+  let msg = '';
+  if (kind !== 'none' && raw) {
+    if (!endISO) msg = "That end date isn't readable — use M-D-YYYY.";
+    else if (startISO && endISO < startISO) {
+      msg = `That's before the first occurrence (${formatDateMedium(parseDate(startISO))}) — the event would never repeat.`;
+    }
+  }
+  renderDateViolationHint(endInp, msg);
 }
 
 function readEventForm(idArg) {
