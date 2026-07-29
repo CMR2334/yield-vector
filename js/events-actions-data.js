@@ -282,7 +282,12 @@ function onChange(e) {
     if (el.classList && el.classList.contains('yv-date')) {
       const raw = (el.value || '').trim();
       const iso = raw ? parseDateInput(raw) : isoDate(TODAY);
-      if (!iso) return;
+      if (!iso) {
+        // Unreadable: keep the stored anchor, but put it back on screen — the
+        // field must never display a date the projection isn't actually using.
+        el.value = formatDateDisplay(App.state.settings[key]);
+        return;
+      }
       App.update(s => { s.settings[key] = iso; });
       return;
     }

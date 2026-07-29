@@ -173,12 +173,17 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: var(--space-6);
   /* viewport-fit=cover means the page extends under the status bar / Dynamic
-     Island and under the landscape display cutout. The header is the top-most
-     chrome, so it absorbs the top inset (border-box: height grows, content
-     stays centered below the bar) and keeps its gutters clear of the side
-     insets. env() resolves to 0 everywhere it doesn't apply. */
+     Island and under the landscape display cutout. The header absorbs the TOP
+     inset (border-box: height grows, content stays centered below the bar).
+     env() resolves to 0 everywhere it doesn't apply.
+     SIDE gutters stay at the flat design value here: this desktop header has an
+     intrinsic minimum of 805px and no slack, so folding a 44px landscape cutout
+     inset into each gutter pushed its requirement to 869px and made every
+     notched-iPhone landscape width (812 / 844 / 852) scroll sideways. The
+     compact header (<=804px) — which is what phones actually render, and which
+     has slack — keeps its inset-aware gutters. */
   height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
-  padding: env(safe-area-inset-top, 0px) max(var(--space-6), env(safe-area-inset-right, 0px)) 0 max(var(--space-6), env(safe-area-inset-left, 0px));
+  padding: env(safe-area-inset-top, 0px) var(--space-6) 0 var(--space-6);
   background: rgba(245, 245, 247, 0.85);
   backdrop-filter: saturate(1.6) blur(14px);
   -webkit-backdrop-filter: saturate(1.6) blur(14px);
@@ -2818,27 +2823,30 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 /* ============================================================
    TOUCH TARGETS
    ============================================================
-   Several controls are deliberately small for visual density (filter
-   checkboxes 18px, the include / done circles 22px, the Upcoming pager 24px,
-   the sync chip 23px on mobile, icon buttons 36px) — all well under the 44pt
-   comfortable-tap minimum. Each gets an invisible, centered 44x44 hit area
-   from an absolutely-positioned pseudo-element: out of flow, so no element's
-   rendered box, position, or size changes — only the region that accepts the
-   tap. Scoped to coarse pointers so mouse hover targets stay exactly as drawn.
-   ::before, NOT ::after — .offer-include and the .checkbox-row checkboxes
-   already use ::after for their checkmark glyph.
+   Several controls are deliberately small for visual density (the include /
+   done circles 22px, the Upcoming pager 24px, the sync chip 23px on mobile,
+   icon buttons 36px) — all well under the 44pt comfortable-tap minimum. Each
+   gets an invisible, centered 44x44 hit area from an absolutely-positioned
+   pseudo-element: out of flow, so no element's rendered box, position, or size
+   changes — only the region that accepts the tap. Scoped to coarse pointers so
+   mouse hover targets stay exactly as drawn.
+   ::before, NOT ::after — .offer-include already uses ::after for its glyph.
+   The 18px .checkbox-row checkboxes are deliberately EXCLUDED. They stack 38px
+   apart inside the event/commitment modals, so a centered 44px band overlapped
+   its neighbour by 6px and a tap 10px under "Include in projection" silently
+   toggled "Display on Overview chart" instead. They need no expansion anyway:
+   .checkbox-row is a <label> wrapping the input, so the full-width row — glyph
+   AND text — is already the tap target.
    The bottom nav's 34pt row height is deliberately NOT touched here: raising
    it changes visible layout, so it stays an owner decision.
    ============================================================ */
 @media (pointer: coarse) {
-  .checkbox-row input[type="checkbox"],
   .offer-include,
   .action-check,
   .upcoming-pg-btn,
   .btn-icon,
   .sync-indicator { position: relative; }
 
-  .checkbox-row input[type="checkbox"]::before,
   .offer-include::before,
   .action-check::before,
   .upcoming-pg-btn::before,
