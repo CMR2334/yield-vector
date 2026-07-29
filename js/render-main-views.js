@@ -1934,7 +1934,8 @@ function renderHeroChart(svg) {
   const tooltip = document.getElementById('chart-tooltip');
   const W = 800, H = 360;
   // padL is small because the $ axis labels now render in the sticky HTML
-  // .chart-yaxis sibling (48px) to the left of the SVG, not inside it.
+  // .chart-yaxis sibling to the left of the SVG, not inside it. That sibling
+  // sizes itself to its widest label (see the --yv-yaxis-w block below).
   const padL = 8, padR = 28, padT = 16, padB = 36;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
@@ -2262,6 +2263,19 @@ function renderHeroChart(svg) {
     yaxisEl.innerHTML = yTicks.map(t =>
       `<span class="ylab" style="top:${(yFor(t) / H * 100).toFixed(2)}%;">${formatCompactCurrency(t)}</span>`
     ).join('');
+    // Size the frozen column to its widest label. The labels are absolutely
+    // positioned (right:6px, white-space:nowrap) so their measured width is
+    // the intrinsic text width even while the column is still narrow — a
+    // negative tick like "-$600K" is ~45px and used to overhang the 36px
+    // column, where .chart-scroll's overflow clipped its "-" and "$".
+    const YAXIS_LABEL_GAP = 6;   // must match .ylab { right: 6px }
+    let widest = 0;
+    yaxisEl.querySelectorAll('.ylab').forEach(el => {
+      const w = el.getBoundingClientRect().width;
+      if (w > widest) widest = w;
+    });
+    const axisW = Math.min(88, Math.max(36, Math.ceil(widest) + YAXIS_LABEL_GAP + 2));
+    yaxisEl.style.setProperty('--yv-yaxis-w', axisW + 'px');
   }
 
   // Hover interactions
