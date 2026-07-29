@@ -2864,7 +2864,8 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
    nav now take over one pixel below where the desktop header stops fitting. */
 @media (max-width: 804px) {
   .primary-nav, .header-actions { display: none; }
-  .app-header { padding: 0 var(--space-4); }
+  /* Tighter gutters than desktop, but still inset-aware (see the base rule). */
+  .app-header { padding: env(safe-area-inset-top, 0px) max(var(--space-4), env(safe-area-inset-right, 0px)) 0 max(var(--space-4), env(safe-area-inset-left, 0px)); }
   .mobile-nav { display: flex; }
   .fab { display: flex; }
   .app-main {
@@ -2896,6 +2897,22 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
     line-height: 1.35;
   }
   .timeline-row-label .sub { font-size: 10px; }
+  /* The axis row's date range ("JUL 29 → DEC 11" ≈ 106px) is wider than the
+     narrow mobile label column (69px of content), so it was ellipsised at
+     every mobile width — a fixed, always-truncated string. It wraps to a
+     second line instead: the 32px row has room for two 11px lines, the label
+     column keeps the width every other row is aligned to, and the fix holds
+     for any date pair rather than one measured string. */
+  .timeline-row-label.axis {
+    white-space: normal;
+    text-overflow: clip;
+    /* Two 11px lines need 25px of content box; the row's fixed 32px height
+       (which must match the axis track for alignment) leaves that only with
+       the tighter vertical padding. */
+    line-height: 1.15;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
   .tl-axis-tick { font-size: 10px; }
   .modal { padding: 0; align-items: flex-end; }
   .modal-card { max-width: 100%; width: 100%; max-height: 92vh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
