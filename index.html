@@ -26,25 +26,25 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.14b",
-    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.14b",
-    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.14b",
-    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.14b",
-    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.14b",
-    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.14b",
-    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.14b",
-    "./js/app-state.js": "./js/app-state.js?v=2026.07.14b",
-    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.14b",
-    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.14b",
-    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.14b",
-    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.14b",
-    "./js/reminders.js": "./js/reminders.js?v=2026.07.14b",
-    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.14b",
-    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.14b",
-    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.14b",
-    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.14b",
-    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.14b",
-    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.14b"
+    "./js/runtime-status.js": "./js/runtime-status.js?v=2026.07.29",
+    "./js/requirements-templates.js": "./js/requirements-templates.js?v=2026.07.29",
+    "./js/migrations-catalogs.js": "./js/migrations-catalogs.js?v=2026.07.29",
+    "./js/sync-pwa.js": "./js/sync-pwa.js?v=2026.07.29",
+    "./js/date-format-core.js": "./js/date-format-core.js?v=2026.07.29",
+    "./js/dd-core.js": "./js/dd-core.js?v=2026.07.29",
+    "./js/dd-widgets.js": "./js/dd-widgets.js?v=2026.07.29",
+    "./js/app-state.js": "./js/app-state.js?v=2026.07.29",
+    "./js/offer-model.js": "./js/offer-model.js?v=2026.07.29",
+    "./js/projection-optimizer.js": "./js/projection-optimizer.js?v=2026.07.29",
+    "./js/optimizer-engine.js": "./js/optimizer-engine.js?v=2026.07.29",
+    "./js/render-shell-overview.js": "./js/render-shell-overview.js?v=2026.07.29",
+    "./js/reminders.js": "./js/reminders.js?v=2026.07.29",
+    "./js/render-main-views.js": "./js/render-main-views.js?v=2026.07.29",
+    "./js/doc-parser.js": "./js/doc-parser.js?v=2026.07.29",
+    "./js/doc-import-templates.js": "./js/doc-import-templates.js?v=2026.07.29",
+    "./js/modals-forms.js": "./js/modals-forms.js?v=2026.07.29",
+    "./js/ui-utils.js": "./js/ui-utils.js?v=2026.07.29",
+    "./js/events-actions-data.js": "./js/events-actions-data.js?v=2026.07.29"
   }
 }
 </script>
@@ -2850,7 +2850,6 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
   .offer-include::before,
   .action-check::before,
   .upcoming-pg-btn::before,
-  .btn-icon::before,
   .sync-indicator::before {
     content: '';
     position: absolute;
@@ -2859,6 +2858,23 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
     width: 44px;
     height: 44px;
     transform: translate(-50%, -50%);
+  }
+
+  /* .btn-icon buttons often sit in tight adjacent pairs (edit/delete,
+     edit/duplicate) with only a few px of gap between 36px buttons — a
+     full 44px-wide centered hit band overlaps its neighbor's, so a tap in
+     the sliver between them hits the wrong control. Expand vertically only;
+     horizontally the hit area stays at the button's own width (left:0;
+     right:0 spans exactly the element, no extra reach into the gap), so
+     adjacent bands meet without crossing. Still ≥44pt tall. */
+  .btn-icon::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
   }
 }
 
