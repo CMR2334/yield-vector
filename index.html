@@ -172,8 +172,13 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: var(--space-6);
-  height: var(--header-height);
-  padding: 0 var(--space-6);
+  /* viewport-fit=cover means the page extends under the status bar / Dynamic
+     Island and under the landscape display cutout. The header is the top-most
+     chrome, so it absorbs the top inset (border-box: height grows, content
+     stays centered below the bar) and keeps its gutters clear of the side
+     insets. env() resolves to 0 everywhere it doesn't apply. */
+  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) max(var(--space-6), env(safe-area-inset-right, 0px)) 0 max(var(--space-6), env(safe-area-inset-left, 0px));
   background: rgba(245, 245, 247, 0.85);
   backdrop-filter: saturate(1.6) blur(14px);
   -webkit-backdrop-filter: saturate(1.6) blur(14px);
@@ -343,7 +348,8 @@ a { color: inherit; text-decoration: none; }
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: saturate(1.6) blur(14px);
   border-top: 1px solid var(--border-soft);
-  padding: 8px 4px calc(3px + env(safe-area-inset-bottom, 0px));
+  /* Side insets keep the outer nav items off the landscape display cutout. */
+  padding: 8px max(4px, env(safe-area-inset-right, 0px)) calc(3px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px));
   z-index: 30;
   justify-content: space-around;
 }
@@ -373,7 +379,7 @@ a { color: inherit; text-decoration: none; }
   position: fixed;
   display: none;
   bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px);
-  right: 16px;
+  right: calc(16px + env(safe-area-inset-right, 0px));
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -2810,6 +2816,45 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 .row-action-buttons { display: flex; gap: var(--space-1); justify-content: flex-end; }
 
 /* ============================================================
+   TOUCH TARGETS
+   ============================================================
+   Several controls are deliberately small for visual density (filter
+   checkboxes 18px, the include / done circles 22px, the Upcoming pager 24px,
+   the sync chip 23px on mobile, icon buttons 36px) — all well under the 44pt
+   comfortable-tap minimum. Each gets an invisible, centered 44x44 hit area
+   from an absolutely-positioned pseudo-element: out of flow, so no element's
+   rendered box, position, or size changes — only the region that accepts the
+   tap. Scoped to coarse pointers so mouse hover targets stay exactly as drawn.
+   ::before, NOT ::after — .offer-include and the .checkbox-row checkboxes
+   already use ::after for their checkmark glyph.
+   The bottom nav's 34pt row height is deliberately NOT touched here: raising
+   it changes visible layout, so it stays an owner decision.
+   ============================================================ */
+@media (pointer: coarse) {
+  .checkbox-row input[type="checkbox"],
+  .offer-include,
+  .action-check,
+  .upcoming-pg-btn,
+  .btn-icon,
+  .sync-indicator { position: relative; }
+
+  .checkbox-row input[type="checkbox"]::before,
+  .offer-include::before,
+  .action-check::before,
+  .upcoming-pg-btn::before,
+  .btn-icon::before,
+  .sync-indicator::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 /* 804px, not 720px: the desktop header (wordmark + 5 nav pills + sync chip +
@@ -2825,8 +2870,10 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
   .app-main {
     /* Bottom padding clears BOTH the fixed mobile nav AND the FAB that floats
        above it (bottom = nav+safe+12, height 56). Without the FAB allowance the
-       last offer card scrolled under the button (~36px overlap at 375px). */
-    padding: var(--space-4) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3));
+       last offer card scrolled under the button (~36px overlap at 375px).
+       Side gutters take the larger of the design gutter and the display-cutout
+       inset (landscape). */
+    padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right, 0px)) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3)) max(var(--space-4), env(safe-area-inset-left, 0px));
   }
   .hero { padding: var(--space-4) var(--space-3); border-radius: var(--radius-lg); }
   .hero-amount { font-size: 36px; }
@@ -2899,15 +2946,15 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
     --header-height: 50px;
     --bottom-nav-height: 56px;
   }
-  .app-header { height: 50px; }
+  .app-header { height: calc(50px + env(safe-area-inset-top, 0px)); }
   .mobile-nav { height: 56px; }
   .mobile-nav .nav-btn { padding: 4px 8px; font-size: 10px; }
   .mobile-nav .nav-btn svg { width: 18px; height: 18px; }
   .app-main {
     /* Same FAB allowance as portrait — without it the last paragraph of a
        page could never be scrolled out from under the floating + button
-       (nav 56 + 12 gap + 56 FAB). */
-    padding: var(--space-3) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3));
+       (nav 56 + 12 gap + 56 FAB). Side gutters clear the landscape cutout. */
+    padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right, 0px)) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3)) max(var(--space-4), env(safe-area-inset-left, 0px));
   }
   .hero {
     padding: var(--space-4);
