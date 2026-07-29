@@ -267,7 +267,7 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.02em;
   color: var(--text-tertiary);
 }
-@media (max-width: 720px) {
+@media (max-width: 804px) {
   /* Stat cards stay 3-per-row; Upcoming actions and churn span full width */
   .overview-main  { grid-column: 1 / -1; }
   .churn-section  { grid-column: 1 / -1; }
@@ -656,7 +656,7 @@ a { color: inherit; text-decoration: none; }
    reflow into different-sized boxes day-to-day based on which markers
    happen to be near the cursor. Long event names truncate cleanly
    inside the fixed box rather than pushing the box wider. */
-@media (max-width: 720px) {
+@media (max-width: 804px) {
   .chart-tooltip {
     white-space: normal;
     width: 220px;
@@ -1252,9 +1252,13 @@ a { color: inherit; text-decoration: none; }
 .ddm-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .ddm-left  { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .ddm-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
-.ddm-list  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
-.ddm-pill  { display: inline-flex; align-items: center; font-size: 11px; padding: 2px 4px 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; }
-.ddm-method { overflow: hidden; text-overflow: ellipsis; }
+/* min-width:0 / max-width:100% down the chain so a long method name actually
+   uses the .ddm-method ellipsis below instead of setting a floor under the
+   whole offer card's min-content width (which pushed a 2-up offers grid into
+   sideways page scroll on narrow tablets). */
+.ddm-list  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; min-width: 0; }
+.ddm-pill  { display: inline-flex; align-items: center; font-size: 11px; padding: 2px 4px 2px 7px; border-radius: var(--radius-pill); background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border-soft); white-space: nowrap; min-width: 0; max-width: 100%; }
+.ddm-method { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Datapoint count as a separated badge so "Business checking" + "2 DP"
    never read as one phrase ("Business checking 2"). */
 .ddm-dp { flex-shrink: 0; margin-left: 6px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--border-soft); color: var(--text-tertiary); font-weight: 700; font-size: 10px; font-feature-settings: 'tnum' 1; }
@@ -1941,6 +1945,15 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: var(--space-1);
 }
 .form-section .section-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-5); }
+
+/* Narrow screens: a settings section title and its trailing action button
+   ("Capital commitments" + "+ Add commitment") no longer fit on one line, and
+   the title wrapped mid-phrase straight into the button. Keep the title whole
+   and let the button drop to its own line instead. */
+@media (max-width: 560px) {
+  .form-section .card-header { flex-wrap: wrap; row-gap: var(--space-2); }
+  .form-section .card-header h2 { white-space: nowrap; }
+}
 
 .form-grid {
   display: grid;
@@ -2799,7 +2812,12 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width: 720px) {
+/* 804px, not 720px: the desktop header (wordmark + 5 nav pills + sync chip +
+   "Add offer") has an intrinsic minimum of 805px, so every viewport in the
+   721–804 band scrolled sideways with "Add offer" hanging off the edge —
+   iPad mini portrait (744pt) lives in that band. The compact header + bottom
+   nav now take over one pixel below where the desktop header stops fitting. */
+@media (max-width: 804px) {
   .primary-nav, .header-actions { display: none; }
   .app-header { padding: 0 var(--space-4); }
   .mobile-nav { display: flex; }
@@ -2866,7 +2884,7 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
    vertical space when the user is working in a chart or reading a
    long list. Landscape (handled below) keeps the header sticky since
    landscape phone screens are short and quick nav access matters. */
-@media (max-width: 720px) and (orientation: portrait) {
+@media (max-width: 804px) and (orientation: portrait) {
   .app-header { position: static; top: auto; }
 }
 
@@ -2886,7 +2904,10 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
   .mobile-nav .nav-btn { padding: 4px 8px; font-size: 10px; }
   .mobile-nav .nav-btn svg { width: 18px; height: 18px; }
   .app-main {
-    padding: var(--space-3) var(--space-4) calc(var(--bottom-nav-height) + var(--space-4));
+    /* Same FAB allowance as portrait — without it the last paragraph of a
+       page could never be scrolled out from under the floating + button
+       (nav 56 + 12 gap + 56 FAB). */
+    padding: var(--space-3) var(--space-4) calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px + 56px + var(--space-3));
   }
   .hero {
     padding: var(--space-4);
@@ -2951,15 +2972,22 @@ button.opt-review-row.tappable:active { background: var(--bg-subtle); }
   }
 }
 
-@media (min-width: 481px) and (max-width: 879px) {
+/* Two-up starts at 560px, not 481px. An offer card's min-content width is
+   ~235–270px (driven by the bank/offer name and the 2-col stat grid), so a
+   two-column `1fr 1fr` needed ~519px of viewport and every width in the
+   481–518 band pushed the grid — and the whole page — into sideways scroll.
+   560px keeps ~40px of headroom for longer bank names than the QA fixture's,
+   and minmax(0, 1fr) stops one wide card from forcing unequal tracks that
+   overflow the row. */
+@media (min-width: 560px) and (max-width: 879px) {
   .planner-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-4);
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 559px) {
   .planner-grid { display: flex; flex-direction: column; gap: var(--space-4); }
 }
 
