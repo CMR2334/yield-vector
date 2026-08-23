@@ -610,13 +610,13 @@ function optimizationInputSig(o) {
 const CHURN_RECHECK_REASON_COPY = {
   'no-url': 'No source URL stored — paste the DoC link below, then Save to enable one-tap verify',
   'no-worker': 'No document fetcher set up — verify the terms and Save',
-  'tiered': 'This offer has a tier ladder — Import from URL, then confirm the tier and Save',
-  'structural-dd': 'Direct-deposit terms changed — Import from URL to update, then Save',
-  'structural-requirements': 'New requirements found — Import from URL to update, then Save'
+  'tiered': 'This offer has a tier ladder — Fetch & Parse the DoC URL, then confirm the tier and Save',
+  'structural-dd': 'Direct-deposit terms changed — Fetch & Parse the DoC URL to update, then Save',
+  'structural-requirements': 'New requirements found — Fetch & Parse the DoC URL to update, then Save'
 };
 
 // Prompt-gated churn re-check (P2-2). Opens the source offer's edit modal so
-// the user can pull the latest terms via the existing DoC "Import from URL"
+// the user can pull the latest terms via the DoC URL field's "Fetch & Parse"
 // Worker path (or verify manually), then Save. The save-gate above re-runs the
 // optimizer iff an optimization input actually changed. `opts.reason` (from a
 // one-tap verify fallback) selects a SPECIFIC bubble stating why the fast path
@@ -630,7 +630,7 @@ function recheckChurnCandidate(sourceId, opts = {}) {
   showOfferModal(sourceId);
   const specific = opts.reason && CHURN_RECHECK_REASON_COPY[opts.reason];
   toast(specific || (src.docUrl
-    ? 'Re-check: use "Import from URL" to pull the latest terms, then Save'
+    ? 'Re-check: press "Fetch & Parse" on the DoC URL field to pull the latest terms, then Save'
     : 'Re-check: verify the terms and Save'));
   if (opts.focusField) setTimeout(() => focusOfferField(opts.focusField), 130);
 }

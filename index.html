@@ -1415,14 +1415,13 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--font-mono); line-height: 1.4; color: var(--text-strong);
 }
 .doc-import-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-/* Fetch-from-URL mode (Phase 7 v2). Only rendered when a Worker URL is
-   configured — see the gated block in showOfferModal. */
-.doc-fetch { margin: 4px 0 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-soft); }
+/* Fetch-from-URL row (2026-08-23: the merged "DoC URL" field on the modal
+   surface — the input is the offer's docUrl field; the button renders only when
+   a Worker URL is configured). */
 .doc-fetch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.doc-fetch-url { flex: 1 1 220px; min-width: 0; font-size: 13px; }
 .doc-fetch-btn[aria-busy="true"] { opacity: 0.7; pointer-events: none; }
+.doc-fetch-err:empty { display: none; }
 .doc-fetch-err { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.4; }
-.doc-fetch-or { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.02em; margin: 8px 0 2px; }
 /* "AI" badge + failed-verification note on preview fields sourced from the LLM. */
 .doc-ai-badge {
   flex: 0 0 auto; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;

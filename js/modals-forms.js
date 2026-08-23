@@ -164,6 +164,43 @@ function showOfferModal(offerId = null, seed = null) {
               <input id="f-offer" class="input" type="text" placeholder="Sapphire Banking, Priority $1500…" value="${escapeAttr(o.offerName)}" name="offerName" />
             </div>
           </div>
+          <!-- DoC URL + import (owner directive 2026-08-23). ONE url field: the
+               offer's stored source link (docUrl) IS the field the import reads,
+               so there is no second URL bubble to keep in sync, and the import
+               is on the modal surface instead of buried in Advanced fields.
+               Paste-the-post-text mode works with or without a Worker. -->
+          <div class="field" style="grid-column: 1 / -1;">
+            <div class="field-box">
+              <label for="f-doc">DoC URL</label>
+              <div class="doc-fetch-row">
+                <input id="f-doc" class="input" type="url" style="flex:1 1 220px;min-width:0;" placeholder="https://www.doctorofcredit.com/…" value="${escapeAttr(o.docUrl)}" name="docUrl" autocomplete="off" spellcheck="false" />
+                ${Sync.getDocWorkerUrl() ? `<button type="button" class="btn btn-primary btn-sm doc-fetch-btn" id="doc-fetch-btn" data-action="doc-import-fetch">Fetch &amp; Parse</button>` : ''}
+              </div>
+              <div class="doc-fetch-err" id="doc-fetch-err" role="status" aria-live="polite"></div>
+            </div>
+            <span class="field-hint">The Doctor of Credit (or bank) post this offer comes from — saved with the offer.${Sync.getDocWorkerUrl() ? ' <strong>Fetch &amp; Parse</strong> pulls that post through your Worker and fills the form below for review (an AI pass covers the fuzzy prose fields, each shown with the exact quote it came from). Nothing saves until you press Save.' : ' Configure a DoC Worker in Settings to fetch a post straight from this URL; until then, paste the post text below.'}</span>
+            <div class="doc-import" id="doc-import" style="margin-top:8px;">
+              <button type="button" class="doc-import-toggle" data-action="doc-import-toggle" aria-expanded="false" aria-controls="doc-import-body">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Import by pasting the post text</span>
+              </button>
+              <div class="doc-import-body" id="doc-import-body" hidden>
+                <p class="doc-import-help">Paste the full Doctor of Credit post text or HTML below, then Parse. Nothing is saved — parsed values fill the form for you to review and confirm.</p>
+                <textarea id="doc-import-paste" class="textarea doc-import-paste" rows="5" placeholder="Paste the Doctor of Credit post here…" autocomplete="off" spellcheck="false"></textarea>
+                <div class="doc-import-actions">
+                  <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-parse">Parse</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-action="doc-import-clear">Clear</button>
+                </div>
+              </div>
+            </div>
+            <!-- Status + preview live OUTSIDE the paste disclosure: a fetch
+                 started from the URL row above must show its result even while
+                 the paste area is collapsed. Both are empty until a parse runs. -->
+            <div class="doc-import-actions" style="margin-top:8px;">
+              <span class="doc-import-status" id="doc-import-status" role="status" aria-live="polite"></span>
+            </div>
+            <div class="doc-import-preview" id="doc-import-preview"></div>
+          </div>
           <div class="field" style="grid-column: 1 / -1;">
             <label>Color</label>
             <input type="hidden" id="f-color" name="color" value="${escapeAttr(o.color || '')}" />
@@ -400,41 +437,11 @@ function showOfferModal(offerId = null, seed = null) {
         </div>
 
         <button type="button" class="advanced-toggle" data-action="toggle-advanced-form" aria-expanded="false">
-          <span>Advanced fields (DD, fees, links, entity)</span>
+          <span>Advanced fields (DD, fees, entity)</span>
           <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="advanced-fields" id="advanced-fields">
           <div class="form-grid">
-            <div class="field"><div class="field-box"><label for="f-doc">DoC / source URL</label><input id="f-doc" class="input" type="url" placeholder="https://doctorofcredit.com/..." value="${escapeAttr(o.docUrl)}" name="docUrl" /></div></div>
-            <div class="field" style="grid-column: 1 / -1;">
-              <div class="doc-import" id="doc-import">
-                <button type="button" class="doc-import-toggle" data-action="doc-import-toggle" aria-expanded="false" aria-controls="doc-import-body">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  <span>Import from Doctor of Credit</span>
-                </button>
-                <div class="doc-import-body" id="doc-import-body" hidden>
-                  ${Sync.getDocWorkerUrl() ? `
-                  <div class="doc-fetch" id="doc-fetch">
-                    <p class="doc-import-help">Fetch the post straight from its URL — the configured Worker retrieves it and runs an AI pass on the fuzzy fields (each shown with the exact quote it came from). Results fill the form for review; nothing saves.</p>
-                    <div class="doc-fetch-row">
-                      <input id="doc-fetch-url" class="input doc-fetch-url" type="url" placeholder="https://www.doctorofcredit.com/…" value="${escapeAttr(o.docUrl || '')}" autocomplete="off" spellcheck="false" />
-                      <button type="button" class="btn btn-primary btn-sm doc-fetch-btn" id="doc-fetch-btn" data-action="doc-import-fetch">Fetch &amp; Parse</button>
-                    </div>
-                    <div class="doc-fetch-err" id="doc-fetch-err" role="status" aria-live="polite"></div>
-                  </div>
-                  <div class="doc-fetch-or">or paste the post text</div>
-                  ` : ''}
-                  <p class="doc-import-help">Paste the full Doctor of Credit post text or HTML below, then Parse. Nothing is saved — parsed values fill the form for you to review and confirm.</p>
-                  <textarea id="doc-import-paste" class="textarea doc-import-paste" rows="5" placeholder="Paste the Doctor of Credit post here…" autocomplete="off" spellcheck="false"></textarea>
-                  <div class="doc-import-actions">
-                    <button type="button" class="btn btn-primary btn-sm" data-action="doc-import-parse">Parse</button>
-                    <button type="button" class="btn btn-secondary btn-sm" data-action="doc-import-clear">Clear</button>
-                    <span class="doc-import-status" id="doc-import-status" role="status" aria-live="polite"></span>
-                  </div>
-                  <div class="doc-import-preview" id="doc-import-preview"></div>
-                </div>
-              </div>
-            </div>
             <div class="field">
               <div class="field-box">
                 <label for="f-entity">Entity used</label>

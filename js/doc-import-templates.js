@@ -802,8 +802,12 @@ async function docWorkerFetchParse(url) {
   }
 }
 
+// Fetch-from-URL handler. Since 2026-08-23 it reads the offer's OWN "DoC URL"
+// field (#f-doc, name=docUrl) — there is no separate import URL input to copy
+// between any more, so what the owner sees in the field is exactly what gets
+// fetched and exactly what the offer saves.
 async function docImportFetch() {
-  const urlInput = document.getElementById('doc-fetch-url');
+  const urlInput = document.getElementById('f-doc');
   const btn = document.getElementById('doc-fetch-btn');
   const errBox = document.getElementById('doc-fetch-err');
   const status = document.getElementById('doc-import-status');
@@ -832,8 +836,13 @@ async function docImportFetch() {
       status.textContent = nFields ? `Fetched — found ${nFields} field${nFields === 1 ? '' : 's'}${aiBit}. Review below.` : 'Fetched, but no fields were readable — paste the text instead.';
       status.className = nFields ? 'doc-import-status success' : 'doc-import-status muted';
     }
-    // Keep the paste box + the docUrl field in sync with what was fetched.
-    if (urlInput) { const df = document.getElementById('f-doc'); if (df && !df.value.trim()) { df.value = url; df.dispatchEvent(new Event('input', { bubbles: true })); } }
+    // The fetched URL IS the field's value (single field) — nothing to mirror.
+    // A trailing-space paste is normalized so the saved docUrl matches what was
+    // actually fetched.
+    if (urlInput && urlInput.value !== url) {
+      urlInput.value = url;
+      urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   } catch (e) {
     if (typeof logError === 'function') logError(ErrCode.SYNC_PULL, e, 'docImportFetch');
     setErr('Fetch failed — paste the post text instead.');
