@@ -331,8 +331,11 @@ function parseDateInput(str) {
 }
 /* ---- Picker-primary tap state machine (owner directive 2026-08-23) --------
    A .yv-date bubble is PICKER-FIRST on touch: the first tap opens ONLY the
-   custom yv-date picker (no iOS keypad covering it), and a SECOND tap on the
-   already-ACTIVE field switches that field to manual typed entry (keypad).
+   custom yv-date picker (no iOS keypad covering it). Manual typed entry is
+   reached from the picker's "Type" control, NOT from a second tap on the field:
+   iOS device testing (2026-08-23) disproved every field-tap mechanism for
+   raising the keypad on an already-focused field, so a tap on a field whose
+   picker is open is now a no-op that leaves the picker up.
    This is the PURE decision half of that machine — DateFieldTap (dd-widgets.js)
    owns the DOM half (arming the field before focus, closing the picker, moving
    focus). Kept here, DOM-free, so it is pinnable in bare Node.
@@ -340,18 +343,18 @@ function parseDateInput(str) {
                   keep the pre-2026-08-23 behavior: picker opens AND the field
                   stays typeable, so desktop ergonomics can't regress.
      typing     — this field is already in manual-typing mode.
-     pickerOpen — the picker is open ON THIS field (i.e. this is a second tap
+     pickerOpen — the picker is open ON THIS field (i.e. this is a repeat tap
                   on the active field).
    Returns one of:
      'picker+typing' — desktop: open the picker, leave typing available
      'picker-only'   — first touch tap: open the picker, suppress the keypad
-     'typing'        — second tap on the active field: close picker, raise keypad
-     'noop'          — already typing: leave the caret alone                */
+     'noop'          — already typing (leave the caret alone) or the picker is
+                       already open on this field (leave it open)            */
 function dateTapDecision(ctx) {
   const c = ctx || {};
   if (!c.coarse) return 'picker+typing';
   if (c.typing) return 'noop';
-  if (c.pickerOpen) return 'typing';
+  if (c.pickerOpen) return 'noop';
   return 'picker-only';
 }
 

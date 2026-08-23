@@ -1105,6 +1105,15 @@ a { color: inherit; text-decoration: none; }
 .yv-dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
 .yv-dp-foot button { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 6px; font-weight: 500; }
 .yv-dp-foot button:hover { text-decoration: underline; }
+/* Touch-only "Type" control (owner directive 2026-08-23) — on a coarse pointer
+   the date field is picker-primary, so this is the only route to the numeric
+   keypad. Boxed (so it reads as a control, not a link) and tall enough to clear
+   the touch-target floor. Never rendered on a fine pointer. */
+.yv-dp-foot [data-type-entry] {
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  padding: 6px 16px; min-height: 40px;
+}
+.yv-dp-foot [data-type-entry]:hover { text-decoration: none; }
 
 .offer-card-header {
   display: flex;

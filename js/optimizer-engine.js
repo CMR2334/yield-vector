@@ -2823,8 +2823,11 @@ function testOptimizerPins() {
       dateTapDecision({ coarse: false, typing: false, pickerOpen: false }) === 'picker+typing');
     check('date tap: first touch tap opens the picker only (no keypad)',
       dateTapDecision({ coarse: true, typing: false, pickerOpen: false }) === 'picker-only');
-    check('date tap: second tap on the ACTIVE field switches to typed entry',
-      dateTapDecision({ coarse: true, typing: false, pickerOpen: true }) === 'typing');
+    // Device-disproved on iOS (2026-08-23): no field-tap mechanism can raise the
+    // keypad on the already-focused armed field, so a repeat tap now LEAVES the
+    // open picker alone; typed entry is reached from the picker's "Type" control.
+    check('date tap: a repeat tap on the ACTIVE field leaves the picker open',
+      dateTapDecision({ coarse: true, typing: false, pickerOpen: true }) === 'noop');
     check('date tap: a tap inside an already-typing field is a no-op',
       dateTapDecision({ coarse: true, typing: true, pickerOpen: false }) === 'noop');
     check('date tap: a fresh field while ANOTHER field is typing still opens the picker',

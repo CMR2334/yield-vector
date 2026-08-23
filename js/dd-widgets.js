@@ -59,6 +59,18 @@ const DatePicker = {
     d.style.display = 'none';
     document.body.appendChild(d);
     this.el = d;
+    // The picker's "Type" control hands the field to the keypad, and WebKit only
+    // raises the keypad when focus genuinely MOVES to an editable field inside a
+    // user gesture. The field is focused-and-armed while the picker is open, so
+    // we disarm + blur it HERE, on the pointerdown/mousedown that precedes the
+    // click — one event turn earlier — leaving the click handler's focus() a real
+    // focus change. (Blurring and refocusing inside the one click handler is what
+    // was device-disproved on iOS.)
+    const preType = (e) => {
+      if (e.target && e.target.closest && e.target.closest('[data-type-entry]')) DateFieldTap.preTypeBlur(this.input);
+    };
+    d.addEventListener('pointerdown', preType);
+    d.addEventListener('mousedown', preType);              // no-PointerEvent fallback
     d.addEventListener('mousedown', (e) => e.preventDefault()); // keep input focus
     d.addEventListener('click', (e) => this.onClick(e));
     document.addEventListener('mousedown', (e) => {
@@ -204,12 +216,19 @@ const DatePicker = {
         // No optimality legend in neutral mode — only the (rare) blocked key.
         ? (blockedLegend ? `<div class="yv-dp-legend">${blockedLegend}</div>` : '')
         : `<div class="yv-dp-legend"><span><i class="s good"></i>posts same day</span><span><i class="s amber"></i>shifts to next business day</span>${blockedLegend}</div>`;
+    // Touch-only escape hatch to manual typing (owner directive 2026-08-23). A
+    // touch field is picker-primary, so this control is the ONLY route to the
+    // keypad; on a fine pointer the field is already typeable and the button
+    // would be noise, so it isn't rendered at all.
+    const typeBtn = DateFieldTap.coarse()
+      ? `<button type="button" data-type-entry="1" aria-label="Type the date manually">Type</button>`
+      : '';
     this.el.innerHTML =
       `<div class="yv-dp-head"><button type="button" data-nav="-1">‹</button><span>${monthName}</span><button type="button" data-nav="1">›</button></div>`
       + `<div class="yv-dp-dow">${['S','M','T','W','T','F','S'].map(x => `<span>${x}</span>`).join('')}</div>`
       + `<div class="yv-dp-grid">${cells}</div>`
       + legend
-      + `<div class="yv-dp-foot"><button type="button" data-today="1">Today</button><button type="button" data-clear="1">Clear</button></div>`;
+      + `<div class="yv-dp-foot"><button type="button" data-today="1">Today</button>${typeBtn}<button type="button" data-clear="1">Clear</button></div>`;
   },
   onClick(e) {
     const nav = e.target.closest('[data-nav]');
@@ -228,6 +247,14 @@ const DatePicker = {
       this.setValue(isoDate(TODAY)); return;
     }
     if (e.target.closest('[data-clear]')) { this.setValue(''); return; }
+    if (e.target.closest('[data-type-entry]')) {
+      // Picker away, keypad up. Capture the field BEFORE close() clears it, and
+      // do the focus synchronously inside this tap so WebKit accepts it.
+      const inp = this.input;
+      this.close();                    // also disarms `inp` (readOnly/inputmode)
+      DateFieldTap.toTyping(inp);
+      return;
+    }
     const day = e.target.closest('[data-day]');
     if (day) this.setValue(day.dataset.day);
   },
@@ -252,8 +279,11 @@ const DatePicker = {
        (readOnly + inputmode="none" — readOnly is what actually suppresses the
        iOS keypad; inputmode="none" is the belt for browsers that honor it),
      • the first tap opens ONLY the picker,
-     • a SECOND tap on the ACTIVE field (picker open on it) closes the picker
-       and hands the field to manual typed entry with the numeric keypad,
+     • manual typed entry is reached from the picker's own "Type" control, which
+       closes the popover, disarms the field and focuses it inside that tap —
+       the one keyboard-raise WebKit honors. (A second tap on the field itself
+       was the original design; iOS refused the blur→focus bounce it needed, so
+       the field-tap now just leaves the open picker alone.)
      • state resets on blur, on day selection / picker close (DatePicker.close),
        on switching to another date field, and on modal close (closeModal) —
        and, because every reset runs through blur, on an unparseable typed value.
@@ -291,20 +321,30 @@ const DateFieldTap = {
       pickerOpen: DatePicker.isOpen() && DatePicker.input === input
     });
     if (decision === 'picker+typing' || decision === 'picker-only') { DatePicker.open(input); return; }
-    if (decision === 'typing') this.toTyping(input);
-    // 'noop' — the field is already in typing mode; leave the caret where the
-    // user put it and keep the picker closed.
+    // 'noop' — either the field is already typing (leave the caret where the user
+    // put it) or the picker is already open on it (leave it open; the picker's
+    // "Type" control is the route to the keypad on touch).
   },
-  // Second tap on the active field: picker away, keypad up.
+  // Pointerdown over the picker's "Type" control, BEFORE the click that raises
+  // the keypad: disarm the field and drop focus so the click's focus() is a
+  // genuine focus MOVE. Blur+focus inside one handler is what iOS refuses.
+  preTypeBlur(input) {
+    const el = input || this.typingInput;
+    if (!el) return;
+    el.readOnly = false;
+    el.setAttribute('inputmode', 'numeric');
+    try { el.blur(); } catch { /* non-fatal */ }
+  },
+  // "Type" tapped: hand the (already disarmed, already blurred) field the keypad.
+  // Must run synchronously inside the tap handler — that user activation is what
+  // lets WebKit raise the keyboard for a programmatic focus.
   toTyping(input) {
-    DatePicker.close();
+    if (!input) return;
     input.readOnly = false;
     input.setAttribute('inputmode', 'numeric');
-    // The field is ALREADY focused (armed + focused by the first tap), and iOS
-    // raises the keypad only when focus MOVES inside a user gesture — so bounce
-    // focus off and back on. The blur listener's reset is harmless here:
-    // typingInput is only claimed after the bounce.
-    try { input.blur(); } catch { /* non-fatal */ }
+    // Belt: if preTypeBlur never ran (no pointer/mouse event reached the picker),
+    // the field may still hold focus — then focus() alone would be a no-op.
+    try { if (document.activeElement === input) input.blur(); } catch { /* non-fatal */ }
     try { input.focus(); } catch { /* non-fatal */ }
     this.typingInput = input;
     try { const n = (input.value || '').length; input.setSelectionRange(n, n); } catch { /* not all inputs support it */ }
