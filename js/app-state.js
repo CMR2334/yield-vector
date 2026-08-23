@@ -134,7 +134,19 @@ const App = {
         // ("season 1 business day").
         ddTransfer: { inDays: 1, seasonDays: 1, backDays: 1 },
         // Banks the user can transfer money FROM (for DD-method ranking).
-        sourceBanks: []
+        sourceBanks: [],
+        // "Entity used" / "Email used" pick-lists (owner directive 2026-08-23).
+        // STATE-BACKED, not hard-coded: these are personal identifiers, so they
+        // live in the user's own synced state and never in source. A device with
+        // no history seeds generic placeholders; a device with offers rebuilds
+        // the lists from the values those offers already carry
+        // (migrateEntityCatalogs in migrations-catalogs.js).
+        entityOptions: [],
+        emailOptions: [],
+        // Auto-default pairs by classified offer kind. EMPTY by default — the
+        // owner picks his own business/personal pair once in Settings and it
+        // syncs; until both halves of a kind are set, nothing is ever prefilled.
+        entityDefaults: { businessEntity: '', businessEmail: '', personalEntity: '', personalEmail: '' }
       },
       offers: [],
       commitments: [],

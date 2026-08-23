@@ -2,8 +2,8 @@ import { App } from './app-state.js';
 import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, formatLocalDateTime, formatMoneyInput, isUsBankHoliday, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
 import { DatePicker, DateFieldTap, ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
 import { _docUserChecks, docImportUpdateApplyCount, docTierSelect, filterTemplateList, renderTemplatePicker } from './doc-import-templates.js';
-import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
-import { debitDeadlineISO, choosablePaths, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
+import { COMMITMENT_TYPES, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, emailCatalog, entityCatalog, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
+import { debitDeadlineISO, choosablePaths, classifyEntityKind, entityAutoFillAllowed, entityDefaultsFor, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
 import { renderLifecycleInfo, renderPipelineStrip } from './render-main-views.js';
 import { render } from './render-shell-overview.js';
 import { REQUIREMENT_FREQUENCIES, REQUIREMENT_FREQ_LABELS, REQUIREMENT_TYPES, REQUIREMENT_TYPE_META, offerDisplayLabel, makeRequirementRow, requirementDeadlineISO, schemaV2Defaults, syncRequirementsWithLegacy } from './requirements-templates.js';
@@ -84,6 +84,9 @@ function rebuildReqMetSection() {
 
 function showOfferModal(offerId = null, seed = null) {
   const isEdit = Boolean(offerId);
+  // Every open starts a fresh entity/email auto-default cycle (see
+  // classifyEntityFromForm) — no classification may leak between offers.
+  resetEntityAutoState();
   // Auto-assign the first unused palette color on new offers so the
   // chart/timeline picks up identity coding without making the user
   // hunt for a swatch. User can clear or change it in the modal.
@@ -437,8 +440,8 @@ function showOfferModal(offerId = null, seed = null) {
                 <label for="f-entity">Entity used</label>
                 <select id="f-entity" class="select" name="entityUsed">
                   <option value="" ${!o.entityUsed ? 'selected' : ''}>—</option>
-                  ${ENTITY_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.entityUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
-                  ${o.entityUsed && !ENTITY_OPTIONS.includes(o.entityUsed) ? `<option value="${escapeAttr(o.entityUsed)}" selected>${escapeHtml(o.entityUsed)} (legacy)</option>` : ''}
+                  ${entityCatalog().map(e => `<option value="${escapeAttr(e)}" ${o.entityUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                  ${o.entityUsed && !entityCatalog().includes(o.entityUsed) ? `<option value="${escapeAttr(o.entityUsed)}" selected>${escapeHtml(o.entityUsed)} (legacy)</option>` : ''}
                 </select>
               </div>
             </div>
@@ -447,8 +450,8 @@ function showOfferModal(offerId = null, seed = null) {
                 <label for="f-email">Email used</label>
                 <select id="f-email" class="select" name="emailUsed">
                   <option value="" ${!o.emailUsed ? 'selected' : ''}>—</option>
-                  ${EMAIL_OPTIONS.map(e => `<option value="${escapeAttr(e)}" ${o.emailUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
-                  ${o.emailUsed && !EMAIL_OPTIONS.includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
+                  ${emailCatalog().map(e => `<option value="${escapeAttr(e)}" ${o.emailUsed === e ? 'selected' : ''}>${escapeHtml(e)}</option>`).join('')}
+                  ${o.emailUsed && !emailCatalog().includes(o.emailUsed) ? `<option value="${escapeAttr(o.emailUsed)}" selected>${escapeHtml(o.emailUsed)} (legacy)</option>` : ''}
                 </select>
               </div>
             </div>
@@ -657,6 +660,13 @@ function showOfferModal(offerId = null, seed = null) {
       // DoC-import tier radio chosen → re-render the preview from the new
       // selection (updates bonus/funding rows + their checked state live).
       if (ev.target.classList && ev.target.classList.contains('doc-tier-radio')) { docTierSelect(Number(ev.target.value)); return; }
+      // Entity/email auto-defaults (2026-08-23). The name fields' `change` is the
+      // manual-entry SETTLE point — it fires when the owner leaves a field he
+      // actually edited, so classification runs once on real, finished text
+      // instead of mid-keystroke. Picking an entity/email himself permanently
+      // opts that field out of auto-fill.
+      if (ev.target.id === 'f-entity' || ev.target.id === 'f-email') { markEntityFieldTouched(ev.target); return; }
+      if (ev.target.id === 'f-bank' || ev.target.id === 'f-offer' || ev.target.id === 'f-doc') classifyEntityFromForm();
       if (ev.target.name === 'offerType') { syncDdSectionUI(); syncReqMetSection(); }
       if (ev.target.name === 'ddReqMode') { syncReqMode(); generateDdDatesFromRequirement(); }
       if (ev.target.id === 'ddreq-freq-every') syncFreqUnit();
@@ -1146,6 +1156,69 @@ function refreshRequirementsSection() {
   // add/remove/type edit, so re-derive the "How is this bonus met?" chooser from
   // the same live state (preserving the in-progress logic/path choice).
   rebuildReqMetSection();
+}
+
+/* ---- ENTITY / EMAIL AUTO-DEFAULTS (owner directive 2026-08-23) -------------
+   A business bonus is opened under the owner's LLC + its inbox, everything else
+   under his personal identity — so the form fills that pair for him instead of
+   making him pick it on every offer. Three rules, all owner-stated:
+     • Classification happens ONCE per offer, at a SETTLE point (the bank/offer
+       name field committed a change, or a DoC import finished applying) — never
+       field-by-field mid-typing or mid-parse.
+     • An auto-fill may replace an EMPTY value or a PREVIOUS AUTO-FILL. It may
+       never replace a value the owner chose (he sometimes runs a business offer
+       under his sole prop — that's a manual adjust, not something to detect).
+     • Ambiguous ⇒ personal.
+   The classification + the default pair are the pure classifyEntityKind /
+   entityDefaultsFor in offer-model.js; this is only the form wiring. State is
+   per-modal and reset on every open (showOfferModal).                        */
+let _entityAutoClassified = false;
+function resetEntityAutoState() { _entityAutoClassified = false; }
+// Mark an Entity/Email select as owner-owned so no later auto-fill touches it.
+// Called from the offer form's change listener (a real user interaction — the
+// auto-fill below never dispatches a change event).
+function markEntityFieldTouched(sel) {
+  if (!sel) return;
+  sel.dataset.userTouched = '1';
+  delete sel.dataset.autofilled;
+}
+function _fillEntityField(sel, value) {
+  if (!sel || !value) return false;
+  const allowed = entityAutoFillAllowed({
+    userTouched: sel.dataset.userTouched === '1',
+    hasValue: !!sel.value,
+    autofilled: sel.dataset.autofilled === '1'
+  });
+  if (!allowed) return false;
+  if (!Array.from(sel.options || []).some(op => op.value === value)) return false;
+  sel.value = value;
+  sel.dataset.autofilled = '1';
+  return true;
+}
+// Classify the offer currently in the form and apply the matching defaults.
+// `force` (the DoC-import path) re-classifies even after a manual settle — the
+// import is new identifying information; the never-overwrite-the-owner rule in
+// _fillEntityField is what keeps that safe.
+function classifyEntityFromForm(opts) {
+  const force = !!(opts && opts.force);
+  if (_entityAutoClassified && !force) return 'unknown';
+  const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const entitySel = document.getElementById('f-entity');
+  const emailSel = document.getElementById('f-email');
+  if (!entitySel && !emailSel) return 'unknown';
+  const kind = classifyEntityKind({
+    bankName: val('f-bank'),
+    offerName: val('f-offer'),
+    docUrl: val('f-doc'),
+    fineText: val('f-notes')
+  });
+  if (kind === 'unknown') return kind;   // nothing identifying yet — try again at the next settle
+  _entityAutoClassified = true;
+  // Values come from the owner's own Settings mapping (never from source).
+  const defs = entityDefaultsFor(kind, (App.state.settings || {}).entityDefaults);
+  _fillEntityField(entitySel, defs.entityUsed);
+  _fillEntityField(emailSel, defs.emailUsed);
+  return kind;
 }
 
 // Live re-render of the modal's slim lifecycle strip + info block when the
@@ -1999,4 +2072,4 @@ function openActionTarget(kind, id) {
   else if (kind === 'event') showEventModal(id);
 }
 
-export { showOfferModal, renderDdRow, requirementWriteThroughTarget, requirementFieldEditable, renderRequirementRow, renderRequirementRows, readUserReqsFromForm, writeUserReqsToForm, buildLiveRequirementsOffer, refreshRequirementsSection, refreshLifecycleStrip, refreshClosedDateField, refreshRequirementDates, handleRequirementInput, addRequirementRow, removeRequirementRow, generateDdDatesFromRequirement, readDdRowsFromForm, addDdRow, removeDdRow, readOfferForm, showCommitmentModal, readCommitmentForm, showEventModal, readEventForm, showSyncHistoryModal, closeModal, addSourceBank, removeSourceBank, openActionTarget };
+export { classifyEntityFromForm, showOfferModal, renderDdRow, requirementWriteThroughTarget, requirementFieldEditable, renderRequirementRow, renderRequirementRows, readUserReqsFromForm, writeUserReqsToForm, buildLiveRequirementsOffer, refreshRequirementsSection, refreshLifecycleStrip, refreshClosedDateField, refreshRequirementDates, handleRequirementInput, addRequirementRow, removeRequirementRow, generateDdDatesFromRequirement, readDdRowsFromForm, addDdRow, removeDdRow, readOfferForm, showCommitmentModal, readCommitmentForm, showEventModal, readEventForm, showSyncHistoryModal, closeModal, addSourceBank, removeSourceBank, openActionTarget };

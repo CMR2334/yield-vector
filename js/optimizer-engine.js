@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, dateTapDecision, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, choosablePaths, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, choosablePaths, classifyEntityKind, entityAutoFillAllowed, entityDefaultsFor, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -2829,6 +2829,52 @@ function testOptimizerPins() {
       dateTapDecision({ coarse: true, typing: true, pickerOpen: false }) === 'noop');
     check('date tap: a fresh field while ANOTHER field is typing still opens the picker',
       dateTapDecision({ coarse: true, typing: false, pickerOpen: false }) === 'picker-only');
+  }
+
+  {
+    // ---- Owner directive 2026-08-23: entity/email auto-defaults by offer kind.
+    // Classification is conservative (identifying text only, ambiguous ⇒
+    // personal) and the VALUES come from the owner's own Settings mapping —
+    // source ships the mechanism empty, so these pins use synthetic settings.
+    const defs = {
+      businessEntity: 'Acme Systems (LLC - EIN)', businessEmail: 'acme@example.com',
+      personalEntity: 'Sample Person (Ind - SSN)', personalEmail: 'person@example.com'
+    };
+    check('entity kind: a business bank/offer name classifies business',
+      classifyEntityKind({ bankName: 'Chase', offerName: 'Business Complete Banking $300' }) === 'business');
+    check('entity kind: a DoC business slug classifies business',
+      classifyEntityKind({ docUrl: 'https://www.doctorofcredit.com/chase-business-complete-banking-300/' }) === 'business');
+    check('entity kind: an ordinary personal offer classifies personal',
+      classifyEntityKind({ bankName: 'Citi', offerName: 'Priority Checking $1500' }) === 'personal');
+    // FALSE-POSITIVE GUARD: fine print that merely MENTIONS business accounts is
+    // not evidence — only identifying text is.
+    check('entity kind: fine print mentioning business accounts stays personal',
+      classifyEntityKind({
+        bankName: 'Citi', offerName: 'Priority Checking $1500',
+        fineText: 'Monthly fee waived for business checking account holders; not available to business customers.'
+      }) === 'personal');
+    check('entity kind: an empty form classifies unknown (nothing is prefilled)',
+      classifyEntityKind({}) === 'unknown');
+    const bizDef = entityDefaultsFor('business', defs);
+    check('entity defaults: business kind prefills the business pair',
+      bizDef.entityUsed === defs.businessEntity && bizDef.emailUsed === defs.businessEmail, JSON.stringify(bizDef));
+    const perDef = entityDefaultsFor('personal', defs);
+    check('entity defaults: personal kind prefills the personal pair',
+      perDef.entityUsed === defs.personalEntity && perDef.emailUsed === defs.personalEmail, JSON.stringify(perDef));
+    const unknownDef = entityDefaultsFor('unknown', defs);
+    check('entity defaults: unknown kind prefills nothing',
+      unknownDef.entityUsed === '' && unknownDef.emailUsed === '');
+    const unsetDef = entityDefaultsFor('business', {});
+    check('entity defaults: UNSET Settings mapping prefills nothing (ships inert)',
+      unsetDef.entityUsed === '' && unsetDef.emailUsed === '');
+    check('entity auto-fill: an empty field may be filled',
+      entityAutoFillAllowed({ userTouched: false, hasValue: false, autofilled: false }) === true);
+    check('entity auto-fill: a previous auto-fill may be replaced',
+      entityAutoFillAllowed({ userTouched: false, hasValue: true, autofilled: true }) === true);
+    check('entity auto-fill: a user-entered value is NEVER overwritten',
+      entityAutoFillAllowed({ userTouched: true, hasValue: true, autofilled: true }) === false);
+    check('entity auto-fill: a pre-existing saved value is not overwritten',
+      entityAutoFillAllowed({ userTouched: false, hasValue: true, autofilled: false }) === false);
   }
 
   const pass = results.filter(r => r.ok).length;

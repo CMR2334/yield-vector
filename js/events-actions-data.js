@@ -3,7 +3,7 @@ import { TODAY, addDays, formatCurrency, formatDateDisplay, formatMoneyInput, is
 import { ddTransferConfig } from './dd-core.js';
 import { DateFieldTap } from './dd-widgets.js';
 import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImportParse, docImportToggle, docWorkerFetchParse, _docHasTiers, toggleTemplatePicker, useTemplate } from './doc-import-templates.js';
-import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
+import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, rememberEntityValues, restorePreV2Backup } from './migrations-catalogs.js';
 import { optimizePlanner } from './optimizer-engine.js';
 import { addDdRow, addRequirementRow, addSourceBank, closeModal, openActionTarget, readCommitmentForm, readEventForm, readOfferForm, removeDdRow, removeRequirementRow, removeSourceBank, showCommitmentModal, showEventModal, showOfferModal, showSyncHistoryModal } from './modals-forms.js';
 import { effectiveOfferForToday, isOfferComplete, mapEffectiveOffers, reconcileClosedDate, shouldSuggestWaiting } from './offer-model.js';
@@ -79,6 +79,12 @@ function bindGlobalEvents() {
     if (e.key === 'Enter' && e.target && e.target.id === 'source-bank-input') {
       e.preventDefault();
       addSourceBank();
+      return;
+    }
+    // Enter in either entity/email catalog input adds the entry.
+    if (e.key === 'Enter' && e.target && (e.target.id === 'entity-option-input' || e.target.id === 'email-option-input')) {
+      e.preventDefault();
+      addCatalogOption(e.target.id === 'entity-option-input' ? 'entityOptions' : 'emailOptions', e.target.id);
       return;
     }
     // Activate keyboard-focused upcoming-action rows with Enter or Space
@@ -232,6 +238,12 @@ function onClick(e) {
 
     case 'add-source-bank': addSourceBank(); break;
     case 'remove-source-bank': removeSourceBank(target.dataset.bank); break;
+    // Entity/email pick-list editor (2026-08-23). The lists are the user's own
+    // synced data — source ships none of them.
+    case 'add-entity-option': addCatalogOption('entityOptions', 'entity-option-input'); break;
+    case 'remove-entity-option': removeCatalogOption('entityOptions', target.dataset.value); break;
+    case 'add-email-option': addCatalogOption('emailOptions', 'email-option-input'); break;
+    case 'remove-email-option': removeCatalogOption('emailOptions', target.dataset.value); break;
 
     // Stat-card click-throughs from the overview hero
     case 'goto-offers-included':
@@ -322,11 +334,13 @@ function onChange(e) {
       : (el.type === 'number' ? Number(el.value) : el.value);
     if (isMoneySetting) value = Math.max(0, value);
     if (key === 'projectionHorizonDays') value = Math.max(30, Math.min(1825, value));
-    // Nested settings (e.g. "ddTransfer.inDays") — clamp transfer legs 0–10.
+    // Nested settings. "ddTransfer.*" legs are numeric and clamped 0–10; the
+    // entity/email default pickers ("entityDefaults.*") are plain catalog
+    // strings and pass through untouched.
     if (key.includes('.')) {
       const [parent, child] = key.split('.');
-      value = Math.max(0, Math.min(10, Number(value) || 0));
-      App.update(s => { s.settings[parent] = { ...(s.settings[parent] || {}), [child]: value }; });
+      const nested = parent === 'ddTransfer' ? Math.max(0, Math.min(10, Number(value) || 0)) : value;
+      App.update(s => { s.settings[parent] = { ...(s.settings[parent] || {}), [child]: nested }; });
       return;
     }
     App.update(s => { s.settings[key] = value; });
@@ -455,6 +469,37 @@ function toggleAdvancedForm(btn) {
 /* ============================================================
    ACTIONS
    ============================================================ */
+// Add a typed value to one of the settings-backed pick-lists (entityOptions /
+// emailOptions). Trimmed, deduped case-insensitively, order preserved — the
+// same idiom as addSourceBank, over the user's own synced catalogs.
+function addCatalogOption(key, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const value = (input.value || '').trim();
+  if (!value) return;
+  App.update(s => {
+    const list = Array.isArray(s.settings[key]) ? s.settings[key] : [];
+    if (!list.some(v => String(v).toLowerCase() === value.toLowerCase())) list.push(value);
+    s.settings[key] = list;
+  });
+  input.value = '';
+  render();
+}
+
+// Remove a value from a pick-list. An auto-fill default pointing at the removed
+// value is cleared with it, so Settings can never offer a default that is no
+// longer a real option.
+function removeCatalogOption(key, value) {
+  if (!value) return;
+  App.update(s => {
+    s.settings[key] = (Array.isArray(s.settings[key]) ? s.settings[key] : []).filter(v => v !== value);
+    const ed = s.settings.entityDefaults || {};
+    for (const k of Object.keys(ed)) { if (ed[k] === value) ed[k] = ''; }
+    s.settings.entityDefaults = ed;
+  });
+  render();
+}
+
 function saveOfferFromForm(id, isEdit) {
   const offer = readOfferForm(id, isEdit);
   if (!offer) return;
@@ -467,6 +512,9 @@ function saveOfferFromForm(id, isEdit) {
     const idx = s.offers.findIndex(o => o.id === id);
     if (idx >= 0) s.offers[idx] = offer;
     else s.offers.push(offer);
+    // Whatever entity/email this offer committed joins the pick-lists (2026-08-23
+    // — the catalogs are the user's own synced data, so they grow from use).
+    rememberEntityValues(s, offer.entityUsed, offer.emailUsed);
   });
   let savedTemplate = false;
   if (alsoTemplate) {
@@ -1558,8 +1606,8 @@ function seedSampleData(state) {
       confidence: 'confirmed',
       notes: 'Hold period is 60 days from account open. Funding later shortens the actual lock.',
       docUrl: '',
-      entityUsed: 'Collin Rekowski (Ind - SSN)',
-      emailUsed: 'collinrekowski1@gmail.com',
+      entityUsed: 'Individual (SSN)',
+      emailUsed: 'demo@example.com',
       // Schema-v2 churnability example: re-eligible 12 months after the bonus
       // posts. Intentionally left otherwise legacy-shaped (no requirements[]) so
       // it still exercises the v2 migration + derivation on load.
@@ -1592,7 +1640,7 @@ function seedSampleData(state) {
       confidence: 'likely',
       notes: '$50k tier',
       docUrl: 'https://www.doctorofcredit.com/',
-      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      entityUsed: 'Individual (SSN)',
       emailUsed: ''
     },
     {
@@ -1612,7 +1660,7 @@ function seedSampleData(state) {
       confidence: 'likely',
       notes: '',
       docUrl: '',
-      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      entityUsed: 'Individual (SSN)',
       emailUsed: ''
     },
     {
@@ -1632,7 +1680,7 @@ function seedSampleData(state) {
       confidence: 'likely',
       notes: '',
       docUrl: '',
-      entityUsed: 'Collin Rekowski (Ind - SSN)',
+      entityUsed: 'Individual (SSN)',
       emailUsed: ''
     },
     {

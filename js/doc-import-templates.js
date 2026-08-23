@@ -1,7 +1,7 @@
 import { App } from './app-state.js';
 import { formatCompactCurrency, formatDateDisplay, formatDateMedium, formatMoneyInput, formatDollarInput, parseMoneyInput, uid } from './date-format-core.js';
 import { parseDocPost } from './doc-parser.js';
-import { generateDdDatesFromRequirement, readUserReqsFromForm, refreshLifecycleStrip, refreshRequirementsSection, showOfferModal, writeUserReqsToForm } from './modals-forms.js';
+import { classifyEntityFromForm, generateDdDatesFromRequirement, readUserReqsFromForm, refreshLifecycleStrip, refreshRequirementsSection, showOfferModal, writeUserReqsToForm } from './modals-forms.js';
 import { offerDisplayLabel, makeRequirementRow, requirementSummary, templateToOffer } from './requirements-templates.js';
 import { ErrCode, logError } from './runtime-status.js';
 import { Sync } from './sync-pwa.js';
@@ -891,6 +891,10 @@ function docImportApply() {
   // reflect the freshly-applied legacy values (funding/debit → derived rows).
   if (typeof refreshRequirementsSection === 'function') refreshRequirementsSection();
   if (typeof refreshLifecycleStrip === 'function') refreshLifecycleStrip();
+  // The import has SETTLED — this is the one classification point for an imported
+  // offer (never per-field mid-parse). `force` lets it re-decide over any earlier
+  // manual settle; the never-overwrite-the-owner rule still protects his picks.
+  if (typeof classifyEntityFromForm === 'function') classifyEntityFromForm({ force: true });
   const status = document.getElementById('doc-import-status');
   if (status) { status.textContent = `Applied ${applied} field${applied === 1 ? '' : 's'} to the form — review, then Save.`; status.className = 'doc-import-status success'; }
   if (typeof toast === 'function') toast(`Applied ${applied} field${applied === 1 ? '' : 's'} — review and Save`);

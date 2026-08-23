@@ -6,11 +6,17 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
+// Two in-app pin suites run here: the optimizer engine's own, and (2026-08-23)
+// the entity/email catalog migration in migrations-catalogs.js. The catalog
+// pins live outside optimizer-engine deliberately — that module's contract is
+// "no App/Sync/render imports" — but they are the same kind of bare-node
+// assertion, so the release battery stays a single command.
 const script = `
-  import('./js/optimizer-engine.js')
-    .then(({ testOptimizerPins }) => {
-      const result = testOptimizerPins();
-      process.exit(result.fail ? 1 : 0);
+  Promise.all([import('./js/optimizer-engine.js'), import('./js/migrations-catalogs.js')])
+    .then(([opt, cat]) => {
+      const a = opt.testOptimizerPins();
+      const b = cat.testEntityCatalogPins();
+      process.exit((a.fail || b.fail) ? 1 : 0);
     })
     .catch(err => {
       console.error(err && err.stack ? err.stack : err);

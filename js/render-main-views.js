@@ -2,7 +2,7 @@ import { App } from './app-state.js';
 import { TODAY, addDays, daysBetween, expandEventInstances, formatCompactCurrency, formatCurrency, formatDateDisplay, formatDateLong, formatDateMedium, formatDateShort, formatLocalDateTime, formatMoneyInput, formatDollarInput, formatPercent, isoDate, parseDate, startOfDay } from './date-format-core.js';
 import { DDMethods, directDepositEffectiveDate } from './dd-widgets.js';
 import { updateSyncButtonsLive } from './events-actions-data.js';
-import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
+import { CONFIDENCE_LABELS, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, emailCatalog, entityCatalog, hasPreV2Backup, offerColorHex } from './migrations-catalogs.js';
 import { CHURN_ANCHOR_LABELS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, annualizedReturn, churnEligibleDate, hasGenuinePriorRun, churnSnoozeActive, ddCapitalTime, debitDeadlineISO, depositDeadline, effectiveOfferForToday, expectedBonusWindow, isOfferComplete, lifecycleCaption, lifecycleStage, lockStartDate, mapEffectiveOffers, offerIsActiveForProjection, offerIssues, pathState, requirementActive, safeToCloseDate, shouldSuggestWaiting, simpleReturn, withdrawalEligibleDate } from './offer-model.js';
 import { effectiveHorizonDays, generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { displayOfferName, offerDisplayLabel, requirementDeadlineISO, requirementDisplayLabel } from './requirements-templates.js';
@@ -1438,8 +1438,28 @@ function renderOffersTable(offers) {
 /* ============================================================
    SETTINGS VIEW
    ============================================================ */
+// One "auto-fill default" picker: a select over a catalog list, plus the
+// current value as a (legacy) option when it is no longer in the catalog, so a
+// stored default can never silently vanish from the UI that owns it.
+function _entityDefaultPicker(label, settingKey, options, current) {
+  const cur = typeof current === 'string' ? current : '';
+  const id = 's-' + settingKey.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  return `
+        <div class="field">
+          <div class="field-box">
+            <label for="${id}">${escapeHtml(label)}</label>
+            <select id="${id}" class="select" data-setting="${escapeAttr(settingKey)}">
+              <option value="" ${cur ? '' : 'selected'}>—</option>
+              ${options.map(o => `<option value="${escapeAttr(o)}" ${cur === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+              ${cur && !options.includes(cur) ? `<option value="${escapeAttr(cur)}" selected>${escapeHtml(cur)} (not in list)</option>` : ''}
+            </select>
+          </div>
+        </div>`;
+}
+
 function renderSettings() {
   const s = App.state.settings;
+  const ed = s.entityDefaults || {};
   return `
     <div class="section-header">
       <div>
@@ -1555,6 +1575,45 @@ function renderSettings() {
               </button>
             </span>`).join('')}</div>`
         : `<p style="font-size:13px;color:var(--text-tertiary);">No source banks added yet.</p>`}
+    </section>
+
+    <section class="form-section">
+      <h2>Entities &amp; emails</h2>
+      <p class="section-desc">The identities you open offers under. These lists live in <em>your</em> data (they sync with everything else) — nothing personal is stored in the app's code. On upgrade they were rebuilt from the entity/email values your existing offers already carry, and anything you save on an offer joins them automatically.</p>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);">
+        <input id="entity-option-input" class="input" type="text" placeholder="e.g. Jane Doe (Ind - SSN)" style="max-width:280px;" autocomplete="off" />
+        <button class="btn btn-secondary" data-action="add-entity-option">+ Add entity</button>
+      </div>
+      ${entityCatalog().length
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:var(--space-4);">${entityCatalog().map(e => `
+            <span class="chip chip-accent" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 12px;font-size:13px;text-transform:none;letter-spacing:0;">
+              ${escapeHtml(e)}
+              <button class="btn-icon" data-action="remove-entity-option" data-value="${escapeAttr(e)}" aria-label="Remove ${escapeAttr(e)}" style="width:18px;height:18px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              </button>
+            </span>`).join('')}</div>`
+        : `<p style="font-size:13px;color:var(--text-tertiary);margin-bottom:var(--space-4);">No entities yet.</p>`}
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);">
+        <input id="email-option-input" class="input" type="email" placeholder="e.g. you@example.com" style="max-width:280px;" autocomplete="off" />
+        <button class="btn btn-secondary" data-action="add-email-option">+ Add email</button>
+      </div>
+      ${emailCatalog().length
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:var(--space-4);">${emailCatalog().map(e => `
+            <span class="chip chip-accent" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 12px;font-size:13px;text-transform:none;letter-spacing:0;">
+              ${escapeHtml(e)}
+              <button class="btn-icon" data-action="remove-email-option" data-value="${escapeAttr(e)}" aria-label="Remove ${escapeAttr(e)}" style="width:18px;height:18px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+              </button>
+            </span>`).join('')}</div>`
+        : `<p style="font-size:13px;color:var(--text-tertiary);margin-bottom:var(--space-4);">No emails yet.</p>`}
+      <h3 style="font-size:14px;margin:0 0 var(--space-2);">Auto-fill defaults by offer kind</h3>
+      <p class="section-desc">When a new offer looks like a <strong>business</strong> offer (the bank or offer name says so), the form prefills this pair; anything else prefills the personal pair. Leave a picker on "—" and nothing is prefilled for that kind. A value you choose yourself on an offer is never overwritten.</p>
+      <div class="form-grid">
+        ${_entityDefaultPicker('Business entity', 'entityDefaults.businessEntity', entityCatalog(), ed.businessEntity)}
+        ${_entityDefaultPicker('Business email', 'entityDefaults.businessEmail', emailCatalog(), ed.businessEmail)}
+        ${_entityDefaultPicker('Personal entity', 'entityDefaults.personalEntity', entityCatalog(), ed.personalEntity)}
+        ${_entityDefaultPicker('Personal email', 'entityDefaults.personalEmail', emailCatalog(), ed.personalEmail)}
+      </div>
     </section>
 
     <section class="form-section">

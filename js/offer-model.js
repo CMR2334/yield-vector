@@ -46,6 +46,57 @@ function debitDeadlineISO(offer) {
   return isoDate(addDays(signup, days));
 }
 
+/* ---- ENTITY KIND (owner directive 2026-08-23) ------------------------------
+   Business bonuses are opened under the owner's LLC with its inbox; everything
+   else under his personal identity. Both halves below are PURE so the offer
+   modal and the DoC import share one classification and one default pair.
+
+   classifyEntityKind reads IDENTIFYING text only — bank name, offer name, the
+   DoC post title / URL slug. Fine print is DELIBERATELY not evidence: a
+   personal-checking post whose fee waiver mentions "business checking accounts"
+   is a PERSONAL offer, and the owner's stated default when a post is ambiguous
+   is personal. `fineText` therefore only distinguishes "nothing entered yet"
+   (unknown → don't touch the form) from "an offer with no business signal"
+   (personal). Never business.                                                */
+const BUSINESS_NAME_RE = /\b(business|biz|commercial|corporate|corp|merchant)\b/i;
+function classifyEntityKind(sources) {
+  const s = sources || {};
+  const str = (x) => String(x == null ? '' : x);
+  // The URL slug is hyphen/slash-separated; flatten separators so a word inside
+  // it ("…/chase-business-complete-banking-300/") is a real word boundary.
+  const nameText = [str(s.bankName), str(s.offerName), str(s.docTitle), str(s.docUrl).replace(/[^A-Za-z0-9]+/g, ' ')]
+    .join(' ');
+  if (BUSINESS_NAME_RE.test(nameText)) return 'business';
+  if (nameText.trim() || str(s.fineText).trim()) return 'personal';
+  return 'unknown';
+}
+
+// The default {entityUsed, emailUsed} pair for a classified kind, read from the
+// user's OWN Settings mapping (settings.entityDefaults — passed in, so this
+// module stays free of App/state imports and the values never live in source).
+// Unset settings ⇒ empty strings ⇒ the caller prefills nothing: the mechanism
+// ships inert and only starts filling once the owner picks his two pairs in
+// Settings (they then sync to every device). 'unknown' never fills.
+function entityDefaultsFor(kind, entityDefaults) {
+  const d = entityDefaults || {};
+  const str = (x) => (typeof x === 'string' ? x.trim() : '');
+  if (kind === 'business') return { entityUsed: str(d.businessEntity), emailUsed: str(d.businessEmail) };
+  if (kind === 'personal') return { entityUsed: str(d.personalEntity), emailUsed: str(d.personalEmail) };
+  return { entityUsed: '', emailUsed: '' };
+}
+
+// May an auto-fill write into an Entity/Email field? The owner's rule: an
+// auto-fill may replace an EMPTY value or a PREVIOUS auto-fill, and may NEVER
+// replace a value he chose himself (he sometimes runs a business offer under his
+// sole prop — that is a manual adjust, not something to detect). PURE, so the
+// rule is pinned independently of the DOM that carries the flags.
+function entityAutoFillAllowed(field) {
+  const f = field || {};
+  if (f.userTouched) return false;
+  if (f.hasValue && !f.autofilled) return false;
+  return true;
+}
+
 // Offer types that seed the HELD LUMP family in pathFamilyFlags (the family map's
 // legacy-field fallback: an enumerated held type + requiredFundingAmount>0 → hold
 // family present). 'other' is a legacy catch-all normalized to 'new-funds-held'
@@ -942,4 +993,4 @@ function offerIsActiveForProjection(offer, includedOverride = null) {
   return Boolean(offer.includeInScenario);
 }
 
-export { effectiveFundingDate, bizDayISO, depositDeadline, debitDeadlineISO, pathState, choosablePaths, offerPathFamilies, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, isPreAccountOffer, effectiveOfferForToday, mapEffectiveOffers, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };
+export { effectiveFundingDate, bizDayISO, classifyEntityKind, entityDefaultsFor, entityAutoFillAllowed, depositDeadline, debitDeadlineISO, pathState, choosablePaths, offerPathFamilies, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, lockStartDate, isPreAccountOffer, effectiveOfferForToday, mapEffectiveOffers, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS, LIFECYCLE_STAGES, LIFECYCLE_STAGE_LABELS, lifecycleStage, lifecycleCaption, reconcileClosedDate, allRequirementsDone, shouldSuggestWaiting, bonusWindowAnchor, expectedBonusWindow, safeToCloseDate, CHURN_HORIZON_DAYS, CHURN_FEED_LOOKAHEAD_DAYS, CHURN_FEED_PAST_GRACE_DAYS, CHURN_ANCHOR_LABELS, churnAnchorDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive, simpleReturn, ddCapitalTime, annualizedReturn, isOfferComplete, offerIssues, offerIsActiveForProjection };

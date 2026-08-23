@@ -50,6 +50,9 @@ function migrateOffersToSchemaV2(state) {
     // Always-on: refresh derived rows from current legacy values (idempotent).
     syncRequirementsWithLegacy(o);
   }
+  // Entity/email pick-lists: rebuild from the values this state's own offers
+  // carry (2026-08-23 — the lists left source, see migrateEntityCatalogs).
+  migrateEntityCatalogs(state);
   return state;
 }
 
@@ -242,16 +245,146 @@ function applyCategorySign(amount, cat) {
   return s * Math.abs(amount);
 }
 
-const ENTITY_OPTIONS = [
-  'Collin Rekowski (Ind - SSN)',
-  'Collin Rekowski (SP - EIN)',
-  'Ethir Systems (LLC - EIN)'
-];
+/* ============================================================
+   ENTITY / EMAIL CATALOGS (owner directive 2026-08-23)
+   ============================================================
+   The "Entity used" / "Email used" pick-lists used to be hard-coded here. They
+   are personal identifiers and this repo is public, so they now live in the
+   user's own SYNCED state (settings.entityOptions / settings.emailOptions) and
+   source carries only neutral placeholders. Nothing is lost on upgrade:
+   migrateEntityCatalogs rebuilds each list from the UNION of the values the
+   user's OWN offers already carry, so an existing device reconstitutes its
+   catalog from its own private data on first load of this version.
+   ============================================================ */
+// Seeded ONLY on a device with no entity history at all (fresh install, nothing
+// synced yet). Deliberately generic — a real identity is something the user
+// types in Settings or inherits from their own offers.
+const PLACEHOLDER_ENTITY_OPTIONS = ['Individual (SSN)', 'Business (EIN)'];
 
-const EMAIL_OPTIONS = [
-  'cmreko91@gmail.com',
-  'collinrekowski1@gmail.com',
-  'ethirsystems@gmail.com'
-];
+// Live catalogs (absent-safe reads of the synced settings). Every consumer —
+// the offer form's selects, the Settings editor, the auto-default pickers —
+// goes through these two so there is a single source of truth.
+function entityCatalog() {
+  const s = App.state && App.state.settings;
+  return (s && Array.isArray(s.entityOptions) ? s.entityOptions : []).filter(Boolean);
+}
+function emailCatalog() {
+  const s = App.state && App.state.settings;
+  return (s && Array.isArray(s.emailOptions) ? s.emailOptions : []).filter(Boolean);
+}
 
-export { migrateOffersToSchemaV2, hasPreV2Backup, clearPreV2Backup, restorePreV2Backup, CONFIDENCE_LABELS, OFFER_COLOR_PALETTE, OFFER_COLOR_BY_NAME, offerColorHex, usedOfferColors, firstUnusedOfferColor, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, COMMITMENT_TYPES, EVENT_CATEGORIES, categorySign, applyCategorySign, ENTITY_OPTIONS, EMAIL_OPTIONS };
+// Union-merge helper: keep existing order, append new values, drop blanks and
+// exact duplicates. PURE.
+function _mergeCatalog(existing, additions) {
+  const out = [];
+  const seen = new Set();
+  for (const v of [].concat(existing || [], additions || [])) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+// Rebuild the catalogs from the user's own data. IDEMPOTENT: re-running over an
+// already-migrated state is a no-op (the union of a set with its own members).
+// Runs inside migrateOffersToSchemaV2, so it fires at boot AND after every sync
+// pull/restore — a device that pulls a peer's offers picks up their entity
+// values too. Placeholders seed ONLY when nothing at all is known.
+function migrateEntityCatalogs(state) {
+  if (!state || !state.settings) return state;
+  const s = state.settings;
+  const offers = Array.isArray(state.offers) ? state.offers : [];
+  // Tolerant guard for the defaults map (older payloads never wrote it), same
+  // idiom as the templates/action_done guards above. Idempotent.
+  s.entityDefaults = (s.entityDefaults && typeof s.entityDefaults === 'object' && !Array.isArray(s.entityDefaults))
+    ? s.entityDefaults
+    : { businessEntity: '', businessEmail: '', personalEntity: '', personalEmail: '' };
+  const ents = _mergeCatalog(s.entityOptions, offers.map(o => o && o.entityUsed));
+  const mails = _mergeCatalog(s.emailOptions, offers.map(o => o && o.emailUsed));
+  s.entityOptions = ents.length ? ents : PLACEHOLDER_ENTITY_OPTIONS.slice();
+  s.emailOptions = mails;
+  return state;
+}
+
+// Add values the user committed on an offer to the catalogs (the "anything you
+// use joins the list" affordance — covers DoC-imported and legacy values that
+// never passed through the Settings editor). Caller supplies the mutable state.
+function rememberEntityValues(state, entityUsed, emailUsed) {
+  if (!state || !state.settings) return state;
+  state.settings.entityOptions = _mergeCatalog(state.settings.entityOptions, [entityUsed]);
+  state.settings.emailOptions = _mergeCatalog(state.settings.emailOptions, [emailUsed]);
+  return state;
+}
+
+// ---- Entity-catalog pins (2026-08-23) ---------------------------------------
+// Bare-node runnable (this module imports no DOM at load). Run from the optimizer
+// harness: docs/fixtures/optimizer/harness/optimizer-pins.js.
+function testEntityCatalogPins() {
+  const results = [];
+  const check = (name, ok, extra = '') => results.push({ name, ok: !!ok, extra });
+  const mkState = (over) => Object.assign({ settings: { entityOptions: [], emailOptions: [] }, offers: [] }, over || {});
+
+  {
+    // Union rebuild from the user's own offers — the upgrade path that lets the
+    // hard-coded lists leave source without the owner losing his entries.
+    const st = mkState({
+      offers: [
+        { entityUsed: 'Entity A', emailUsed: 'a@example.com' },
+        { entityUsed: 'Entity B', emailUsed: 'b@example.com' },
+        { entityUsed: 'Entity A', emailUsed: 'a@example.com' },   // duplicate
+        { entityUsed: '', emailUsed: '' },                        // blanks ignored
+        null
+      ]
+    });
+    migrateEntityCatalogs(st);
+    check('catalog migration: rebuilt from the offers\' own values, deduped, in order',
+      st.settings.entityOptions.join('|') === 'Entity A|Entity B'
+      && st.settings.emailOptions.join('|') === 'a@example.com|b@example.com',
+      st.settings.entityOptions.join('|') + ' / ' + st.settings.emailOptions.join('|'));
+    const before = JSON.stringify(st.settings);
+    migrateEntityCatalogs(st);
+    migrateEntityCatalogs(st);
+    check('catalog migration: idempotent (re-running changes nothing)', JSON.stringify(st.settings) === before);
+  }
+  {
+    // Existing catalog entries survive and lead; new offer values append.
+    const st = mkState({
+      settings: { entityOptions: ['Kept First'], emailOptions: ['kept@example.com'] },
+      offers: [{ entityUsed: 'Added Later', emailUsed: 'added@example.com' }]
+    });
+    migrateEntityCatalogs(st);
+    check('catalog migration: existing entries keep their order, new values append',
+      st.settings.entityOptions.join('|') === 'Kept First|Added Later'
+      && st.settings.emailOptions.join('|') === 'kept@example.com|added@example.com');
+  }
+  {
+    // Fresh device, nothing synced: generic placeholders only — never a real
+    // identity, because source carries none.
+    const st = mkState();
+    migrateEntityCatalogs(st);
+    check('catalog migration: a fresh device gets only the generic placeholders',
+      st.settings.entityOptions.join('|') === PLACEHOLDER_ENTITY_OPTIONS.join('|') && st.settings.emailOptions.length === 0,
+      st.settings.entityOptions.join('|'));
+  }
+  {
+    // Values committed on an offer join the lists (the "anything you use joins
+    // the list" affordance), deduped.
+    const st = mkState({ settings: { entityOptions: ['Entity A'], emailOptions: [] } });
+    rememberEntityValues(st, 'Entity A', 'new@example.com');
+    rememberEntityValues(st, 'Entity C', 'new@example.com');
+    check('catalog: a saved offer\'s entity/email join the lists without duplicating',
+      st.settings.entityOptions.join('|') === 'Entity A|Entity C' && st.settings.emailOptions.join('|') === 'new@example.com');
+  }
+
+  const pass = results.filter(r => r.ok).length;
+  const fail = results.length - pass;
+  if (typeof console !== 'undefined') {
+    console.log(`testEntityCatalogPins: PASS ${pass}  FAIL ${fail}`);
+    for (const r of results) console.log(`  ${r.ok ? 'ok ' : 'X  '}${r.name}${r.extra ? '  [' + r.extra + ']' : ''}`);
+  }
+  return { pass, fail, results };
+}
+
+export { migrateOffersToSchemaV2, migrateEntityCatalogs, testEntityCatalogPins, rememberEntityValues, entityCatalog, emailCatalog, _mergeCatalog, PLACEHOLDER_ENTITY_OPTIONS, hasPreV2Backup, clearPreV2Backup, restorePreV2Backup, CONFIDENCE_LABELS, OFFER_COLOR_PALETTE, OFFER_COLOR_BY_NAME, offerColorHex, usedOfferColors, firstUnusedOfferColor, CONFIRMED_OFFER_STATUSES, HYPOTHETICAL_OFFER_STATUSES, COMMITMENT_TYPES, EVENT_CATEGORIES, categorySign, applyCategorySign };
