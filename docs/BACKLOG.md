@@ -58,6 +58,57 @@ Priorities are owner-directed — nothing here self-dispatches.
   approval. Only the unused class rule was deleted; the `--card-soft` color
   variable and all live uses remain.
 
+## Owner directives — 2026-08-23 (approved specs, queued for next build session)
+- **Date-input tap behavior (offer + event forms)** — FIRST tap on any date
+  bubble opens ONLY the custom `yv-date` picker: no iOS keypad (suppress the
+  focus keyboard, e.g. `inputmode="none"` until armed). A SECOND tap on the
+  already-active bubble switches to manual typed entry (numeric keypad).
+  Picker is the primary input mode; typing is opt-in. Owner spec from a
+  2026-08-23 phone screenshot where the keypad + AutoFill bar covered the
+  open picker on "Planned funding date". Typed-violation hints unchanged.
+- **DoC import promotion + single "DoC URL" field** — promote the import out
+  of the collapsed Advanced disclosure (today nothing on the modal surface
+  hints it exists). MERGE with the existing source-URL bubble into one field
+  labeled **"DoC URL"**; the import operates directly from it (URL fetch via
+  the deployed Worker; pasted post text stays supported). Remove the
+  redundant second input. Owner: "having a 2nd input/url bubble seems
+  redundant."
+- **Entity/email auto-defaults by offer kind** — when an offer (manual entry
+  OR DoC import) is detected as a BUSINESS offer, prefill "Entity used" +
+  email with the owner's business defaults; PERSONAL offers prefill his
+  personal defaults; always manually overridable (owner sometimes uses his
+  sole prop for business offers). PRIVACY CONSTRAINT: this repo is public —
+  store the default VALUES in Settings (synced app state), never hard-coded
+  in source; ship the mechanism with empty defaults + a one-time Settings
+  prompt. The owner's actual values are recorded in the assistant's private
+  session memory and get entered on his device at build time.
+- **Offer-card creation/input performance + card layout improvements** —
+  owner has observations queued ("mostly with offer card creation/input, and
+  card layout") and will direct these in a future session; do not guess at
+  scope before he does.
+- **Automated mobile visual review (feasibility assessed 2026-08-23)** —
+  owner asked how to stop relying on his eyes for per-release mobile checks
+  ("a mobile app plugin or something"). Verdict: a native/TestFlight-style
+  review channel is NOT feasible/worth it (YV is a web PWA; no native
+  wrapper exists and building one buys nothing). What IS feasible, phased:
+  **(P1) commit the QA harness** from run 2026-07-29-ios-simulator-mobile-qa
+  (Playwright probes + simulator driver + frozen fixture) as a repo suite so
+  every release auto-runs the OBJECTIVE checks — breakpoint-matrix overflow,
+  label clipping, tap-target geometry, console/diagnostics, external-request
+  guard. That run proved the probes catch real defects (3 P2s + 2
+  Codex-flagged regressions) without human eyes.
+  **(P2) golden-screenshot diffing** — store approved per-surface/per-width
+  goldens; each release pixel-diffs and auto-generates a phone-friendly
+  before/after gallery (private artifact) showing ONLY changed regions;
+  owner reviews diffs in under a minute instead of sweeping the app.
+  **(P3) taste-only residue** — the gallery ends with any eye-call items;
+  owner approve/reject from the phone becomes the stable-tag gate.
+  Costs, stated honestly: goldens churn on intentional UI changes (needs an
+  approval step); simulator rotation still needs the macOS accessibility
+  permission; Playwright becomes a dev-only dep in a no-build repo
+  (mitigate: live under docs/fixtures/e2e with `npm i --no-save`, jsdom-
+  harness style). Recommendation: P1 next app-touching session, P2 after.
+
 ## Proposed — 2026-07-09 night review (owner-requested ideation; awaiting owner picks, nothing self-dispatches)
 Timeline+chart review and project-wide review both by Codex read-only passes (logs were
 /tmp/yv-timeline-review.log, /tmp/yv-project-review.log; key content preserved here).

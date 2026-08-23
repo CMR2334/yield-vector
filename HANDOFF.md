@@ -17,7 +17,10 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-07-29, Round 93)
+## Current state (as of 2026-08-23, Round 94)
+
+- **R94 (2026-08-23 — owner decision round, NO code shipped; specs recorded in docs/BACKLOG.md "Owner directives — 2026-08-23"):**
+  Owner reviewed v2026.07.29 on his phone (diagnostics screenshot: version live, sync configured, only benign transient E_SYNC_PUSH fail-closed entries). Decisions captured: (1) date inputs — picker-primary, keypad only on SECOND tap (spec from his screenshot of the keypad covering the picker); (2) DoC import PROMOTED + merged into ONE "DoC URL" field (kill the redundant bubble, import runs from it); (3) entity/email auto-defaults by personal-vs-business detection, values stored in synced Settings NOT public source (actual values in assistant private memory), always overridable; (4) offer-card creation/input perf + card layout improvements deferred — OWNER WILL DIRECT, don't guess scope; (5) automated mobile visual review feasibility recorded (harness-as-suite → golden diffing → phone approval gallery; native app channel rejected as infeasible). Still open from him: stable-2026-07-29 tag verdict (device pass in progress — do NOT cut without his word), eye-call (a) neutral event picker (recommend keep-neutral), (c) chooser path order card-spend-first vs hold-first, plus run-1's Clause-B dollar-days question and the two keep-recommendations (Move-to-today no-auto-include; Today/Clear advisory bypass). Note: earlier in-session date confusion — real date is 2026-08-23 (his phone's August log entries are past, not future).
 
 - **R93 (v2026.07.29 — simulator+desktop QA release: 3 P2 layout fixes, 13 P3 polish, Codex folds):**
   Orchestrated run `.claude/orchestrator/runs/2026-07-29-ios-simulator-mobile-qa.md`, steps 1–4. QA ran on **real iOS WebKit** (iPhone 17 Pro simulator) **+ Playwright desktop**, both against a **frozen synthetic fixture** — external-request counter **0** on every pass, owner data (live site + Gist) never touched. **0 P1s found.**
