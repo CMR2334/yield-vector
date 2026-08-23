@@ -1,4 +1,4 @@
-import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
+import { addBusinessDays, addDays, addMonthsClamped, dateTapDecision, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
 import { annualizedReturn, bizDayISO, choosablePaths, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
@@ -2813,6 +2813,22 @@ function testOptimizerPins() {
     const orderDd = choosablePaths(ddOr);
     check('chooser path order: dd still leads its either/or',
       orderDd.length === 2 && orderDd[0] === 'dd' && orderDd[1] === 'debit', orderDd.join(','));
+  }
+
+  {
+    // ---- Owner directive 2026-08-23: picker-primary date bubbles. The pure
+    // half of the tap state machine (date-format-core.dateTapDecision) decides
+    // every transition; DateFieldTap only executes it against the DOM.
+    check('date tap: desktop (fine pointer) keeps picker + typing',
+      dateTapDecision({ coarse: false, typing: false, pickerOpen: false }) === 'picker+typing');
+    check('date tap: first touch tap opens the picker only (no keypad)',
+      dateTapDecision({ coarse: true, typing: false, pickerOpen: false }) === 'picker-only');
+    check('date tap: second tap on the ACTIVE field switches to typed entry',
+      dateTapDecision({ coarse: true, typing: false, pickerOpen: true }) === 'typing');
+    check('date tap: a tap inside an already-typing field is a no-op',
+      dateTapDecision({ coarse: true, typing: true, pickerOpen: false }) === 'noop');
+    check('date tap: a fresh field while ANOTHER field is typing still opens the picker',
+      dateTapDecision({ coarse: true, typing: false, pickerOpen: false }) === 'picker-only');
   }
 
   const pass = results.filter(r => r.ok).length;

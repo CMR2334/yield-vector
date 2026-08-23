@@ -1,7 +1,7 @@
 import { App } from './app-state.js';
 import { TODAY, addDays, formatCurrency, formatDateDisplay, formatMoneyInput, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
 import { ddTransferConfig } from './dd-core.js';
-import { DatePicker } from './dd-widgets.js';
+import { DateFieldTap } from './dd-widgets.js';
 import { deleteTemplate, docImportApply, docImportClear, docImportFetch, docImportParse, docImportToggle, docWorkerFetchParse, _docHasTiers, toggleTemplatePicker, useTemplate } from './doc-import-templates.js';
 import { HYPOTHETICAL_OFFER_STATUSES, clearPreV2Backup, migrateOffersToSchemaV2, restorePreV2Backup } from './migrations-catalogs.js';
 import { optimizePlanner } from './optimizer-engine.js';
@@ -22,13 +22,30 @@ function bindGlobalEvents() {
   document.addEventListener('click', onClick);
   document.addEventListener('change', onChange);
   document.addEventListener('input', onInput);
-  // Open the custom date picker when a .yv-date field is clicked.
+  // PICKER-PRIMARY date fields (owner directive 2026-08-23). On touch the FIRST
+  // tap must open only the picker — no iOS keypad over it — and a SECOND tap on
+  // the active field switches to typed entry. The keypad can only be suppressed
+  // BEFORE focus, so arming happens on pointerdown (capture, so a stopped
+  // propagation elsewhere can't skip it); the click then routes through the tap
+  // state machine. Applies to EVERY .yv-date bubble — offer form, DD rows, event
+  // form, and the Settings projection-start field — so the interaction is one
+  // rule everywhere. Desktop (pointer: fine) is unchanged: DateFieldTap.arm is a
+  // no-op and .tap() opens the picker while the field stays typeable.
+  document.addEventListener('pointerdown', (e) => {
+    const inp = e.target && e.target.closest && e.target.closest('.yv-date');
+    if (inp) DateFieldTap.arm(inp);
+  }, true);
+  // Safari/WebKit fallback for the (rare) no-PointerEvent path — mousedown also
+  // precedes focus. arm() is idempotent, so a double-arm is harmless.
+  document.addEventListener('mousedown', (e) => {
+    const inp = e.target && e.target.closest && e.target.closest('.yv-date');
+    if (inp) DateFieldTap.arm(inp);
+  }, true);
   document.addEventListener('click', (e) => {
     const inp = e.target.closest && e.target.closest('.yv-date');
-    // Open the visual picker on tap/click (the owner's primary date-entry
-    // path). Fields are no longer readonly, so we do NOT preventDefault —
-    // the input still focuses, allowing optional typing/paste of M-D-YYYY.
-    if (inp) { DatePicker.open(inp); }
+    // No preventDefault — the input still focuses; whether that focus carries a
+    // keypad is decided by the armed state DateFieldTap set on pointerdown.
+    if (inp) DateFieldTap.tap(inp);
   });
   // Normalize a typed/pasted yv-date value when the field loses focus:
   // parse via parseDateInput and, if understood, rewrite in canonical
@@ -38,6 +55,11 @@ function bindGlobalEvents() {
   document.addEventListener('blur', (e) => {
     const inp = e.target && e.target.closest && e.target.closest('.yv-date');
     if (!inp) return;
+    // Leaving the field ends its typed-entry mode — the next tap starts over at
+    // the picker. This is also the reset for an unparseable typed value (the
+    // normalization below leaves it visible, but the field is picker-primary
+    // again).
+    DateFieldTap.reset(inp);
     const iso = parseDateInput(inp.value);
     if (iso) {
       const disp = formatDateDisplay(iso);

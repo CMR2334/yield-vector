@@ -329,6 +329,32 @@ function parseDateInput(str) {
   if (m) return _isoFromYMD(+m[3], +m[1], +m[2]);
   return null;
 }
+/* ---- Picker-primary tap state machine (owner directive 2026-08-23) --------
+   A .yv-date bubble is PICKER-FIRST on touch: the first tap opens ONLY the
+   custom yv-date picker (no iOS keypad covering it), and a SECOND tap on the
+   already-ACTIVE field switches that field to manual typed entry (keypad).
+   This is the PURE decision half of that machine — DateFieldTap (dd-widgets.js)
+   owns the DOM half (arming the field before focus, closing the picker, moving
+   focus). Kept here, DOM-free, so it is pinnable in bare Node.
+     coarse     — the pointer is coarse (touch). Fine pointers (desktop mice)
+                  keep the pre-2026-08-23 behavior: picker opens AND the field
+                  stays typeable, so desktop ergonomics can't regress.
+     typing     — this field is already in manual-typing mode.
+     pickerOpen — the picker is open ON THIS field (i.e. this is a second tap
+                  on the active field).
+   Returns one of:
+     'picker+typing' — desktop: open the picker, leave typing available
+     'picker-only'   — first touch tap: open the picker, suppress the keypad
+     'typing'        — second tap on the active field: close picker, raise keypad
+     'noop'          — already typing: leave the caret alone                */
+function dateTapDecision(ctx) {
+  const c = ctx || {};
+  if (!c.coarse) return 'picker+typing';
+  if (c.typing) return 'noop';
+  if (c.pickerOpen) return 'typing';
+  return 'picker-only';
+}
+
 // Build an ISO date only if the Y/M/D make a real calendar date;
 // reject overflow (e.g. 13-40-2026, 2-30-2026) so bad input becomes
 // null rather than a silently rolled-over date.
@@ -391,4 +417,4 @@ function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatLocalDateTime, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, _isoFromYMD, formatMoneyInput, formatDollarInput, parseMoneyInput, uid };
+export { TODAY, startOfDay, expandEventInstances, nextEventInstance, parseDate, isUsBankHoliday, isBusinessDay, nextBusinessDay, previousBusinessDay, addBusinessDays, isoDate, addDays, addMonthsClamped, daysBetween, formatDateShort, formatDateMedium, formatDateLong, relativeDays, formatLocalDateTime, formatCurrency, formatCompactCurrency, formatPercent, formatDateDisplay, parseDateInput, dateTapDecision, _isoFromYMD, formatMoneyInput, formatDollarInput, parseMoneyInput, uid };

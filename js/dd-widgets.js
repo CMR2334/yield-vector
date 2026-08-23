@@ -1,5 +1,5 @@
 import { App } from './app-state.js';
-import { TODAY, addDays, formatDateDisplay, isBusinessDay, isUsBankHoliday, isoDate, nextBusinessDay, parseDate, parseDateInput, previousBusinessDay } from './date-format-core.js';
+import { TODAY, addDays, dateTapDecision, formatDateDisplay, isBusinessDay, isUsBankHoliday, isoDate, nextBusinessDay, parseDate, parseDateInput, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, directDepositEffectiveDate, ddTransferConfig, setDdTransferProvider } from './dd-core.js';
 import { render } from './render-shell-overview.js';
 
@@ -82,7 +82,17 @@ const DatePicker = {
     this.render();
     this.place();   // decide + anchor ONCE per open
   },
-  close() { if (this.el) this.el.style.display = 'none'; this.input = null; },
+  isOpen() { return !!(this.el && this.el.style.display !== 'none'); },
+  close() {
+    if (this.el) this.el.style.display = 'none';
+    // Closing the picker (day picked, outside tap, resize, modal close) ENDS the
+    // tap state machine for that field: it goes back to picker-primary and must
+    // not stay armed/readonly. A field the user has ALREADY switched to typing
+    // keeps its keypad — DateFieldTap.reset skips it.
+    const inp = this.input;
+    this.input = null;
+    if (inp && DateFieldTap.typingInput !== inp) DateFieldTap.reset(inp);
+  },
   // Anchor the popover once on open. The above/below decision uses a FIXED
   // height estimate (not the live offsetHeight) so it doesn't change between
   // a 5-row and 6-row month. We anchor by a fixed EDGE (top when below,
@@ -233,6 +243,84 @@ const DatePicker = {
 };
 
 /* ============================================================
+   DATE-FIELD TAP MODE (picker-primary; owner directive 2026-08-23)
+   ============================================================
+   The owner's phone screenshot: tapping "Planned funding date" raised the iOS
+   keypad + AutoFill bar ON TOP of the picker he actually wanted. So on TOUCH
+   devices a .yv-date bubble is now picker-primary:
+     • pointerdown ARMS the field BEFORE focus can raise the keyboard
+       (readOnly + inputmode="none" — readOnly is what actually suppresses the
+       iOS keypad; inputmode="none" is the belt for browsers that honor it),
+     • the first tap opens ONLY the picker,
+     • a SECOND tap on the ACTIVE field (picker open on it) closes the picker
+       and hands the field to manual typed entry with the numeric keypad,
+     • state resets on blur, on day selection / picker close (DatePicker.close),
+       on switching to another date field, and on modal close (closeModal) —
+       and, because every reset runs through blur, on an unparseable typed value.
+   Desktop (pointer: fine) keeps the pre-directive behavior untouched: the field
+   is never armed, so click = open picker AND type freely.
+   The DECISION is the pure dateTapDecision() in date-format-core.js; this object
+   is only the DOM half. ============================================================ */
+const DateFieldTap = {
+  typingInput: null,
+  // A re-render (Settings, a rebuilt DD row) can replace the typing field's node
+  // without a blur ever firing. Drop a detached reference before any decision so
+  // a stale node can never make a live field look "already typing".
+  _prune() { if (this.typingInput && this.typingInput.isConnected === false) this.typingInput = null; },
+  coarse() {
+    try { return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+    catch { return false; }
+  },
+  // pointerdown/mousedown — runs BEFORE the browser focuses the field, which is
+  // the only moment where the keypad can still be suppressed for this tap.
+  arm(input) {
+    if (!input || !this.coarse()) return;
+    this._prune();
+    if (this.typingInput && this.typingInput !== input) this.reset(this.typingInput);  // field switch
+    if (this.typingInput === input) return;                                            // already typing here
+    input.readOnly = true;
+    input.setAttribute('inputmode', 'none');
+  },
+  // click — decide between opening the picker and switching to typed entry.
+  tap(input) {
+    if (!input) return;
+    this._prune();
+    const decision = dateTapDecision({
+      coarse: this.coarse(),
+      typing: this.typingInput === input,
+      pickerOpen: DatePicker.isOpen() && DatePicker.input === input
+    });
+    if (decision === 'picker+typing' || decision === 'picker-only') { DatePicker.open(input); return; }
+    if (decision === 'typing') this.toTyping(input);
+    // 'noop' — the field is already in typing mode; leave the caret where the
+    // user put it and keep the picker closed.
+  },
+  // Second tap on the active field: picker away, keypad up.
+  toTyping(input) {
+    DatePicker.close();
+    input.readOnly = false;
+    input.setAttribute('inputmode', 'numeric');
+    // The field is ALREADY focused (armed + focused by the first tap), and iOS
+    // raises the keypad only when focus MOVES inside a user gesture — so bounce
+    // focus off and back on. The blur listener's reset is harmless here:
+    // typingInput is only claimed after the bounce.
+    try { input.blur(); } catch { /* non-fatal */ }
+    try { input.focus(); } catch { /* non-fatal */ }
+    this.typingInput = input;
+    try { const n = (input.value || '').length; input.setSelectionRange(n, n); } catch { /* not all inputs support it */ }
+  },
+  // Back to picker-primary for `input` (default: whichever field is typing).
+  reset(input) {
+    const el = input || this.typingInput;
+    if (this.typingInput === el) this.typingInput = null;
+    if (!el) return;
+    el.readOnly = false;
+    el.setAttribute('inputmode', 'numeric');
+  },
+  resetAll() { this.reset(this.typingInput); this.typingInput = null; }
+};
+
+/* ============================================================
    DD-METHOD DATAPOINTS (Doctor of Credit)
    ============================================================
    Lazy-loads dd-methods.json (1,150+ destination banks, each with the
@@ -292,4 +380,4 @@ const DDMethods = {
   }
 };
 
-export { ddTransferConfig, ddRoundTrip, suggestedFundingDate, directDepositEffectiveDate, DatePicker, DDMethods };
+export { ddTransferConfig, ddRoundTrip, suggestedFundingDate, directDepositEffectiveDate, DatePicker, DateFieldTap, DDMethods };

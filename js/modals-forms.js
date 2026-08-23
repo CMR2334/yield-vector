@@ -1,6 +1,6 @@
 import { App } from './app-state.js';
 import { TODAY, addBusinessDays, addDays, formatDateDisplay, formatDateMedium, formatLocalDateTime, formatMoneyInput, isUsBankHoliday, isoDate, parseDate, parseDateInput, parseMoneyInput, uid } from './date-format-core.js';
-import { ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
+import { DatePicker, DateFieldTap, ddRoundTrip, directDepositEffectiveDate, suggestedFundingDate } from './dd-widgets.js';
 import { _docUserChecks, docImportUpdateApplyCount, docTierSelect, filterTemplateList, renderTemplatePicker } from './doc-import-templates.js';
 import { COMMITMENT_TYPES, EMAIL_OPTIONS, ENTITY_OPTIONS, EVENT_CATEGORIES, OFFER_COLOR_PALETTE, applyCategorySign, firstUnusedOfferColor, usedOfferColors } from './migrations-catalogs.js';
 import { debitDeadlineISO, choosablePaths, reconcileClosedDate, DEFAULT_BONUS_POST_MIN_DAYS, DEFAULT_BONUS_POST_MAX_DAYS } from './offer-model.js';
@@ -1954,6 +1954,11 @@ function closeModal() {
   modal.classList.remove('open');
   modal.innerHTML = '';
   delete modal.dataset.strictClose;
+  // The modal's date fields are gone — close the picker (it lives on <body>, so
+  // it would otherwise survive the wipe) and drop any picker-primary tap state
+  // so the next form opens with every bubble back at "first tap = picker".
+  DatePicker.close();
+  DateFieldTap.resetAll();
 }
 
 // Route an "Upcoming actions" row click to the right edit-modal opener.
