@@ -96,13 +96,15 @@ function offerPathFamilies(offer) {
 }
 
 // The path families the owner can CHOOSE between for an either/or offer, in
-// canonical order (dd, debit, hold). A family is choosable when a row of that
-// family is present AND the offerType permits it as a choice:
+// canonical order (dd, HOLD, debit — owner directive 2026-08-23: hold funds
+// lists BEFORE card spend everywhere the two co-occur, so the composed either/or
+// copy reads "hold funds or card spend"). A family is choosable when a row of
+// that family is present AND the offerType permits it as a choice:
 //   • dd    → present + DD-family offerType
-//   • debit → present (a debit-family row; ties up no capital either way)
 //   • hold  → present + offerType === 'new-funds-held' (ONLY new-funds-held can
 //             put hold in the either/or; held-and-dd's hold is unconditional and
 //             therefore never a choice — decision 7).
+//   • debit → present (a debit-family row; ties up no capital either way)
 // Shared by pathState and the modal "How is this bonus met?" chooser so the two
 // can never disagree. PURE. Design: 2026-07-13-requirements-driven-paths.md.
 function choosablePaths(offer) {
@@ -111,8 +113,8 @@ function choosablePaths(offer) {
   const hasDdType = o.offerType === 'direct-deposit' || o.offerType === 'held-and-dd';
   const out = [];
   if (fams.dd && hasDdType) out.push('dd');
-  if (fams.debit) out.push('debit');
   if (fams.hold && o.offerType === 'new-funds-held') out.push('hold');
+  if (fams.debit) out.push('debit');
   return out;
 }
 

@@ -1,7 +1,7 @@
 import { addBusinessDays, addDays, addMonthsClamped, daysBetween, formatDateDisplay, isoDate, parseDate, previousBusinessDay } from './date-format-core.js';
 import { ddRoundTrip, ddWindowEndDate, directDepositEffectiveDate, normalizeDdTransfer } from './dd-core.js';
 import { generateProjection, summarizeProjection } from './projection-optimizer.js';
-import { annualizedReturn, bizDayISO, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
+import { annualizedReturn, bizDayISO, choosablePaths, debitDeadlineISO, depositDeadline, ddCapitalTime, expectedBonusWindow, isOfferComplete, lockStartDate, offerIsActiveForProjection, pathState, requirementActive, withdrawalEligibleDate, withdrawalInitiateDate, churnEligibleDate, hasGenuinePriorRun, churnNextEligibleAfterPlan, churnSnoozeActive } from './offer-model.js';
 import { HYPOTHETICAL_OFFER_STATUSES, PRE_ACCOUNT_SUB_STATUSES } from './runtime-status.js';
 
 /* ============================================================
@@ -2781,6 +2781,38 @@ function testOptimizerPins() {
     check('H2 hold-path control: deposit-deadline still enforced + emitted when hold active',
       holdCons.some(c => c.kind === 'deposit-deadline') && holdSched.derived.depositDeadline !== '',
       `holdDepDL="${holdSched.derived.depositDeadline}"`);
+  }
+
+  {
+    // ---- Owner directive 2026-08-23: the "How is this bonus met?" chooser lists
+    // HOLD FUNDS BEFORE CARD SPEND. choosablePaths is the canonical order the
+    // modal renders from (reqMetPaths maps it straight to radios + the composed
+    // "Either way (… or …)" label), so pinning the array order pins the UI copy.
+    const eitherOr = _pinOffer({
+      id: 'off_order', offerType: 'new-funds-held', requirementLogic: 'any',
+      requiredFundingAmount: 30000, daysFundsMustRemain: 60,
+      debitRequirement: { required: true, count: 5, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirements: [
+        { id: 'r_hold', type: 'deposit', done: false, done_date: '', source: 'derived' },
+        { id: 'r_debit', type: 'spend', done: false, done_date: '', source: 'derived' }
+      ]
+    });
+    const order = choosablePaths(eitherOr);
+    check('chooser path order is hold-first (hold precedes debit)',
+      order.length === 2 && order[0] === 'hold' && order[1] === 'debit', order.join(','));
+    // A DD-family either/or still leads with dd (hold is not choosable there).
+    const ddOr = _pinOffer({
+      id: 'off_order_dd', offerType: 'direct-deposit', requirementLogic: 'any',
+      ddRequirement: { mode: 'count', count: 2 },
+      debitRequirement: { required: true, count: 5, withinDays: 30, byDate: '', byDateLegacy: '' },
+      requirements: [
+        { id: 'r_dd', type: 'direct_deposit', done: false, done_date: '', source: 'derived' },
+        { id: 'r_debit', type: 'spend', done: false, done_date: '', source: 'derived' }
+      ]
+    });
+    const orderDd = choosablePaths(ddOr);
+    check('chooser path order: dd still leads its either/or',
+      orderDd.length === 2 && orderDd[0] === 'dd' && orderDd[1] === 'debit', orderDd.join(','));
   }
 
   const pass = results.filter(r => r.ok).length;
