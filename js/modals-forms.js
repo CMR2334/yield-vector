@@ -1169,9 +1169,14 @@ function refreshRequirementsSection() {
    A business bonus is opened under the owner's LLC + its inbox, everything else
    under his personal identity — so the form fills that pair for him instead of
    making him pick it on every offer. Three rules, all owner-stated:
-     • Classification happens ONCE per offer, at a SETTLE point (the bank/offer
-       name field committed a change, or a DoC import finished applying) — never
-       field-by-field mid-typing or mid-parse.
+     • Classification runs at every SETTLE point (the bank/offer name/DoC URL
+       field committed a change, or a DoC import finished applying) — never
+       field-by-field mid-typing or mid-parse. It is deliberately NOT one-shot:
+       the natural entry order types the bank first ("Chase", which alone reads
+       personal) and the product second ("Business Complete Banking"), so a
+       once-per-offer guard would lock in the wrong kind from the incomplete
+       form and never recover (Codex 2026-08-23 H3, pinned). Re-running is safe
+       precisely because of the next rule.
      • An auto-fill may replace an EMPTY value or a PREVIOUS AUTO-FILL. It may
        never replace a value the owner chose (he sometimes runs a business offer
        under his sole prop — that's a manual adjust, not something to detect).
@@ -1179,8 +1184,10 @@ function refreshRequirementsSection() {
    The classification + the default pair are the pure classifyEntityKind /
    entityDefaultsFor in offer-model.js; this is only the form wiring. State is
    per-modal and reset on every open (showOfferModal).                        */
-let _entityAutoClassified = false;
-function resetEntityAutoState() { _entityAutoClassified = false; }
+// Last kind applied in THIS modal. Not a gate (see H3 above) — only a memo so a
+// settle that changes nothing does no redundant DOM work.
+let _entityLastKind = '';
+function resetEntityAutoState() { _entityLastKind = ''; }
 // Mark an Entity/Email select as owner-owned so no later auto-fill touches it.
 // Called from the offer form's change listener (a real user interaction — the
 // auto-fill below never dispatches a change event).
@@ -1203,12 +1210,12 @@ function _fillEntityField(sel, value) {
   return true;
 }
 // Classify the offer currently in the form and apply the matching defaults.
-// `force` (the DoC-import path) re-classifies even after a manual settle — the
-// import is new identifying information; the never-overwrite-the-owner rule in
-// _fillEntityField is what keeps that safe.
+// Runs at EVERY settle (see H3 above). `force` (the DoC-import path) also
+// bypasses the no-change memo, because an import can rewrite the same-kind
+// fields underneath us. The never-overwrite-the-owner rule in _fillEntityField
+// is what makes re-running safe.
 function classifyEntityFromForm(opts) {
   const force = !!(opts && opts.force);
-  if (_entityAutoClassified && !force) return 'unknown';
   const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
   const entitySel = document.getElementById('f-entity');
   const emailSel = document.getElementById('f-email');
@@ -1220,7 +1227,8 @@ function classifyEntityFromForm(opts) {
     fineText: val('f-notes')
   });
   if (kind === 'unknown') return kind;   // nothing identifying yet — try again at the next settle
-  _entityAutoClassified = true;
+  if (kind === _entityLastKind && !force) return kind;   // nothing new to apply
+  _entityLastKind = kind;
   // Values come from the owner's own Settings mapping (never from source).
   const defs = entityDefaultsFor(kind, (App.state.settings || {}).entityDefaults);
   _fillEntityField(entitySel, defs.entityUsed);

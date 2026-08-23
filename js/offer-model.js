@@ -59,12 +59,25 @@ function debitDeadlineISO(offer) {
    (unknown → don't touch the form) from "an offer with no business signal"
    (personal). Never business.                                                */
 const BUSINESS_NAME_RE = /\b(business|biz|commercial|corporate|corp|merchant)\b/i;
+// The identifying part of a DoC link is its PATH SLUG. Tracking/query metadata
+// is not product text (Codex 2026-08-23 M6): a personal offer linked as
+// ".../personal-checking-bonus/?utm_campaign=business" used to classify BUSINESS
+// off the campaign name alone. Take the pathname only; fall back to the raw
+// string for values that aren't parseable URLs (a bare slug, a half-typed link).
+function _docUrlSlugWords(docUrl) {
+  const raw = String(docUrl == null ? '' : docUrl);
+  if (!raw.trim()) return '';
+  let path = raw;
+  try { path = new URL(raw).pathname; }
+  catch { path = raw.split(/[?#]/)[0]; }
+  return path.replace(/[^A-Za-z0-9]+/g, ' ');
+}
 function classifyEntityKind(sources) {
   const s = sources || {};
   const str = (x) => String(x == null ? '' : x);
   // The URL slug is hyphen/slash-separated; flatten separators so a word inside
   // it ("…/chase-business-complete-banking-300/") is a real word boundary.
-  const nameText = [str(s.bankName), str(s.offerName), str(s.docTitle), str(s.docUrl).replace(/[^A-Za-z0-9]+/g, ' ')]
+  const nameText = [str(s.bankName), str(s.offerName), str(s.docTitle), _docUrlSlugWords(s.docUrl)]
     .join(' ');
   if (BUSINESS_NAME_RE.test(nameText)) return 'business';
   if (nameText.trim() || str(s.fineText).trim()) return 'personal';

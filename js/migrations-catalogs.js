@@ -275,23 +275,39 @@ function emailCatalog() {
 
 // Union-merge helper: keep existing order, append new values, drop blanks and
 // exact duplicates. PURE.
+// Dedupe is CASE-INSENSITIVE (Codex 2026-08-23 L7): the Settings editor already
+// refuses a case-variant duplicate, so a migration that kept "Jane Doe" and
+// "jane doe" as two picker entries disagreed with the editor that produced them.
+// The FIRST spelling seen wins, and order is otherwise stable.
 function _mergeCatalog(existing, additions) {
   const out = [];
   const seen = new Set();
   for (const v of [].concat(existing || [], additions || [])) {
     const s = typeof v === 'string' ? v.trim() : '';
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     out.push(s);
   }
   return out;
 }
 
-// Rebuild the catalogs from the user's own data. IDEMPOTENT: re-running over an
-// already-migrated state is a no-op (the union of a set with its own members).
-// Runs inside migrateOffersToSchemaV2, so it fires at boot AND after every sync
-// pull/restore — a device that pulls a peer's offers picks up their entity
-// values too. Placeholders seed ONLY when nothing at all is known.
+// Seed the catalogs from the user's own data, ONCE. Runs inside
+// migrateOffersToSchemaV2, so it fires at boot AND after every sync pull/restore.
+//
+// The rebuild-from-offers union is an UPGRADE step, not a steady state (Codex
+// 2026-08-23 M4, pinned): re-unioning every boot silently resurrects an entry
+// the user just deleted in the Settings editor, because some historical offer
+// still carries it — the deletion looked like it worked and was back the next
+// morning. So the union runs only until `entityCatalogsSeeded` is set, after
+// which the stored lists are authoritative and only ever grow through explicit
+// user action (the Settings editor, or rememberEntityValues on a save).
+//
+// The marker lives in settings, so it rides the Gist: a peer that upgrades first
+// hands the seeded catalogs to every other device. A payload from an OLD version
+// carries neither the marker nor the keys, so it re-seeds exactly as intended.
+// Still IDEMPOTENT — re-running over a seeded state changes nothing.
 function migrateEntityCatalogs(state) {
   if (!state || !state.settings) return state;
   const s = state.settings;
@@ -301,10 +317,18 @@ function migrateEntityCatalogs(state) {
   s.entityDefaults = (s.entityDefaults && typeof s.entityDefaults === 'object' && !Array.isArray(s.entityDefaults))
     ? s.entityDefaults
     : { businessEntity: '', businessEmail: '', personalEntity: '', personalEmail: '' };
+  if (s.entityCatalogsSeeded === true) {
+    // Already seeded: normalize what is stored (trim/dedupe/drop blanks) but
+    // never re-add anything from offer history.
+    s.entityOptions = _mergeCatalog(s.entityOptions, []);
+    s.emailOptions = _mergeCatalog(s.emailOptions, []);
+    return state;
+  }
   const ents = _mergeCatalog(s.entityOptions, offers.map(o => o && o.entityUsed));
   const mails = _mergeCatalog(s.emailOptions, offers.map(o => o && o.emailUsed));
   s.entityOptions = ents.length ? ents : PLACEHOLDER_ENTITY_OPTIONS.slice();
   s.emailOptions = mails;
+  s.entityCatalogsSeeded = true;
   return state;
 }
 
@@ -376,6 +400,55 @@ function testEntityCatalogPins() {
     rememberEntityValues(st, 'Entity C', 'new@example.com');
     check('catalog: a saved offer\'s entity/email join the lists without duplicating',
       st.settings.entityOptions.join('|') === 'Entity A|Entity C' && st.settings.emailOptions.join('|') === 'new@example.com');
+  }
+
+  {
+    // Codex 2026-08-23 M4: a deletion in the Settings editor must STAY deleted.
+    // Before the seeded marker, the next boot re-unioned it back out of an old
+    // offer that still carried the value.
+    const st = mkState({
+      settings: { entityOptions: [], emailOptions: [] },
+      offers: [{ entityUsed: 'Retired LLC', emailUsed: 'retired@example.com' }]
+    });
+    migrateEntityCatalogs(st);                       // upgrade: seeded from offers
+    const seeded = st.settings.entityOptions.join('|');
+    st.settings.entityOptions = st.settings.entityOptions.filter(v => v !== 'Retired LLC');  // user deletes it
+    st.settings.emailOptions = st.settings.emailOptions.filter(v => v !== 'retired@example.com');
+    migrateEntityCatalogs(st);                       // next boot / sync pull
+    migrateEntityCatalogs(st);                       // and again
+    check('catalog: a value deleted in Settings STAYS deleted across boots (M4)',
+      seeded === 'Retired LLC' && st.settings.entityOptions.length === 0 && st.settings.emailOptions.length === 0,
+      `seeded=${seeded} after=${st.settings.entityOptions.join('|')}`);
+    check('catalog: the seeded marker rides in settings (syncs to peers)',
+      st.settings.entityCatalogsSeeded === true);
+  }
+
+  {
+    // Schema tolerance: a payload from the OLD version carries no catalog keys
+    // and no marker, so it re-seeds from its own offers exactly as on upgrade.
+    const old = { settings: { currentLiquidCapital: 1 }, offers: [{ entityUsed: 'Peer Entity', emailUsed: 'peer@example.com' }] };
+    migrateEntityCatalogs(old);
+    check('catalog: an OLD-version payload (no catalog keys) re-seeds cleanly',
+      old.settings.entityOptions.join('|') === 'Peer Entity' && old.settings.emailOptions.join('|') === 'peer@example.com'
+      && old.settings.entityCatalogsSeeded === true,
+      old.settings.entityOptions.join('|'));
+  }
+
+  {
+    // Codex 2026-08-23 L7: dedupe matches the Settings editor's case-insensitive
+    // rule, keeping the FIRST spelling and stable order.
+    const st = mkState({
+      settings: { entityOptions: [], emailOptions: [] },
+      offers: [
+        { entityUsed: 'Jane Doe', emailUsed: 'Jane@Example.com' },
+        { entityUsed: 'jane doe', emailUsed: 'jane@example.com' },
+        { entityUsed: ' JANE DOE ', emailUsed: '' }
+      ]
+    });
+    migrateEntityCatalogs(st);
+    check('catalog: case-variant duplicates collapse, first spelling wins (L7)',
+      st.settings.entityOptions.join('|') === 'Jane Doe' && st.settings.emailOptions.join('|') === 'Jane@Example.com',
+      `${st.settings.entityOptions.join('|')} / ${st.settings.emailOptions.join('|')}`);
   }
 
   const pass = results.filter(r => r.ok).length;

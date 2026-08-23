@@ -593,6 +593,16 @@ function docImportUpdateApplyCount() {
 // Cache of the last parse result for Apply (avoids re-parsing / re-escaping).
 let _docLastParse = null;
 
+// GENERATION TOKEN for in-flight Worker fetches (Codex 2026-08-23 H1). The parse
+// cache above is module-global while the modal it renders into is not: fetch URL
+// A, close the modal, reopen it for offer B, fetch B — whichever request lands
+// LAST used to win and "Apply" could then write offer A's bank/bonus/funding
+// into offer B. Every fetch takes the next token; a result is only allowed to
+// touch the DOM or the cache while its token is still current. closeModal's
+// docImportClear() bumps it, so a request in flight when the modal closes is
+// abandoned rather than applied to whatever is open when it returns.
+let _docFetchGen = 0;
+
 // Tier-picker selection state (step 4b). `null` = no radio chosen yet (the
 // initial, never-auto-selected state); an integer 0..n-1 = that tier index in
 // _docLastParse.tiers; -1 = the explicit "No tier — keep manual/headline
@@ -818,6 +828,15 @@ async function docImportFetch() {
   const url = urlInput ? urlInput.value.trim() : '';
   if (!url) { setErr('Enter a Doctor of Credit post URL first.'); return; }
 
+  // Claim this fetch's generation, and drop any previous result NOW so a stale
+  // preview can't stay actionable (or be Applied) while a new fetch is in flight.
+  const gen = ++_docFetchGen;
+  const stale = () => gen !== _docFetchGen || !urlInput || !urlInput.isConnected;
+  _docLastParse = null;
+  _docTierSel = null;
+  _docUserChecks = {};
+  if (preview) preview.innerHTML = '';
+
   // Loading state on the button (label swap + busy flag). Restored in finally.
   const origLabel = btn ? btn.textContent : '';
   if (btn) { btn.setAttribute('aria-busy', 'true'); btn.disabled = true; btn.textContent = 'Fetching…'; }
@@ -825,6 +844,9 @@ async function docImportFetch() {
 
   try {
     const result = await docWorkerFetchParse(url);
+    // A newer fetch started, or the modal that asked for this one is gone.
+    // Abandon silently — this result belongs to a form that no longer exists.
+    if (stale()) return;
     _docLastParse = result;
     _docTierSel = null;   // fresh fetch → no tier selection carried over
     _docUserChecks = {};
@@ -838,18 +860,21 @@ async function docImportFetch() {
     }
     // The fetched URL IS the field's value (single field) — nothing to mirror.
     // A trailing-space paste is normalized so the saved docUrl matches what was
-    // actually fetched.
-    if (urlInput && urlInput.value !== url) {
+    // actually fetched. Only ever rewrite the field when it still holds the URL
+    // we fetched (modulo whitespace): if the user edited it mid-flight, putting
+    // the old URL back would silently revert their edit.
+    if (urlInput.value !== url && urlInput.value.trim() === url) {
       urlInput.value = url;
       urlInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
   } catch (e) {
+    if (stale()) return;
     if (typeof logError === 'function') logError(ErrCode.SYNC_PULL, e, 'docImportFetch');
     setErr('Fetch failed — paste the post text instead.');
     if (status) { status.textContent = ''; status.className = 'doc-import-status'; }
     if (preview) preview.innerHTML = '';
   } finally {
-    if (btn) { btn.removeAttribute('aria-busy'); btn.disabled = false; btn.textContent = origLabel || 'Fetch & Parse'; }
+    if (!stale() && btn) { btn.removeAttribute('aria-busy'); btn.disabled = false; btn.textContent = origLabel || 'Fetch & Parse'; }
   }
 }
 
@@ -920,6 +945,7 @@ function docImportClear() {
   _docLastParse = null;
   _docTierSel = null;
   _docUserChecks = {};
+  _docFetchGen++;   // abandon any fetch still in flight (Codex 2026-08-23 H1)
 }
 
 // Toggle the import body open/closed.

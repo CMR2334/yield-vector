@@ -2853,6 +2853,18 @@ function testOptimizerPins() {
         bankName: 'Citi', offerName: 'Priority Checking $1500',
         fineText: 'Monthly fee waived for business checking account holders; not available to business customers.'
       }) === 'personal');
+    // FALSE-POSITIVE GUARD (Codex 2026-08-23 M6): only the URL's PATH SLUG is
+    // identifying text. Tracking/query metadata is not the product's name.
+    check('entity kind: a business token in the QUERY STRING stays personal (M6)',
+      classifyEntityKind({
+        docUrl: 'https://www.doctorofcredit.com/local-bank-personal-checking-bonus/?utm_campaign=business&src=business-list'
+      }) === 'personal');
+    check('entity kind: the path slug still classifies with a query attached',
+      classifyEntityKind({
+        docUrl: 'https://www.doctorofcredit.com/chase-business-complete-banking-300/?utm_source=rss'
+      }) === 'business');
+    check('entity kind: a bare (non-URL) slug still classifies',
+      classifyEntityKind({ docUrl: 'chase-business-complete-banking-300' }) === 'business');
     check('entity kind: an empty form classifies unknown (nothing is prefilled)',
       classifyEntityKind({}) === 'unknown');
     const bizDef = entityDefaultsFor('business', defs);
