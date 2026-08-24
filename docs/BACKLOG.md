@@ -5,6 +5,10 @@ its full context. AI sessions: add items here instead of leaving them only in
 chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
+## Known defects
+
+- **Modal opened <500ms after boot is wiped by deferred render** (pre-existing, found 2026-08-23 during device QA; low priority — rare in practice). A modal opened very early after app boot (within ~500ms) is occasionally wiped by a deferred render pass. Likely cause: the shell's async render cycle may not await or prioritize modals in the render queue at boot time. Workaround: user can re-tap to open the modal. Mitigation: mark-chapter/defer early modal opens, or ensure the render queue flushes before app-ready fires. Codex review deferred (not device-critical for current feature set).
+
 ## Recently resolved
 - **Unreachable legacy `case 'timeline'` route** — shipped v2026.07.09m (R84):
   removed from `renderActiveView` (js/render-shell-overview.js) after re-verifying
@@ -59,21 +63,21 @@ Priorities are owner-directed — nothing here self-dispatches.
   variable and all live uses remain.
 
 ## Owner directives — 2026-08-23 (approved specs, queued for next build session)
-- **Date-input tap behavior (offer + event forms)** — FIRST tap on any date
+- **Date-input tap behavior (offer + event forms)** — SHIPPED v2026.08.23. FIRST tap on any date
   bubble opens ONLY the custom `yv-date` picker: no iOS keypad (suppress the
   focus keyboard, e.g. `inputmode="none"` until armed). A SECOND tap on the
   already-active bubble switches to manual typed entry (numeric keypad).
   Picker is the primary input mode; typing is opt-in. Owner spec from a
   2026-08-23 phone screenshot where the keypad + AutoFill bar covered the
   open picker on "Planned funding date". Typed-violation hints unchanged.
-- **DoC import promotion + single "DoC URL" field** — promote the import out
+- **DoC import promotion + single "DoC URL" field** — SHIPPED v2026.08.23. Promote the import out
   of the collapsed Advanced disclosure (today nothing on the modal surface
   hints it exists). MERGE with the existing source-URL bubble into one field
   labeled **"DoC URL"**; the import operates directly from it (URL fetch via
   the deployed Worker; pasted post text stays supported). Remove the
   redundant second input. Owner: "having a 2nd input/url bubble seems
   redundant."
-- **Entity/email auto-defaults by offer kind** — when an offer (manual entry
+- **Entity/email auto-defaults by offer kind** — SHIPPED v2026.08.23. When an offer (manual entry
   OR DoC import) is detected as a BUSINESS offer, prefill "Entity used" +
   email with the owner's business defaults; PERSONAL offers prefill his
   personal defaults; always manually overridable (owner sometimes uses his
