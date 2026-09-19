@@ -5,6 +5,13 @@ its full context. AI sessions: add items here instead of leaving them only in
 chat or run checkpoints; remove entries when they ship (note the commit).
 Priorities are owner-directed — nothing here self-dispatches.
 
+## Direction — 2026-09-19 (governs everything below)
+Decision record: docs/assessments/2026-09-19-strategic-direction.md. PWA UI
+work is FROZEN; the iOS Shortcut executor is SUPERSEDED (do not build); next
+build is the Mac EventKit reminders bridge, then the measured multi-source
+extractor, headless engine CLI, state write path, and ledger. UI-polish and
+Shortcut items further down are parked unless the owner re-opens them.
+
 ## Known defects
 
 - **Modal opened <500ms after boot is wiped by deferred render** (pre-existing, found 2026-08-23 during device QA; low priority — rare in practice). A modal opened very early after app boot (within ~500ms) is occasionally wiped by a deferred render pass. Likely cause: the shell's async render cycle may not await or prioritize modals in the render queue at boot time. Workaround: user can re-tap to open the modal. Mitigation: mark-chapter/defer early modal opens, or ensure the render queue flushes before app-ready fires. Codex review deferred (not device-critical for current feature set).
@@ -204,9 +211,9 @@ URL pasted into a new Settings field (localStorage-only, like the Gist token).
   2026-07-11-either-or-requirements.md.
 
 ## Owner-action pending (blocked on Collin, not code)
-- **Apple Shortcut v2 executor build** — build the minimal reminders executor
-  per docs/SHORTCUT_BUILD_GUIDE.md (~15 min on iPhone; root SHORTCUT_SETUP.md is
-  superseded/historical).
+- **Apple Shortcut v2 executor build** — SUPERSEDED 2026-09-19 (do not build):
+  replaced by the Mac EventKit bridge in the direction doc. Guide kept for
+  reference only (docs/SHORTCUT_BUILD_GUIDE.md).
 - **Cloudflare Worker deploy** — DoC-import v2 scaffold (`cloudflare/`) still
   needs Collin's deploy + ANTHROPIC_API_KEY/WORKER_SECRET/ALLOWED_ORIGIN. Also a
   prerequisite for the Plaid-Liabilities phase above, if ever picked.

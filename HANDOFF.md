@@ -17,7 +17,10 @@ grows past ~8 entries, keeping the newest 3–4 live.
 
 ---
 
-## Current state (as of 2026-08-23, Round 95)
+## Current state (as of 2026-09-19, Round 96)
+
+- **R96 (2026-09-19 — STRATEGIC DIRECTION REVIEW, NO code shipped). READ FIRST: `docs/assessments/2026-09-19-strategic-direction.md`.**
+  Owner asked whether to keep refining YV or move to a Claude+MCP build. Verdict: **hybrid / invert** — PWA UI work FROZEN (becomes the read-mostly phone dashboard); **do NOT build the iOS Shortcut** (superseded by a Mac EventKit consumer of the existing Gist `_feed`, writing into the owner's existing Reminders list "Credit Cards | Banks | Travel", keyed by URL field, own items only); intake moves to a Claude Code skill (`/bonus <DoC URL>`) that cross-checks DoC against the bank's own terms and calls the YV pure modules for every date/number (LLM extracts, engine computes); ledger = YV state as source of truth + Airtable one-way mirror as KPI view. Verified this session: no "Yield Vector" Reminders list exists (feed has had no consumer since 07-07; owner confirmed he held off deliberately); repo is PUBLIC; the cloud Airtable connector in Claude sessions is a different account (403 on the YV base — use the token script path); AppleScript on Reminders is too slow (use EventKit). Build order, open questions (CLI state-write vs CAS sync; `reminders.js` is MIXED so the feed builder needs a pure extraction), and a paste-ready resume prompt are in the doc.
 
 - **R95 (v2026.08.23 — owner directive batch: picker-first date taps + Type control, DoC URL merge, private entity catalogs, hold-first chooser):**
   Orchestrated run `.claude/orchestrator/runs/2026-08-23-owner-directive-batch.md`, step 3 (mechanical release). Four owner-directed features from R94 decision round.
