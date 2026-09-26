@@ -112,13 +112,18 @@ replacement — calendars have no check-off. Things/Todoist/TickTick have cleane
 APIs but cost a migration out of a tool the owner is embedded in, for no gain
 now that EventKit removes the Shortcut pain. **Stay on Apple Reminders.**
 
-**History store.** Keep **YV state as the source of truth** (add realization +
-lineage fields there), and keep **Airtable as the read-only view/KPI layer** fed
-by the existing mirror, extended with the new fields. Two-way Airtable sync
-stays rejected (fights the CAS sync model). This honours the owner's
-portability rule: the ledger lives in his own JSON, Airtable is replaceable.
-A one-time **backfill of pre-YV bonuses** is required — eligibility gating is
-only as good as the history.
+**History store — REVISED 2026-09-25.** Owner clarified: **Airtable predates YV
+and is nearly complete**; YV holds only a few test offers. So **Airtable is the
+history source of truth**, not YV state. Division of labour: Airtable = ledger
+(every past SUB per bank per entity, dates, realized amounts, fees) + KPI views;
+YV = live plan (active/prospective offers, projection, reminder feed). The
+eligibility gate reads Airtable. The intake skill writes a confirmed offer to
+both; completion writes the realized outcome to Airtable. The existing one-way
+YV→Airtable mirror (`scripts/airtable-sync.mjs`) is re-scoped or retired once
+the skill owns the write. Two-way *automatic* sync into YV state stays rejected
+(CAS model). No backfill needed. Blocker: no Airtable token on this Mac (only in
+GitHub Actions secrets) — owner to create a PAT with read/write on the base and
+export `AIRTABLE_TOKEN`, or share the schema, before the ledger phase is designed.
 
 ---
 
@@ -170,8 +175,9 @@ only as good as the history.
 3. **Headless engine CLI.** `node` entry that loads state, accepts candidate
    offers, runs `optimizePlanner`, prints the tier/path comparison.
 4. **State write path.** See open question 1.
-5. **Ledger.** Realization + lineage fields (backlog "Historical tracking"
-   1→2), backfill, extend the Airtable mirror, KPI views.
+5. **Ledger.** Airtable is the ledger (see §3 revision). Map its existing
+   schema to the offer model, add any missing fields (entity, anchor dates,
+   realized bonus, fees), wire the eligibility gate + completion write-back.
 6. Optional: ICS backstop calendar; phone capture via the existing Apple Notes
    → task-watcher route.
 
@@ -200,6 +206,23 @@ only as good as the history.
    config must live in synced state or outside the repo — never in source.
 
 ---
+
+## 5b. Owner Q&A — 2026-09-25 (owner approved the hybrid direction)
+
+- **EventKit** = Apple's native framework behind Reminders/Calendar; full
+  read/write from a Mac program after a one-time permission grant.
+  `tools/create-reminders.swift` already proves it here. The "Reminders
+  automation is limited" reputation belongs to CalDAV (removed iOS 13),
+  Shortcuts (clumsy actions), and AppleScript (slow) — not EventKit.
+- **Bidirectional: yes.** Bridge writes/updates/retires its own keyed
+  reminders AND reads completions back → `yv-completions.json` (receiver
+  already exists in `js/sync-pwa.js` `applyRemoteCompletions`) → offer/
+  requirement status advances. Completion is the only signal a reminder
+  carries; amounts/facts come from the extractor or the owner.
+- **Extractor runtime** = Claude Code on the owner's subscription (no API
+  key, $0 marginal). Plain fetch for DoC + most bank pages; Playwright only as
+  a fallback fetcher for JS-rendered/bot-walled bank pages; paste as last
+  resort. The Cloudflare Worker becomes optional (phone-only URL fetch).
 
 ## 6. Progress
 
