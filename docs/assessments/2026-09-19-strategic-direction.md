@@ -224,6 +224,32 @@ export `AIRTABLE_TOKEN`, or share the schema, before the ledger phase is designe
   a fallback fetcher for JS-rendered/bot-walled bank pages; paste as last
   resort. The Cloudflare Worker becomes optional (phone-only URL fetch).
 
+## 5c. Airtable ledger audit — 2026-09-25 (proposal, awaiting owner approval)
+
+Base "Bank Account SUB Tracker" `appsCN4cxqX0Ojwf4` (NOT the base the July
+mirror script targets — that was a separate base; the mirror script is
+obsolete). Token: `~/.config/yield-vector/env` → `AIRTABLE_TOKEN` (600 perms,
+outside the repo). Read via `curl`/`urllib` with Bearer auth; the claude.ai
+Airtable connector is not used.
+
+State: Banks 22 rows (8 open / 10 closed / 4 planned; 13 earned), Actions 2
+rows (Shortcut-sync scaffolding, unused), Info 11 rows (bank profile, mostly
+empty, referenced by text not link). Gaps for the eligibility gate: Entity
+blank on 10/22, Email blank on 9, 2 closed rows lack Closed date, 4 banks
+appear twice with no offer label/lineage, single `SUB` amount (no offered vs
+received, no fees), no churn rules stored anywhere. Six formula fields
+re-derive deadlines (funding-by, withdraw-by, OK-to-close, DD#1, APR, close
+trigger) — duplicate the YV engine; drop under the hybrid.
+
+Proposal: **Institutions** (from Info; link target; adds churn rule = lookback
+months + anchor + once-per-lifetime + scope, Chex, hard pull, keep-open days,
+ETF window) · **Accounts** (from Banks; adds Institution link, Offer label,
+Product, Received Bonus, Fees Paid, Tier/Path chosen, Offer expiration, YV
+Offer ID join key, Next Eligible formula; renames abbreviations to full names;
+keeps offer-term parameters as facts) · **Actions** deleted (reminders come
+from the YV feed). Migration: snapshot JSON first → add fields → copy →
+verify → remove old. Needs `schema.bases:write` scope if done via API.
+
 ## 6. Progress
 
 - Done this session: full-folder review; status verification (Reminders list
