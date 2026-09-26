@@ -14,3 +14,6 @@ schedule_tmp.xlsx
 # wrangler local artifacts (deploy config stays local per cloudflare/README)
 .wrangler/
 cloudflare/wrangler.jsonc
+
+# compiled Mac bridge binary (build from tools/yv-reminders-bridge.swift)
+tools/yv-reminders-bridge
