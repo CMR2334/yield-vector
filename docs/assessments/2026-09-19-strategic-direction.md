@@ -334,6 +334,79 @@ Also still true: the July `scripts/airtable-sync.mjs` mirror targets a
 DIFFERENT, older base and is obsolete under this direction — retire it (and its
 `.github/workflows/airtable-sync.yml`) when the skill owns the Airtable write.
 
+## 5e. Muse (Meta personal agent) evaluation — 2026-10-03
+
+Owner asked whether to pivot the buildout to **Muse**, Meta's personal AI agent:
+always-on cloud Linux VM with persistent workspace + shell (node/python), live
+Chromium browser (handles login/JS/bot walls), cron-scheduled jobs, phone chat
+notifications, subagents, artifact dashboards. Connected for him: Gmail ×4,
+Google Calendar/Drive/Sheets, GitHub (all repos, writes need per-action
+approval), Linear, and **Plaid read-only** (Chase, Wealthfront, Amex, Capital
+One, Citi, TSP — balances/transactions/liabilities, cannot move money). **No
+Airtable connector.** Apple Reminders only via a paired Mac app (so it inherits
+the Mac-awake constraint); its cloud-native reminder story is Google Calendar
+events + chat notifications.
+
+Muse agreed with the "model reads, engine computes" principle, agreed its own
+LLM date output must be treated as untrusted, and proposed keeping the engine,
+the verbatim-quote extraction, the DoC-vs-bank-terms reconciliation, and
+Airtable — pivoting only **hosting + front door**, and replacing the Mac bridge.
+
+**Verdict: adopt Muse as a second front door and a watchdog; do NOT move the
+reminder channel or the ledger to it.**
+
+- **Its lead argument (the Mac-asleep gap) is largely theoretical.** Reminders
+  already written are ordinary iCloud reminders — they fire on the phone with
+  the Mac off. What actually waits for a wake is (a) writing reminders for a
+  *newly entered* offer and (b) picking up check-offs. (a) can't precede an
+  intake, and under the documented plan the intake happens on the Mac, so the
+  bridge runs in the same session. (b) delays a projection refresh by hours and
+  misses no deadline, since feeds are built weeks ahead and are day-granular.
+- **What genuinely breaks if the reminder channel moves to Muse:** calendar
+  events and chat messages **have no completion state**, so the
+  check-off → `yv-completions.json` → requirement-done → reconciliation loop —
+  the thing the app has never had and the bridge finally delivers — dies.
+  Replying "done" in chat is *more* owner input, not less, and it splits his
+  action surface, since bank items live beside his card/travel items in one
+  list today.
+- **(b) is not cleaner, it's more parts** — Muse VM + engine pull + an Airtable
+  integration or a Sheets mirror + Calendar + chat, *plus* the Mac bridge
+  anyway if Apple Reminders stays. It only becomes simpler if he abandons
+  checkable reminders, which he called essential.
+- **Airtable stays Mac-side:** a working token + the completed restructure vs.
+  handing a finance API key to a third-party agent platform, or a Sheets mirror
+  that drifts. No reason to move it.
+- **Write safety gets worse, not better.** Open question 1 (how a non-browser
+  writer touches state given the lineage/marker CAS) would gain a THIRD writer.
+  Resolve it before any second front door writes state.
+- **Credential pattern to note:** nearly every Muse capability here is gated on
+  handing it a secret (GitHub token to read the secret gist, Airtable key for
+  the ledger). Worth deciding once, deliberately.
+
+**What Muse is genuinely better at, and should be used for:**
+1. **Phone/away intake.** Paste a DoC URL in chat with no Mac and no terminal —
+   a real gap in the documented plan, which needs him at the keyboard. Its
+   browser also beats the planned headless fallback on bot-walled bank pages.
+   Low port cost: the pure modules are already Node-importable with no DOM, and
+   Muse has GitHub access, so it can **pull the engine from the repo** rather
+   than fork it (never a second copy — drift would break the one guarantee
+   that matters).
+2. **Scheduled watchdog.** A cron sweep that reads the feed and messages his
+   phone if the bridge heartbeat goes stale — the cross-channel alarm the July
+   design wanted, without the ICS worker.
+3. **Plaid for the cash floor.** The parked SimpleFIN backlog item, already
+   connected and free. Honest limit: **none of his nine active bonus banks**
+   (BMO, U.S. Bank, Huntington, Royal, Associated, Wings, Old National, BofA,
+   Verve) are in the Plaid set, so this informs the reserve/buffer input
+   (Chase, Wealthfront) but does NOT deliver DD-posting or bonus-credit
+   auto-detection.
+
+**Resulting target:** Apple Reminders via the Mac bridge (unchanged); engine as
+versioned code in the repo, run by either front door; Airtable Mac-side;
+intake from Claude Code *or* Muse; Muse additionally as watchdog + cash-floor
+feed. Sequencing unchanged — bridge live first, then open question 1, then the
+measured extractor (whichever front door calls it).
+
 ## 6. Progress
 
 - Done this session: full-folder review; status verification (Reminders list
