@@ -250,6 +250,90 @@ keeps offer-term parameters as facts) · **Actions** deleted (reminders come
 from the YV feed). Migration: snapshot JSON first → add fields → copy →
 verify → remove old. Needs `schema.bases:write` scope if done via API.
 
+## 5d. EXECUTION STATUS — last updated 2026-10-03
+
+Where the build actually stands. Phases refer to §4 "Build order".
+
+### Config (all outside the repo — repo is public)
+`~/.config/yield-vector/env`, mode 600, holds `AIRTABLE_TOKEN` (PAT
+`yield-vector-mac`, scopes: records r/w + schema r/w, base-limited),
+`GITHUB_TOKEN` (classic, `gist` scope only), `GIST_ID`
+(`aa598916393a061a4b4f9067fc857d93` — the live sync gist, secret, holds
+`capital-planner.json`; two older gists with the same filename are stale and
+must not be used), `REMINDERS_LIST` (`Credit Cards | Banks | Travel`, iCloud —
+the owner's existing list; verified the only Reminders account is iCloud, so
+Mac writes reach the iPhone through iCloud). Bridge's own memory:
+`~/.config/yield-vector/bridge-state.json`. Pre-migration Airtable snapshot:
+`~/.config/yield-vector/snapshots/2026-09-26-pre-migration/`.
+
+### Phase 1 — Mac EventKit reminders bridge: BUILT, DRY-RUN VERIFIED, NOT YET LIVE
+`tools/yv-reminders-bridge.swift` (commit `283bb3b`; binary gitignored, build
+with `swiftc -O -swift-version 5 -o tools/yv-reminders-bridge
+tools/yv-reminders-bridge.swift`). Launchd plist `tools/com.collin.yv-reminders-bridge.plist`
+(900 s interval + RunAtLoad, logs to `~/Library/Logs/yv-reminders-bridge.log`)
+is written but **not installed** — copy to `~/Library/LaunchAgents/` and
+`launchctl load` when the owner approves going live.
+
+Design decisions worth keeping: owns ONLY reminders whose URL field is
+`https://yieldvector.local/id/<feed item id>`, so the other ~190 reminders in
+that shared list are invisible to it; refuses to act on `schema != 2`,
+`feedStatus != ok`, or an empty manifest (no items AND no tombstones);
+delete-rate guard at 30% of owned items unless `--force-delete`;
+`bridge-state.json` records last-written title/due/notes per id so an owner's
+manual edit survives until the FEED changes that field; completions found on
+owned reminders append to `yv-completions.json` and a heartbeat lands in
+`consumer-mac-bridge.json` (both in the same gist). Flags: `--dry-run`,
+`--force-delete`, `--skip-past-days N`.
+
+**Dry run 2026-09-26 against the live feed** (manifest 29827705, schema 2, 18
+items, 13 tombstones; list had 191 reminders, 0 owned): would create 18, update
+0, delete 0. 10 of the 18 are overdue (May 20 → Sep 21) because no consumer has
+ever existed to mark them done — Huntington withdraw + bonus-window +
+safe-close, Wings ×3 dd-initiate + dd-window-end + withdraw, BMO expiry,
+Associated withdraw. **OPEN DECISION, blocking the first real run:** create all
+18 (recommended — checking the stale ones off is the reconciliation the app has
+never had) vs `--skip-past-days 30` (drops 8). Owner also flagged two possibly
+stale offers to check first: U.S. Bank Platinum Business (expired Sep 27) and
+BofA Advantage Plus (Sep 30).
+
+### Phase 5 — Airtable ledger: RESTRUCTURE EXECUTED 2026-09-26
+Script `scripts/airtable-migrate-2026-09-26.py` (commit `a9d2daa`), three
+idempotent stages (`rename`, `fields`, `data`), all three run successfully.
+Base `appsCN4cxqX0Ojwf4` "Bank Account SUB Tracker".
+
+- **Renamed:** tables Banks→**Accounts**, Info→**Institutions**; ~40 abbreviated
+  fields to full names (`O | C`→Account Status, `FB Day`→Funding Deadline
+  (days), `MB`/`MB Days`→Minimum Balance/Hold Days, `QT`→Debit Transactions,
+  `SF`→Fee Waiver…, `SUB`→Offered Bonus, `Earned`→Bonus Received Date, etc.).
+- **Added to Institutions:** Churn Lookback (mo), Churn Anchor, Once Per
+  Lifetime, Churn Scope, Hard Pull, ETF Window (days), Notes.
+- **Added to Accounts:** Institution (link), Offer, Product, Received Bonus,
+  Fees Paid, Tier Chosen, Path Chosen, Offer Expiration, YV Offer ID, Chex
+  Pulled, Churn Lookback/Anchor Override, 3 institution lookups, and formulas
+  **Net Bonus** + **Next Eligible** (override-aware, anchor-switching).
+- **Data pass:** 8 institutions created (19 total), all 22 accounts linked,
+  Product inferred on all 22, personal rows auto-filled Entity=SSN +
+  Email=cmreko91 per the owner's rule (Entity blank 10→1, Email 9→0), Received
+  Bonus seeded from Offered Bonus on the 13 earned rows. Formula fields healthy
+  (no error values).
+- **Per-offer vs per-bank:** the owner's concern that one bank's offers may
+  differ (Chex, churn rules, keep-open days) is handled by Institution defaults
+  + per-row overrides on Accounts; `Next Eligible` prefers the override.
+- **Owner-only remainders (API cannot delete fields/tables):** delete the
+  `(legacy) …` prefixed fields in both tables, delete the now-unused **Actions**
+  table (2 rows, Shortcut scaffolding), fill Institutions churn columns for
+  banks expected to repeat, label `Offer` on repeat-bank rows (U.S. Bank ×2,
+  Chime ×2, BMO ×2, Wells ×2), add Closed date to the 2 closed rows missing it,
+  Entity/Email on the 1 remaining business row. A reminder carrying this list
+  was created in the owner's bank list on 2026-09-26 (9:00, via EventKit).
+
+### Not started
+Phase 2 (extractor + gold-corpus measurement), Phase 3 (headless engine CLI),
+Phase 4 (state write path — see open question 1), Phase 6 (ICS backstop).
+Also still true: the July `scripts/airtable-sync.mjs` mirror targets a
+DIFFERENT, older base and is obsolete under this direction — retire it (and its
+`.github/workflows/airtable-sync.yml`) when the skill owns the Airtable write.
+
 ## 6. Progress
 
 - Done this session: full-folder review; status verification (Reminders list
